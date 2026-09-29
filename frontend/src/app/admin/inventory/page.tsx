@@ -22,6 +22,7 @@ import {
   Trash2,
   X,
   Upload,
+  FileSpreadsheet,
   Image as ImageIcon,
   Layers,
   MapPin,
@@ -33,6 +34,7 @@ import {
   ArrowUpDown,
   Tag
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface InventoryItem {
   id: number;
@@ -94,6 +96,14 @@ export default function InventoryAdminPage() {
   const [adjustType, setAdjustType] = useState<'add' | 'deduct' | 'set'>('add');
   const [adjustAmount, setAdjustAmount] = useState<number>(1);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Bulk Upload State
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [parsedUploadItems, setParsedUploadItems] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   // Form Fields
   const [formCode, setFormCode] = useState('');
@@ -452,6 +462,129 @@ export default function InventoryAdminPage() {
     }
   };
 
+  // Download Template (Excel or CSV)
+  const downloadTemplate = (format: 'xlsx' | 'csv') => {
+    const templateData = [
+      {
+        'Part Code': 'DR-INV-1006',
+        'Part Name': 'LED Headlight Matrix Assembly',
+        'Category': 'Body & Lights',
+        'Quantity': 25,
+        'Min Threshold': 5,
+        'Unit Price': 1450,
+        'Location': 'Main Hub Workshop - Rack B3',
+        'Supplier': 'Minda Auto',
+        'Description': 'High-illumination LED matrix headlight for DOON Electro Pro'
+      },
+      {
+        'Part Code': 'DR-INV-1007',
+        'Part Name': 'Rear Shock Absorber Damper',
+        'Category': 'Brakes & Suspension',
+        'Quantity': 18,
+        'Min Threshold': 4,
+        'Unit Price': 980,
+        'Location': 'Main Hub Workshop - Rack C2',
+        'Supplier': 'Gabriel India',
+        'Description': 'Dual spring hydraulic rear suspension shock absorber'
+      },
+      {
+        'Part Code': 'DR-INV-1008',
+        'Part Name': 'Digital LCD Smart Speedometer',
+        'Category': 'Handlebar & Controls',
+        'Quantity': 12,
+        'Min Threshold': 3,
+        'Unit Price': 2200,
+        'Location': 'Main Hub Workshop - Rack A4',
+        'Supplier': 'Pricol Electronics',
+        'Description': 'CAN-bus compatible digital speedometer console'
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventory Template');
+
+    if (format === 'xlsx') {
+      XLSX.writeFile(wb, 'DOON_Riders_Inventory_Template.xlsx');
+    } else {
+      XLSX.writeFile(wb, 'DOON_Riders_Inventory_Template.csv', { bookType: 'csv' });
+    }
+  };
+
+  // Handle Bulk File Selection (XLSX, XLS, CSV)
+  const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadFile(file);
+    setUploadError(null);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[firstSheetName];
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      if (rawData.length === 0) {
+        setUploadError('The uploaded file is empty or formatted incorrectly.');
+        setParsedUploadItems([]);
+        return;
+      }
+
+      const normalized = rawData.map((row: any) => ({
+        part_code: String(row['Part Code'] || row['part_code'] || row['PartCode'] || row['partCode'] || '').trim(),
+        part_name: String(row['Part Name'] || row['part_name'] || row['PartName'] || row['partName'] || row['Name'] || row['name'] || '').trim(),
+        category: String(row['Category'] || row['category'] || 'Spare Parts').trim(),
+        quantity: Number(row['Quantity'] || row['quantity'] || row['Stock'] || row['stock'] || 0),
+        min_threshold: Number(row['Min Threshold'] || row['min_threshold'] || row['Threshold'] || row['threshold'] || 5),
+        unit_price: Number(row['Unit Price'] || row['unit_price'] || row['Price'] || row['price'] || 0),
+        location: String(row['Location'] || row['location'] || 'Main Hub Workshop').trim(),
+        supplier: String(row['Supplier'] || row['supplier'] || '').trim(),
+        description: String(row['Description'] || row['description'] || '').trim()
+      })).filter(it => it.part_name.length > 0);
+
+      if (normalized.length === 0) {
+        setUploadError('No valid items found. Please ensure "Part Name" column exists.');
+        setParsedUploadItems([]);
+        return;
+      }
+
+      setParsedUploadItems(normalized);
+    } catch (err: any) {
+      console.error('File parsing error:', err);
+      setUploadError(`Failed to parse file: ${err.message}`);
+      setParsedUploadItems([]);
+    }
+  };
+
+  // Submit Bulk Upload
+  const handleConfirmBulkUpload = async () => {
+    if (parsedUploadItems.length === 0) return;
+
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const res = await adminApi.post('/admin/inventory/bulk-upload', {
+        items: parsedUploadItems
+      });
+
+      if (res && res.success) {
+        setToastMessage(`Successfully imported ${res.count || parsedUploadItems.length} inventory items!`);
+        setShowUploadModal(false);
+        setUploadFile(null);
+        setParsedUploadItems([]);
+        fetchInventory();
+      } else {
+        setUploadError(res?.message || 'Failed to upload inventory items.');
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Error occurred during bulk upload.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Export CSV
   const handleExportCsv = () => {
     const headers = 'S.No,Part Code,Part Name,Category,Quantity,Min Threshold,Unit Price,Total Valuation,Status,Location,Supplier';
@@ -493,6 +626,19 @@ export default function InventoryAdminPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => {
+                setShowUploadModal(true);
+                setUploadFile(null);
+                setParsedUploadItems([]);
+                setUploadError(null);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition shadow-sm cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-blue-600" />
+              <span>BULK UPLOAD (EXCEL/CSV)</span>
+            </button>
+
             <button
               onClick={handleExportCsv}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F7F9FA] transition shadow-sm cursor-pointer"
@@ -1265,6 +1411,153 @@ export default function InventoryAdminPage() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* BULK UPLOAD MODAL (EXCEL / CSV) */}
+      {/* ========================================================================= */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-100 space-y-5 my-6 max-h-[92vh] flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-black text-lg text-gray-900">
+                    Bulk Upload Inventory
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Upload parts data using Excel (.xlsx, .xls) or CSV (.csv)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="text-gray-400 hover:text-gray-700 p-1.5 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template Download Section */}
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-gray-900 block">Download Template</span>
+                <span className="text-[11px] text-gray-500 block">Sample file with required column headers</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadTemplate('xlsx')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Sample Excel (.xlsx)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadTemplate('csv')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-900 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Sample CSV (.csv)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Upload Dropzone */}
+            <div>
+              <input
+                type="file"
+                ref={bulkFileInputRef}
+                accept=".xlsx, .xls, .csv"
+                onChange={handleBulkFileChange}
+                className="hidden"
+              />
+              <div
+                onClick={() => bulkFileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 hover:border-[#00D96B] bg-[#F9FAFB] hover:bg-emerald-50/40 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-2"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-white border border-gray-200 flex items-center justify-center text-[#00A854] shadow-xs">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-gray-900 block">
+                    {uploadFile ? uploadFile.name : 'Click to select Excel (.xlsx) or CSV (.csv) file'}
+                  </span>
+                  <span className="text-[11px] text-gray-400 block mt-0.5">
+                    Supports .xlsx, .xls, .csv formats
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Error Alert */}
+            {uploadError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {/* Preview Table */}
+            {parsedUploadItems.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-900 uppercase">
+                    Preview ({parsedUploadItems.length} items ready to import)
+                  </span>
+                </div>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold sticky top-0">
+                      <tr>
+                        <th className="p-2">Code</th>
+                        <th className="p-2">Part Name</th>
+                        <th className="p-2">Category</th>
+                        <th className="p-2">Qty</th>
+                        <th className="p-2">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {parsedUploadItems.slice(0, 10).map((it, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="p-2 font-mono font-bold text-gray-900">{it.part_code || 'Auto-generated'}</td>
+                          <td className="p-2 font-bold text-gray-900">{it.part_name}</td>
+                          <td className="p-2 text-gray-600">{it.category}</td>
+                          <td className="p-2 font-bold text-[#00A854]">{it.quantity}</td>
+                          <td className="p-2 font-bold text-gray-900">₹{it.unit_price}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-900 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={parsedUploadItems.length === 0 || uploading}
+                onClick={handleConfirmBulkUpload}
+                className="inline-flex items-center gap-2 bg-[#00A854] hover:bg-[#008744] text-white font-bold px-6 py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-sm transition transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{uploading ? 'Importing...' : `Import ${parsedUploadItems.length} Parts`}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

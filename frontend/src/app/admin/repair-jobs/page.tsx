@@ -1893,28 +1893,15 @@ export default function RepairJobsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-[#344054] block mb-1">Labour Charges (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={approveLabourCharge}
-                    onChange={e => setApproveLabourCharge(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold focus:outline-none focus:border-[#00D96B]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-[#344054] block mb-1">Other Service Charges (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={approveOtherCharge}
-                    onChange={e => setApproveOtherCharge(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold focus:outline-none focus:border-[#00D96B]"
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-bold text-[#344054] block mb-1">Other Service Charges (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={approveOtherCharge}
+                  onChange={e => setApproveOtherCharge(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold focus:outline-none focus:border-[#00D96B]"
+                />
               </div>
 
               {/* Estimated Total Calculation */}
@@ -1923,7 +1910,6 @@ export default function RepairJobsPage() {
                 <span className="text-base font-heading font-black text-[#00A854]">
                   ₹{(
                     approvePartsList.reduce((sum, p) => sum + p.approved_quantity * p.unit_price, 0) +
-                    approveLabourCharge +
                     approveOtherCharge
                   ).toLocaleString('en-IN')}
                 </span>
@@ -2101,18 +2087,7 @@ export default function RepairJobsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-[#344054] block mb-1">Labour Charges (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={billLabourCharge}
-                    onChange={e => setBillLabourCharge(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold focus:outline-none focus:border-[#00D96B]"
-                  />
-                </div>
-
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-[#344054] block mb-1">Other Charges (₹)</label>
                   <input
@@ -2140,14 +2115,13 @@ export default function RepairJobsPage() {
               <div className="bg-[#111827] text-white p-4 rounded-2xl flex items-center justify-between">
                 <div>
                   <span className="text-xs text-[#98A2B3] uppercase tracking-wider block">Grand Total Payable</span>
-                  <span className="text-[11px] text-[#00D96B]">Includes all replaced parts, labour & discounts</span>
+                  <span className="text-[11px] text-[#00D96B]">Includes all replaced parts & discounts</span>
                 </div>
                 <div className="text-right">
                   <span className="text-2xl font-heading font-black text-[#00D96B]">
                     ₹{Math.max(
                       0,
                       (detailedJobData?.parts?.replaced || []).reduce((sum: number, p: any) => sum + (p.replaced_quantity || 1) * p.unit_price, 0) +
-                        billLabourCharge +
                         billOtherCharge -
                         billDiscount
                     ).toLocaleString('en-IN')}

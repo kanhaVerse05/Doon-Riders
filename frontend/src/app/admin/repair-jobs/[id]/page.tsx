@@ -987,10 +987,6 @@ export default function RepairJobDetailsPage() {
                         <span className="font-bold text-[#111827]">₹{bill.parts_total.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-[#E5E7EB]">
-                        <span className="text-[#667085]">Labour / Service Charges:</span>
-                        <span className="font-bold text-[#111827]">₹{bill.labour_charge.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-[#E5E7EB]">
                         <span className="text-[#667085]">Other Diagnostic Charges:</span>
                         <span className="font-bold text-[#111827]">₹{bill.other_charge.toLocaleString('en-IN')}</span>
                       </div>
@@ -1343,25 +1339,14 @@ export default function RepairJobDetailsPage() {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border space-y-4">
             <h3 className="font-heading font-black text-base text-[#111827]">Approve Parts</h3>
             <form onSubmit={handleApprovePartsSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-[#344054] block mb-1">Labour Charge (₹)</label>
-                  <input
-                    type="number"
-                    value={approveLabourCharge}
-                    onChange={e => setApproveLabourCharge(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-[#344054] block mb-1">Other Charge (₹)</label>
-                  <input
-                    type="number"
-                    value={approveOtherCharge}
-                    onChange={e => setApproveOtherCharge(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border text-xs font-bold"
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-bold text-[#344054] block mb-1">Other Charge (₹)</label>
+                <input
+                  type="number"
+                  value={approveOtherCharge}
+                  onChange={e => setApproveOtherCharge(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border text-xs font-bold"
+                />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowApproveModal(false)} className="px-4 py-2 border rounded-xl text-xs font-bold">Cancel</button>
@@ -1403,13 +1388,13 @@ export default function RepairJobDetailsPage() {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border space-y-4">
             <h3 className="font-heading font-black text-base text-[#111827]">Generate Bill</h3>
             <form onSubmit={handleGenerateBillSubmit} className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold block mb-1">Labour (₹)</label>
+                  <label className="text-[11px] font-bold block mb-1">Other (₹)</label>
                   <input
                     type="number"
-                    value={billLabourCharge}
-                    onChange={e => setBillLabourCharge(Number(e.target.value))}
+                    value={billOtherCharge}
+                    onChange={e => setBillOtherCharge(Number(e.target.value))}
                     className="w-full px-2 py-1.5 rounded-xl border text-xs font-bold"
                   />
                 </div>

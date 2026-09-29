@@ -439,3 +439,119 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Failed to delete inventory item' });
   }
 };
+
+export const bulkUploadInventory = async (req: Request, res: Response) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'No items provided for bulk upload.' });
+    }
+
+    let processedCount = 0;
+
+    if (getDbStatus()) {
+      for (const item of items) {
+        const partCode = String(item.part_code || item['Part Code'] || item['partCode'] || '').trim();
+        const partName = String(item.part_name || item['Part Name'] || item['partName'] || '').trim();
+        if (!partName) continue;
+
+        const cleanCode = partCode || `DR-INV-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900 + 100)}`;
+        const category = String(item.category || item['Category'] || 'Spare Parts').trim();
+        const quantity = Math.max(0, Number(item.quantity || item['Quantity'] || item['Stock'] || 0));
+        const minThreshold = Math.max(0, Number(item.min_threshold || item['Min Threshold'] || item['Threshold'] || 5));
+        const unitPrice = Math.max(0, Number(item.unit_price || item['Unit Price'] || item['Price'] || 0));
+        const location = String(item.location || item['Location'] || 'Main Hub Workshop').trim();
+        const supplier = String(item.supplier || item['Supplier'] || '').trim();
+        const description = String(item.description || item['Description'] || '').trim();
+        const status = calculateStatus(quantity, minThreshold);
+
+        // Upsert into inventory table
+        await pool.query(`
+          INSERT INTO inventory (part_code, part_name, category, quantity, min_threshold, unit_price, status, location, supplier, description)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (part_code) 
+          DO UPDATE SET 
+            part_name = EXCLUDED.part_name,
+            category = EXCLUDED.category,
+            quantity = EXCLUDED.quantity,
+            min_threshold = EXCLUDED.min_threshold,
+            unit_price = EXCLUDED.unit_price,
+            status = EXCLUDED.status,
+            location = EXCLUDED.location,
+            supplier = EXCLUDED.supplier,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+        `, [cleanCode, partName, category, quantity, minThreshold, unitPrice, status, location, supplier, description]);
+
+        processedCount++;
+      }
+
+      return res.json({
+        success: true,
+        count: processedCount,
+        message: `Successfully processed ${processedCount} inventory items.`
+      });
+    }
+
+    // In-memory fallback
+    if (!memoryStore.inventory) memoryStore.inventory = [];
+    for (const item of items) {
+      const partCode = String(item.part_code || item['Part Code'] || item['partCode'] || '').trim();
+      const partName = String(item.part_name || item['Part Name'] || item['partName'] || '').trim();
+      if (!partName) continue;
+
+      const cleanCode = partCode || `DR-INV-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900 + 100)}`;
+      const category = String(item.category || item['Category'] || 'Spare Parts').trim();
+      const quantity = Math.max(0, Number(item.quantity || item['Quantity'] || 0));
+      const minThreshold = Math.max(0, Number(item.min_threshold || item['Min Threshold'] || 5));
+      const unitPrice = Math.max(0, Number(item.unit_price || item['Unit Price'] || 0));
+      const location = String(item.location || item['Location'] || 'Main Hub Workshop').trim();
+      const supplier = String(item.supplier || item['Supplier'] || '').trim();
+      const description = String(item.description || item['Description'] || '').trim();
+      const status = calculateStatus(quantity, minThreshold);
+
+      const existingIdx = memoryStore.inventory.findIndex(it => it.part_code.toLowerCase() === cleanCode.toLowerCase());
+      if (existingIdx !== -1) {
+        memoryStore.inventory[existingIdx] = {
+          ...memoryStore.inventory[existingIdx],
+          part_name: partName,
+          category,
+          quantity,
+          min_threshold: minThreshold,
+          unit_price: unitPrice,
+          status: status as any,
+          location,
+          supplier,
+          description
+        };
+      } else {
+        const nextId = memoryStore.inventory.length > 0 ? Math.max(...memoryStore.inventory.map(it => it.id)) + 1 : 1;
+        memoryStore.inventory.unshift({
+          id: nextId,
+          part_code: cleanCode,
+          part_name: partName,
+          category,
+          image_url: '',
+          quantity,
+          min_threshold: minThreshold,
+          unit_price: unitPrice,
+          status: status as any,
+          location,
+          supplier,
+          description,
+          created_at: new Date().toISOString()
+        });
+      }
+      processedCount++;
+    }
+
+    return res.json({
+      success: true,
+      count: processedCount,
+      message: `Successfully processed ${processedCount} inventory items.`
+    });
+  } catch (error: any) {
+    console.error('Error in bulk uploading inventory:', error);
+    return res.status(500).json({ success: false, message: 'Failed to bulk upload inventory.' });
+  }
+};

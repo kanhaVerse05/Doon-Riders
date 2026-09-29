@@ -5,12 +5,14 @@ import {
   createInventoryItem,
   updateInventoryItem,
   adjustStock,
-  deleteInventoryItem
+  deleteInventoryItem,
+  bulkUploadInventory
 } from '../../controllers/admin/adminInventoryController';
 
 const router = Router();
 
 router.get('/', getAllInventory);
+router.post('/bulk-upload', bulkUploadInventory);
 router.get('/:id', getInventoryById);
 router.post('/', createInventoryItem);
 router.put('/:id', updateInventoryItem);

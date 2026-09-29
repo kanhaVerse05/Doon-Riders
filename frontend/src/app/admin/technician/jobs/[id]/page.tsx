@@ -889,35 +889,47 @@ export default function TechnicianJobDetailsPage() {
                     </button>
                   </div>
 
-                  <div className="space-y-2 max-h-44 overflow-y-auto pr-0.5">
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
                     {inspectParts.map((p, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center gap-2 bg-white p-1.5 sm:p-2 rounded-lg border border-gray-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                        className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 shadow-xs"
                       >
-                        <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#00A854] flex items-center justify-center flex-shrink-0">
                           <Package className="w-3.5 h-3.5" />
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <input
-                            type="text"
-                            list={`inventory-parts-${idx}`}
-                            placeholder="Part name (e.g. Brake Pad, Cable)"
+                          <select
                             value={p.part_name}
                             onChange={(e) => handleSelectInventoryPart(idx, e.target.value)}
-                            className="w-full px-2 py-1 text-xs bg-transparent border-0 focus:outline-none text-gray-900 placeholder:text-gray-400"
-                          />
-                          <datalist id={`inventory-parts-${idx}`}>
+                            className="w-full px-2 py-1 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00D96B] text-gray-900 font-semibold"
+                          >
+                            <option value="">-- Select Spare Part --</option>
                             {inventoryList.map((inv) => (
                               <option key={inv.id} value={inv.part_name}>
-                                {inv.part_code} (Stock: {inv.quantity})
+                                {inv.part_name} ({inv.part_code}) • Stock: {inv.quantity}
                               </option>
                             ))}
-                          </datalist>
+                            <option value="CUSTOM_PART">+ Other / Custom Part...</option>
+                          </select>
+
+                          {p.part_name === 'CUSTOM_PART' && (
+                            <input
+                              type="text"
+                              placeholder="Enter custom part name..."
+                              autoFocus
+                              onChange={(e) => {
+                                const updated = [...inspectParts];
+                                updated[idx].notes = e.target.value;
+                                setInspectParts(updated);
+                              }}
+                              className="w-full mt-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded-lg focus:outline-none text-gray-900 placeholder:text-gray-400 font-medium"
+                            />
+                          )}
                         </div>
 
-                        <div className="flex items-center border border-gray-200 rounded-md bg-white overflow-hidden flex-shrink-0">
+                        <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden flex-shrink-0">
                           <button
                             type="button"
                             onClick={() => {
@@ -925,7 +937,7 @@ export default function TechnicianJobDetailsPage() {
                               updated[idx].quantity = Math.max(1, (updated[idx].quantity || 1) - 1);
                               setInspectParts(updated);
                             }}
-                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 font-bold transition text-xs border-r border-gray-200 cursor-pointer select-none"
+                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 font-bold text-xs border-r border-gray-200 cursor-pointer select-none"
                           >
                             −
                           </button>
@@ -939,7 +951,7 @@ export default function TechnicianJobDetailsPage() {
                               updated[idx].quantity = (updated[idx].quantity || 1) + 1;
                               setInspectParts(updated);
                             }}
-                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 font-bold transition text-xs border-l border-gray-200 cursor-pointer select-none"
+                            className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-100 font-bold text-xs border-l border-gray-200 cursor-pointer select-none"
                           >
                             +
                           </button>
@@ -948,7 +960,7 @@ export default function TechnicianJobDetailsPage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveInspectPart(idx)}
-                          className="w-7 h-7 flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition flex-shrink-0 cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition flex-shrink-0 cursor-pointer"
                           title="Remove part"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1041,28 +1053,25 @@ export default function TechnicianJobDetailsPage() {
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-900 mb-1">
                     Select Spare Part <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    list="add-part-inventory"
-                    placeholder="Search inventory spare parts..."
                     value={addPartName}
                     onChange={(e) => {
                       setAddPartName(e.target.value);
                       const matched = inventoryList.find(
-                        (item) => item.part_name.toLowerCase() === e.target.value.toLowerCase()
+                        (item) => item.part_name === e.target.value
                       );
                       if (matched) setAddPartId(matched.id);
                     }}
-                    className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00D96B] text-gray-900"
-                  />
-                  <datalist id="add-part-inventory">
+                    className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00D96B] text-gray-900 font-semibold"
+                  >
+                    <option value="">-- Choose Spare Part from Inventory --</option>
                     {inventoryList.map((inv) => (
                       <option key={inv.id} value={inv.part_name}>
-                        {inv.part_code} (Stock: {inv.quantity})
+                        {inv.part_name} ({inv.part_code}) • Stock: {inv.quantity}
                       </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
 
                 <div>
@@ -1203,17 +1212,22 @@ export default function TechnicianJobDetailsPage() {
                       key={idx}
                       className="flex items-center gap-2 bg-[#F9FAFB] p-2 rounded-xl border border-gray-200"
                     >
-                      <input
-                        type="text"
-                        placeholder="Additional part name..."
+                      <select
                         value={extra.part_name}
                         onChange={(e) => {
                           const updated = [...additionalParts];
                           updated[idx].part_name = e.target.value;
                           setAdditionalParts(updated);
                         }}
-                        className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none"
-                      />
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-900 font-semibold"
+                      >
+                        <option value="">-- Select Extra Part --</option>
+                        {inventoryList.map((inv) => (
+                          <option key={inv.id} value={inv.part_name}>
+                            {inv.part_name} ({inv.part_code}) • Stock: {inv.quantity}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         type="number"
                         min={1}
