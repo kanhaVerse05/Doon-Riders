@@ -54,12 +54,12 @@ export default function TechnicianLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] flex flex-col justify-between items-center p-4 selection:bg-[#00D96B] selection:text-black font-sans">
-      <div className="w-full max-w-sm my-auto space-y-6">
+    <div className="min-h-screen bg-[#F7F8FA] bg-[url('/images/technician-login-bg.png')] bg-cover bg-center bg-no-repeat flex flex-col justify-between items-center p-4 selection:bg-[#00D96B] selection:text-black font-sans relative">
+      <div className="w-full max-w-sm my-auto space-y-6 relative z-10">
         
         {/* App Logo & Header */}
         <div className="text-center space-y-3 pt-4">
-          <div className="inline-flex items-center justify-center w-24 h-16 bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_8px_24px_rgba(16,24,40,0.06)] p-2">
+          <div className="inline-flex items-center justify-center w-24 h-16 bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_8px_24px_rgba(16,24,40,0.08)] p-2">
             <Image
               src="/images/doon-riders-logo.png"
               alt="DOON RIDERS"
@@ -75,7 +75,7 @@ export default function TechnicianLoginPage() {
               <span>DOON RIDERS</span>
               <span className="w-2 h-2 rounded-full bg-[#00D96B]" />
             </h1>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 bg-emerald-50 border border-[#00D96B]/30 rounded-full">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 bg-white/90 backdrop-blur-sm border border-[#00D96B]/30 rounded-full shadow-xs">
               <Wrench className="w-3.5 h-3.5 text-[#00A854]" />
               <span className="text-[11px] font-bold text-[#00A854] tracking-wider uppercase">
                 Technician App Portal
@@ -85,7 +85,7 @@ export default function TechnicianLoginPage() {
         </div>
 
         {/* Login Box */}
-        <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-gray-100 space-y-4">
+        <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 shadow-[0_10px_35px_rgba(0,0,0,0.06)] border border-white/80 space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs font-semibold leading-relaxed">
               {error}
@@ -139,14 +139,14 @@ export default function TechnicianLoginPage() {
         </div>
 
         {/* Security Badge */}
-        <div className="text-center flex items-center justify-center gap-1.5 text-[11px] text-gray-400 font-medium">
+        <div className="text-center flex items-center justify-center gap-1.5 text-[11px] text-gray-600 font-semibold bg-white/70 backdrop-blur-xs py-1.5 px-3 rounded-full mx-auto w-fit border border-white/60 shadow-xs">
           <ShieldCheck className="w-3.5 h-3.5 text-[#00A854]" />
           <span>DOON Riders EV Mobility System</span>
         </div>
       </div>
 
       {/* Bottom iOS home indicator */}
-      <div className="w-32 h-1 bg-gray-300 rounded-full mx-auto my-2" />
+      <div className="w-32 h-1 bg-gray-400/60 rounded-full mx-auto my-2 relative z-10" />
     </div>
   );
 }
