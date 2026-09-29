@@ -71,7 +71,7 @@ export default function AdminPricingPage() {
   ]);
   const [newFeatureText, setNewFeatureText] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
 
   const fetchPlans = async () => {
     try {

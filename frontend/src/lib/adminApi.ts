@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
 
 export const adminApi = {
   async request(endpoint: string, options: RequestInit = {}) {

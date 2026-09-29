@@ -1,6 +1,6 @@
 // API Client for DOON Riders Backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
 
 export interface Vehicle {
   id: number;

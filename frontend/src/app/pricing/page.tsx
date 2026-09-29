@@ -56,7 +56,7 @@ export default function PricingPage() {
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
         const res = await fetch(`${apiUrl}/pricing-plans`);
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
