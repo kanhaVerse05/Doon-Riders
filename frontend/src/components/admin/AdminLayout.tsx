@@ -46,8 +46,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [user]);
 
   useEffect(() => {
-    if (mounted && !isLoading && !user && !pathname?.includes('/admin/login')) {
-      router.replace('/admin/login');
+    if (mounted && !isLoading && !user && !pathname?.includes('/admin/login') && !pathname?.includes('/technician/login')) {
+      if (pathname?.startsWith('/admin/technician') || pathname?.startsWith('/technician')) {
+        router.replace('/technician/login');
+      } else {
+        router.replace('/admin/login');
+      }
     } else if (mounted && !isLoading && user) {
       const isTech = user.roleName === 'TECHNICIAN' || user.roleName?.includes('TECH');
       if (isTech && !pathname?.startsWith('/admin/technician')) {

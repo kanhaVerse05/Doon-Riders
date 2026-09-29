@@ -29,29 +29,25 @@ export default function TechnicianLoginPage() {
     try {
       const success = await login(email, password);
       if (success) {
+        const saved = localStorage.getItem('dr_admin_user');
+        const parsed = saved ? JSON.parse(saved) : null;
+        const isTech = parsed?.roleName === 'TECHNICIAN' || parsed?.roleName?.includes('TECH');
+
+        if (!isTech) {
+          // Clear credentials and reject
+          localStorage.removeItem('dr_admin_token');
+          localStorage.removeItem('dr_admin_user');
+          setError('This portal is reserved for Technicians only. Please use the Admin CRM portal.');
+          setLoading(false);
+          return;
+        }
+
         router.push('/admin/technician/jobs');
       } else {
-        setError('Invalid technician credentials. Please check and try again.');
+        setError('Invalid technician credentials. Please check your email and password.');
       }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickDemoLogin = async () => {
-    setEmail('amit.tech@doonriders.com');
-    setPassword('Admin@1234');
-    setLoading(true);
-    setError(null);
-    try {
-      const success = await login('amit.tech@doonriders.com', 'Admin@1234');
-      if (success) {
-        router.push('/admin/technician/jobs');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Login failed.');
     } finally {
       setLoading(false);
     }
@@ -63,19 +59,24 @@ export default function TechnicianLoginPage() {
         
         {/* App Logo & Header */}
         <div className="text-center space-y-3 pt-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#070D18] rounded-2xl shadow-xl shadow-black/10 border border-white/10 p-3">
-            <div className="w-full h-full bg-[#00D96B] rounded-xl flex items-center justify-center text-[#070D18] font-black text-xl tracking-tight">
-              DR
-            </div>
+          <div className="inline-flex items-center justify-center w-24 h-16 bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_8px_24px_rgba(16,24,40,0.06)] p-2">
+            <Image
+              src="/images/doon-riders-logo.png"
+              alt="DOON RIDERS"
+              width={70}
+              height={44}
+              className="object-contain"
+              priority
+            />
           </div>
 
           <div>
-            <h1 className="text-xl font-black tracking-tight text-[#111827] uppercase flex items-center justify-center gap-1.5">
+            <h1 className="text-xl font-black tracking-tight text-[#111827] uppercase flex items-center justify-center gap-1.5 font-['Play']">
               <span>DOON RIDERS</span>
               <span className="w-2 h-2 rounded-full bg-[#00D96B]" />
             </h1>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 bg-emerald-50 border border-[#00D96B]/30 rounded-full">
-              <Wrench className="w-3 h-3 text-[#00A854]" />
+              <Wrench className="w-3.5 h-3.5 text-[#00A854]" />
               <span className="text-[11px] font-bold text-[#00A854] tracking-wider uppercase">
                 Technician App Portal
               </span>
@@ -86,7 +87,7 @@ export default function TechnicianLoginPage() {
         {/* Login Box */}
         <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-gray-100 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs font-semibold">
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs font-semibold leading-relaxed">
               {error}
             </div>
           )}
@@ -129,24 +130,12 @@ export default function TechnicianLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#00A854] hover:bg-[#008744] text-white font-black py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-[0_4px_14px_rgba(0,168,84,0.3)] transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full bg-[#00A854] hover:bg-[#008744] text-white font-black py-3.5 rounded-2xl text-xs uppercase tracking-wider shadow-[0_4px_14px_rgba(0,168,84,0.3)] transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
             >
               <span>{loading ? 'Signing In...' : 'LOG IN AS TECHNICIAN'}</span>
               <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </button>
           </form>
-
-          {/* 1-Tap Demo Login Button */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={handleQuickDemoLogin}
-              className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 border border-[#00D96B]/30 rounded-xl text-xs font-bold text-[#00A854] flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>1-Tap Demo Technician Login</span>
-            </button>
-          </div>
         </div>
 
         {/* Security Badge */}

@@ -42,12 +42,6 @@ export const MobileBottomNav: React.FC = () => {
           show: true
         },
         {
-          name: 'All Jobs',
-          href: '/admin/technician/jobs',
-          icon: ClipboardList,
-          show: true
-        },
-        {
           name: 'Profile',
           href: '#profile',
           icon: User,

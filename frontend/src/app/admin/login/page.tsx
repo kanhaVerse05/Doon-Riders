@@ -11,22 +11,39 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const success = await login(email, password);
-    if (success) {
-      const saved = localStorage.getItem('dr_admin_user');
-      const parsed = saved ? JSON.parse(saved) : null;
-      if (parsed?.roleName === 'TECHNICIAN') {
-        router.push('/admin/technician/jobs');
-      } else {
+    setError(null);
+
+    try {
+      const success = await login(email, password);
+      if (success) {
+        const saved = localStorage.getItem('dr_admin_user');
+        const parsed = saved ? JSON.parse(saved) : null;
+        const isTech = parsed?.roleName === 'TECHNICIAN' || parsed?.roleName?.includes('TECH');
+
+        if (isTech) {
+          // Block technician login on /admin/login
+          localStorage.removeItem('dr_admin_token');
+          localStorage.removeItem('dr_admin_user');
+          setError('Technicians must log in through the Technician App (/technician/login).');
+          setLoading(false);
+          return;
+        }
+
         router.push('/admin/dashboard');
+      } else {
+        setError('Invalid credentials. Please check your email and password.');
       }
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -60,6 +77,11 @@ export default function AdminLoginPage() {
 
         {/* Login Card */}
         <div className="bg-white border border-[#E5E7EB] rounded-3xl p-7 sm:p-8 shadow-[0_8px_30px_rgba(16,24,40,0.06)] space-y-5">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-xl text-xs font-semibold leading-relaxed">
+              {error}
+            </div>
+          )}
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

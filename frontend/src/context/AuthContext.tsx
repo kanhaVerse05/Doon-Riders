@@ -253,16 +253,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    alert('Invalid credentials. Please check your email and password.');
+    // Invalid credentials
     return false;
   };
 
-  const logout = () => {
+  const logout = (redirectUrl?: string) => {
+    const isTech = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
+    const isTechPath = typeof window !== 'undefined' && (
+      window.location.pathname.startsWith('/technician') ||
+      window.location.pathname.startsWith('/admin/technician')
+    );
+
     setUser(null);
     setToken(null);
     localStorage.removeItem('dr_admin_token');
     localStorage.removeItem('dr_admin_user');
-    window.location.href = '/admin/login';
+
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else if (isTech || isTechPath) {
+      window.location.href = '/technician/login';
+    } else {
+      window.location.href = '/admin/login';
+    }
   };
 
   const switchRoleDemo = async (role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => {
