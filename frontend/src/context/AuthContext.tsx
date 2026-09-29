@@ -257,7 +257,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
-  const logout = (redirectUrl?: string) => {
+  const logout = (redirectUrl?: string | any) => {
     const isTech = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
     const isTechPath = typeof window !== 'undefined' && (
       window.location.pathname.startsWith('/technician') ||
@@ -269,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('dr_admin_token');
     localStorage.removeItem('dr_admin_user');
 
-    if (redirectUrl) {
+    if (typeof redirectUrl === 'string' && redirectUrl.trim().length > 0 && !redirectUrl.includes('object')) {
       window.location.href = redirectUrl;
     } else if (isTech || isTechPath) {
       window.location.href = '/technician/login';

@@ -258,7 +258,7 @@ export const Sidebar: React.FC = () => {
           </div>
 
           <button
-            onClick={logout}
+            onClick={() => logout()}
             title="Logout"
             className="p-1.5 rounded-lg text-[#98A2B3] hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
           >

@@ -176,7 +176,7 @@ export const MobileBottomNav: React.FC = () => {
                 <p className="text-[10px] text-[#00A854] font-bold">{user?.roleDisplayName || 'Super Admin'}</p>
               </div>
               <button
-                onClick={logout}
+                onClick={() => logout()}
                 className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg"
               >
                 <LogOut className="w-3.5 h-3.5" />

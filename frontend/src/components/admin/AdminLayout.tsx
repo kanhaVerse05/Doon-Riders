@@ -169,7 +169,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
             {!isTechnician && (
               <button
-                onClick={logout}
+                onClick={() => logout()}
                 title="Logout Session"
                 className="hidden md:inline-flex p-2 rounded-xl text-[#98A2B3] hover:text-red-600 hover:bg-red-50 transition cursor-pointer border border-transparent hover:border-red-200"
               >
@@ -315,7 +315,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => logout()}
                 className="w-full py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition border border-red-200 flex items-center justify-center gap-1.5 cursor-pointer mt-1"
               >
                 <LogOut className="w-3.5 h-3.5" />
