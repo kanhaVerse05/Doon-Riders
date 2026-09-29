@@ -15,5 +15,11 @@
   },
   "include": [
     "src/**/*"
+  ],
+  "exclude": [
+    "src/test_api.ts",
+    "src/migrate_mysql.ts",
+    "node_modules",
+    "dist"
   ]
 }

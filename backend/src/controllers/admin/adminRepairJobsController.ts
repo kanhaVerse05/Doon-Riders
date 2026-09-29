@@ -401,7 +401,7 @@ export const createRepairJob = async (req: AuthRequest, res: Response) => {
       closed_at: null
     };
 
-    memoryStore.repairJobs.unshift(newJob);
+    memoryStore.repairJobs.unshift(newJob as any);
 
     // Initial Timeline Event
     const event1 = {
@@ -847,11 +847,11 @@ export const startRepair = async (req: AuthRequest, res: Response) => {
         completed_by_id: null,
         completed_by_name: null,
         total_duration_seconds: 0,
-        total_duration_formatted: null,
+        total_duration_formatted: '',
         technician_notes: technician_notes,
         completion_photos: []
       };
-      memoryStore.repairTiming.push(timing);
+      memoryStore.repairTiming.push(timing as any);
     }
 
     job.status = 'Repairing';
@@ -1303,7 +1303,7 @@ export const closeRepairJob = async (req: AuthRequest, res: Response) => {
 
     const closedAt = new Date().toISOString();
     job.status = 'Closed';
-    job.closed_at = closedAt;
+    job.closed_at = closedAt as any;
     job.updated_at = closedAt;
 
     // Decrement technician active workload count

@@ -259,7 +259,7 @@ export const createPreBooking = async (req: Request, res: Response) => {
     };
 
     if (!memoryStore.preBookings) memoryStore.preBookings = [];
-    memoryStore.preBookings.unshift(newBooking);
+    memoryStore.preBookings.unshift(newBooking as any);
 
     return res.status(201).json({
       success: true,

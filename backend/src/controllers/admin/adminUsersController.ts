@@ -73,7 +73,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
             'INSERT INTO roles (name, display_name, description, is_system) VALUES ($1, $2, $3, FALSE)',
             [cleanCode, cleanCustomName, `Custom role: ${cleanCustomName}`]
           );
-          finalRoleId = createRoleRes.insertId;
+          finalRoleId = createRoleRes.insertId || 1;
           finalRoleDisplayName = cleanCustomName;
           finalRoleName = cleanCode;
         }
