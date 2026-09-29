@@ -3,10 +3,11 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.doonriders.technician',
   appName: 'DOON Riders Technician',
-  webDir: 'out',
+  webDir: 'public',
   server: {
-    androidScheme: 'https',
-    cleartext: true
+    url: 'https://doon-riders.vercel.app/technician/login',
+    cleartext: true,
+    androidScheme: 'https'
   },
   plugins: {
     SplashScreen: {
