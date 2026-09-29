@@ -27,7 +27,7 @@ RUN npm ci --only=production
 
 # Copy compiled files from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/uploads ./uploads
+RUN mkdir -p uploads
 
 # Expose API port
 EXPOSE 5000
