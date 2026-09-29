@@ -18,7 +18,13 @@ export default function AdminLoginPage() {
     setLoading(true);
     const success = await login(email, password);
     if (success) {
-      router.push('/admin/dashboard');
+      const saved = localStorage.getItem('dr_admin_user');
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed?.roleName === 'TECHNICIAN') {
+        router.push('/admin/technician/jobs');
+      } else {
+        router.push('/admin/dashboard');
+      }
     }
     setLoading(false);
   };
