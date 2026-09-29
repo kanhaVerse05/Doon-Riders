@@ -1,0 +1,83 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Vehicle {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  slug               String   @unique
+  tagline            String?
+  price              Decimal  @db.Decimal(10, 2)
+  range_km           Int
+  acceleration_0_100 Decimal  @db.Decimal(3, 1)
+  top_speed_kmh      Int
+  battery_kwh        Int
+  charging_time_min  Int
+  image_url          String
+  badge              String?
+  category           String   @default("Electric")
+  is_featured        Boolean  @default(true)
+  created_at         DateTime @default(now())
+
+  bookings           TestDriveBooking[]
+
+  @@map("vehicles")
+}
+
+model TestDriveBooking {
+  id             Int       @id @default(autoincrement())
+  full_name      String
+  email          String
+  phone          String
+  vehicle_id     Int?
+  vehicle_name   String?
+  preferred_date DateTime
+  preferred_time String
+  city           String    @default("Dehradun")
+  message        String?
+  status         String    @default("pending")
+  created_at     DateTime  @default(now())
+
+  vehicle        Vehicle?  @relation(fields: [vehicle_id], references: [id], onDelete: SetNull)
+
+  @@map("test_drive_bookings")
+}
+
+model Newsletter {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  is_active     Boolean  @default(true)
+  subscribed_at DateTime @default(now())
+
+  @@map("newsletters")
+}
+
+model Testimonial {
+  id          Int      @id @default(autoincrement())
+  name        String
+  role        String
+  company     String?
+  avatar_url  String?
+  rating      Int      @default(5)
+  content     String
+  is_approved Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  @@map("testimonials")
+}
+
+model Faq {
+  id            Int     @id @default(autoincrement())
+  question      String
+  answer        String
+  category      String  @default("General")
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+
+  @@map("faqs")
+}

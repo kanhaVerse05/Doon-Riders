@@ -1,0 +1,35 @@
+{
+  "name": "doon-riders-backend",
+  "version": "1.0.0",
+  "description": "Node.js Express REST API with MySQL for Doon Riders Electric Vehicles",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "migrate:mysql": "tsx src/migrate_mysql.ts",
+    "test:api": "tsx src/test_api.ts"
+  },
+  "dependencies": {
+    "@types/pg": "^8.23.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.3.0",
+    "mysql2": "^3.24.4",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^20.14.9",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.5.2"
+  }
+}
