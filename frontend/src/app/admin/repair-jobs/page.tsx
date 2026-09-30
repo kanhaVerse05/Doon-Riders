@@ -879,29 +879,29 @@ export default function RepairJobsPage() {
         )}
 
         {/* Top Header & Role Perspective */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854] shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854] shadow-sm flex-shrink-0">
                   <Wrench className="w-5 h-5" />
                 </div>
-                <div>
-                  <h1 className="text-xl font-heading font-black text-[#111827] tracking-tight">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg sm:text-xl font-heading font-black text-[#111827] tracking-tight truncate">
                     Job Assignment &amp; Repair Management
                   </h1>
-                  <p className="text-xs text-[#667085]">
-                    End-to-end electric scooter workshop workflow, live timers, multi-hub technician dispatch &amp; invoicing
+                  <p className="text-xs text-[#667085] truncate">
+                    End-to-end electric scooter workshop workflow, live timers &amp; multi-hub dispatch
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Quick Header Actions */}
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap flex-shrink-0">
               <button
                 onClick={exportCsv}
-                className="px-3.5 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#344054] hover:bg-[#F7F9FA] flex items-center gap-1.5 transition cursor-pointer"
+                className="px-3.5 py-2 rounded-xl border border-[#E5E7EB] text-xs font-bold text-[#344054] hover:bg-[#F7F9FA] flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>
@@ -909,7 +909,7 @@ export default function RepairJobsPage() {
 
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 rounded-xl bg-[#00D96B] hover:bg-[#00A854] text-white text-xs font-bold shadow-sm shadow-[#00D96B]/30 flex items-center gap-1.5 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#00D96B] hover:bg-[#00A854] text-white text-xs font-bold shadow-sm shadow-[#00D96B]/30 flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Repair Job</span>
@@ -948,91 +948,91 @@ export default function RepairJobsPage() {
         {/* ========================================================= */}
         <div className="space-y-6">
           {/* Top 8 KPI Metrics Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2.5 sm:gap-3">
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-[#667085] tracking-wider uppercase">Total Jobs</span>
-                <Wrench className="w-3.5 h-3.5 text-[#00A854]" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-3">
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-[#667085] tracking-wider uppercase truncate">Total Jobs</span>
+                <Wrench className="w-3.5 h-3.5 text-[#00A854] flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-[#111827]">{stats.totalJobs}</p>
-              <span className="text-[10px] text-[#667085]">All time service</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-[#111827]">{stats.totalJobs}</p>
+              <span className="text-[10px] text-[#667085] truncate block">All time service</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-amber-700 tracking-wider uppercase">Pending Insp.</span>
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-amber-700 tracking-wider uppercase truncate">Pending Insp.</span>
+                <Clock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-amber-700">{stats.pendingInspection}</p>
-              <span className="text-[10px] text-amber-600">Needs check</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-amber-700">{stats.pendingInspection}</p>
+              <span className="text-[10px] text-amber-600 truncate block">Needs check</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-blue-700 tracking-wider uppercase">Assigned</span>
-                <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-blue-700 tracking-wider uppercase truncate">Assigned</span>
+                <UserCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-blue-700">{stats.technicianAssigned}</p>
-              <span className="text-[10px] text-blue-600">With technician</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-blue-700">{stats.technicianAssigned}</p>
+              <span className="text-[10px] text-blue-600 truncate block">With technician</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-purple-700 tracking-wider uppercase">Parts Approval</span>
-                <FileText className="w-3.5 h-3.5 text-purple-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-purple-700 tracking-wider uppercase truncate">Parts Approval</span>
+                <FileText className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-purple-700">{stats.partsApprovalPending}</p>
-              <span className="text-[10px] text-purple-600">Incharge approval</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-purple-700">{stats.partsApprovalPending}</p>
+              <span className="text-[10px] text-purple-600 truncate block">Incharge check</span>
             </div>
 
-            <div className="bg-white border border-orange-200 bg-orange-50/40 rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-orange-700 tracking-wider uppercase">Repairing</span>
-                <Wrench className="w-3.5 h-3.5 text-orange-600 animate-spin" style={{ animationDuration: '4s' }} />
+            <div className="bg-white border border-orange-200 bg-orange-50/40 rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-orange-700 tracking-wider uppercase truncate">Repairing</span>
+                <Wrench className="w-3.5 h-3.5 text-orange-600 animate-spin flex-shrink-0" style={{ animationDuration: '4s' }} />
               </div>
-              <p className="text-xl font-heading font-black text-orange-700">{stats.repairing}</p>
-              <span className="text-[10px] text-orange-600 font-bold">Active Timers</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-orange-700">{stats.repairing}</p>
+              <span className="text-[10px] text-orange-600 font-bold truncate block">Active Timers</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-teal-700 tracking-wider uppercase">Ready Bill</span>
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-teal-700 tracking-wider uppercase truncate">Ready Bill</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-teal-700">{stats.readyForBilling}</p>
-              <span className="text-[10px] text-teal-600">Repair done</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-teal-700">{stats.readyForBilling}</p>
+              <span className="text-[10px] text-teal-600 truncate block">Repair done</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-rose-700 tracking-wider uppercase">Pay Pending</span>
-                <CreditCard className="w-3.5 h-3.5 text-rose-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-rose-700 tracking-wider uppercase truncate">Pay Pending</span>
+                <CreditCard className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-rose-700">{stats.paymentPending}</p>
-              <span className="text-[10px] text-rose-600">Bill generated</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-rose-700">{stats.paymentPending}</p>
+              <span className="text-[10px] text-rose-600 truncate block">Bill generated</span>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-extrabold text-emerald-700 tracking-wider uppercase">Closed</span>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:p-3.5 shadow-xs min-w-0">
+              <div className="flex items-center justify-between mb-1 min-w-0">
+                <span className="text-[10px] font-extrabold text-emerald-700 tracking-wider uppercase truncate">Closed</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
               </div>
-              <p className="text-xl font-heading font-black text-emerald-700">{stats.completedClosed}</p>
-              <span className="text-[10px] text-emerald-600">Handed over</span>
+              <p className="text-lg sm:text-xl font-heading font-black text-emerald-700">{stats.completedClosed}</p>
+              <span className="text-[10px] text-emerald-600 truncate block">Handed over</span>
             </div>
           </div>
 
           {/* Filter Toolbar & Status Tabs */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm space-y-3">
             {/* Status Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#F2F4F7]">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-[#F2F4F7]">
               {STATUS_TABS.map(tab => {
                 const active = statusTab === tab.value;
                 return (
                   <button
                     key={tab.value}
                     onClick={() => setStatusTab(tab.value)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 ${
                       active
                         ? 'bg-[#111827] text-white shadow-sm'
                         : 'text-[#475467] hover:bg-[#F7F9FA] hover:text-[#111827]'
@@ -1050,8 +1050,8 @@ export default function RepairJobsPage() {
             </div>
 
             {/* Search & Filter Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
-              <div className="relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5 pt-1">
+              <div className="relative sm:col-span-2 lg:col-span-1 xl:col-span-1">
                 <Search className="w-4 h-4 text-[#98A2B3] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -1136,7 +1136,7 @@ export default function RepairJobsPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[1100px]">
                 <thead>
                   <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[#667085] font-extrabold uppercase text-[10px] tracking-wider">
                     <th className="py-3 px-3.5 whitespace-nowrap">Job ID</th>

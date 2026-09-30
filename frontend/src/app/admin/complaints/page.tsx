@@ -592,15 +592,15 @@ export default function ComplaintsListPage() {
 
         {/* Filter & Search Bar */}
         <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-3">
-          <div className="flex flex-col md:flex-row items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             {/* Search */}
-            <div className="relative flex-1 w-full">
+            <div className="relative sm:col-span-2 xl:col-span-1 w-full">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98A2B3]" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by Complaint ID, Scooty Reg No, Customer Name, Phone or Issue..."
+                placeholder="Search Complaint ID, Scooty, Customer, Phone..."
                 className="w-full pl-10 pr-4 py-2.5 bg-[#F7F9FA] border border-[#E5E7EB] rounded-2xl text-xs font-medium text-[#111827] focus:outline-none focus:border-[#00D96B] focus:bg-white transition"
               />
               {search && (
@@ -614,7 +614,7 @@ export default function ComplaintsListPage() {
             </div>
 
             {/* Hub Selector */}
-            <div className="w-full md:w-48">
+            <div className="w-full">
               <select
                 value={selectedHub}
                 onChange={e => setSelectedHub(e.target.value)}
@@ -630,7 +630,7 @@ export default function ComplaintsListPage() {
             </div>
 
             {/* Technician Selector */}
-            <div className="w-full md:w-48">
+            <div className="w-full">
               <select
                 value={selectedTechnician}
                 onChange={e => setSelectedTechnician(e.target.value)}
@@ -646,7 +646,7 @@ export default function ComplaintsListPage() {
             </div>
 
             {/* Priority Selector */}
-            <div className="w-full md:w-36">
+            <div className="w-full">
               <select
                 value={selectedPriority}
                 onChange={e => setSelectedPriority(e.target.value)}
@@ -661,7 +661,7 @@ export default function ComplaintsListPage() {
           </div>
 
           {/* Status Tabs Bar */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-[#F0F2F5] text-xs font-bold">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1 border-t border-[#F0F2F5] text-xs font-bold">
             <span className="text-[10px] text-[#98A2B3] uppercase font-extrabold pr-2 shrink-0">Status:</span>
             {[
               { id: 'ALL', label: 'All' },

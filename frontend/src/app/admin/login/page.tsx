@@ -37,10 +37,15 @@ export default function AdminLoginPage() {
         }
 
         if (isHub) {
-          router.push('/admin/complaints');
-        } else {
-          router.push('/admin/dashboard');
+          // Block Hub Incharge login on /admin/login
+          localStorage.removeItem('dr_admin_token');
+          localStorage.removeItem('dr_admin_user');
+          setError('Hub Incharges must log in through the Hub Portal (/hub/login).');
+          setLoading(false);
+          return;
         }
+
+        router.push('/admin/dashboard');
       } else {
         setError('Invalid credentials. Please check your email and password.');
       }

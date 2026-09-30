@@ -47,9 +47,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [user]);
 
   useEffect(() => {
-    if (mounted && !isLoading && !user && !pathname?.includes('/admin/login') && !pathname?.includes('/technician/login')) {
+    if (mounted && !isLoading && !user && !pathname?.includes('/admin/login') && !pathname?.includes('/technician/login') && !pathname?.includes('/hub/login')) {
       if (pathname?.startsWith('/admin/technician') || pathname?.startsWith('/technician')) {
         router.replace('/technician/login');
+      } else if (pathname?.startsWith('/hub')) {
+        router.replace('/hub/login');
       } else {
         router.replace('/admin/login');
       }
