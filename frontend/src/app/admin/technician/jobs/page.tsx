@@ -257,26 +257,101 @@ export default function TechnicianJobsSummaryPage() {
   // Live Background Geolocation Tracker when En Route
   useEffect(() => {
     const activeEnRouteComplaint = fieldComplaints.find(c => c.status === 'En Route');
-    if (!activeEnRouteComplaint || typeof window === 'undefined' || !navigator.geolocation) return;
+    if (!activeEnRouteComplaint || typeof window === 'undefined') return;
 
-    const watchId = navigator.geolocation.watchPosition(
-      pos => {
-        const { latitude, longitude, speed, heading } = pos.coords;
-        adminApi.post(`/admin/complaints/${activeEnRouteComplaint.id}/location`, {
-          latitude,
-          longitude,
-          speed,
-          heading
-        }).catch(() => {});
-      },
-      err => {
-        console.warn('Geolocation watch error:', err.message);
-      },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
-    );
+    const broadcastLocation = (pos: GeolocationPosition) => {
+      const { latitude, longitude, speed, heading } = pos.coords;
+      adminApi.post(`/admin/complaints/${activeEnRouteComplaint.id}/location`, {
+        latitude,
+        longitude,
+        speed,
+        heading
+      }).catch(() => {});
+    };
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    let watchId: number | null = null;
+    let intervalId: any = null;
+
+    if (navigator.geolocation) {
+      // 1. Immediate position broadcast
+      navigator.geolocation.getCurrentPosition(
+        broadcastLocation,
+        err => console.warn('GPS initial error:', err.message),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+
+      // 2. Continuous watchPosition
+      watchId = navigator.geolocation.watchPosition(
+        broadcastLocation,
+        err => console.warn('GPS watch error:', err.message),
+        { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
+      );
+
+      // 3. Heartbeat interval broadcast every 4s
+      intervalId = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(
+          broadcastLocation,
+          () => {},
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      }, 4000);
+    }
+
+    return () => {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [fieldComplaints]);
+
+  const [sendingManualPing, setSendingManualPing] = useState(false);
+
+  const handleManualGPSPing = async (complaintId: number) => {
+    try {
+      setSendingManualPing(true);
+      if (navigator.geolocation) {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 6000, enableHighAccuracy: true });
+        });
+        await adminApi.post(`/admin/complaints/${complaintId}/location`, {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        });
+        showToast('Live GPS coordinates broadcasted successfully!');
+        fetchData();
+      } else {
+        alert('Geolocation is not supported on this browser');
+      }
+    } catch (err: any) {
+      alert('Failed to get GPS: ' + (err.message || 'Permission denied'));
+    } finally {
+      setSendingManualPing(false);
+    }
+  };
+
+  const handleSimulateTechMove = async (complaint: Complaint) => {
+    try {
+      const currentTechLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
+      const currentTechLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
+      const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
+      const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
+
+      const nextLat = currentTechLat + (custLat - currentTechLat) * 0.25;
+      const nextLng = currentTechLng + (custLng - currentTechLng) * 0.25;
+
+      await adminApi.post(`/admin/complaints/${complaint.id}/location`, {
+        latitude: Number(nextLat.toFixed(6)),
+        longitude: Number(nextLng.toFixed(6))
+      });
+      showToast('Simulated movement closer to customer breakdown spot!');
+      fetchData();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
 
   // Pull to Refresh Touch Event Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -833,15 +908,45 @@ export default function TechnicianJobsSummaryPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                            <span>GPS live sync enabled</span>
+                          {/* Live Coordinates & Telemetry */}
+                          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-slate-400">GPS Stream:</span>
+                            <span className="text-[#00D96B] font-bold">
+                              {complaint.technician_latitude ? `${complaint.technician_latitude.toFixed(4)}, ${complaint.technician_longitude?.toFixed(4)}` : 'Broadcasting Live'}
+                            </span>
+                          </div>
+
+                          {/* Action Bar inside Live Card */}
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleManualGPSPing(complaint.id)}
+                                disabled={sendingManualPing}
+                                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold flex items-center gap-1 border border-slate-700 active:scale-95 transition"
+                              >
+                                <Radio className={`w-3 h-3 text-[#00D96B] ${sendingManualPing ? 'animate-spin' : ''}`} />
+                                <span>GPS Ping</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSimulateTechMove(complaint)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-900/60 hover:bg-amber-800 text-amber-200 text-[11px] font-bold flex items-center gap-1 border border-amber-700/50 active:scale-95 transition"
+                                title="Move 25% closer along route (Test simulation)"
+                              >
+                                <Navigation className="w-3 h-3 text-amber-400" />
+                                <span>Move Closer (Test)</span>
+                              </button>
+                            </div>
+
                             <a
                               href={mapsUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[#00D96B] font-bold hover:underline flex items-center gap-1"
+                              className="text-[#00D96B] font-bold hover:underline flex items-center gap-1 text-[11px]"
                             >
-                              <span>Open Google Maps</span>
+                              <span>Open Maps</span>
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           </div>

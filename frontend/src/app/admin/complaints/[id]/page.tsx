@@ -144,6 +144,7 @@ export default function ComplaintOverviewPage() {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [simulatingPing, setSimulatingPing] = useState(false);
 
   // Live Timer Heartbeat
   const [liveSeconds, setLiveSeconds] = useState(0);
@@ -164,9 +165,9 @@ export default function ComplaintOverviewPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const fetchComplaintDetails = async () => {
+  const fetchComplaintDetails = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await adminApi.get(`/admin/complaints/${complaintId}`);
       if (res && res.success) {
         setComplaint(res.data);
@@ -176,16 +177,34 @@ export default function ComplaintOverviewPage() {
     } catch (err) {
       console.error('Failed to load complaint details', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
     if (complaintId) {
-      fetchComplaintDetails();
+      fetchComplaintDetails(false);
     }
   }, [complaintId]);
+
+  // Real-time Silent Polling: Every 3 seconds when complaint is active (En Route / Assigned / Reached / WIP)
+  useEffect(() => {
+    if (!complaintId) return;
+    const isTrackingActive =
+      complaint?.status === 'En Route' ||
+      complaint?.status === 'Assigned' ||
+      complaint?.status === 'Reached' ||
+      complaint?.status === 'Work In Progress';
+
+    if (!isTrackingActive) return;
+
+    const pollInterval = setInterval(() => {
+      fetchComplaintDetails(true);
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [complaintId, complaint?.status]);
 
   // Live timer update
   useEffect(() => {
@@ -206,7 +225,37 @@ export default function ComplaintOverviewPage() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchComplaintDetails();
+    fetchComplaintDetails(false);
+  };
+
+  // Simulate Technician GPS Movement (For live demo / testing)
+  const handleSimulateGPSMove = async () => {
+    if (!complaint) return;
+    try {
+      setSimulatingPing(true);
+      const currentTechLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
+      const currentTechLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
+      const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
+      const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
+
+      // Move 20% closer along line to customer breakdown destination
+      const nextLat = currentTechLat + (custLat - currentTechLat) * 0.25;
+      const nextLng = currentTechLng + (custLng - currentTechLng) * 0.25;
+
+      const res = await adminApi.post(`/admin/complaints/${complaint.id}/location`, {
+        latitude: Number(nextLat.toFixed(6)),
+        longitude: Number(nextLng.toFixed(6))
+      });
+
+      if (res && res.success) {
+        showToast('GPS update simulated! Technician moved closer on OpenStreetMap.');
+        fetchComplaintDetails(true);
+      }
+    } catch (err: any) {
+      alert('Simulation error: ' + (err.message || 'Failed'));
+    } finally {
+      setSimulatingPing(false);
+    }
   };
 
   // Open WhatsApp
@@ -338,6 +387,29 @@ export default function ComplaintOverviewPage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap flex-shrink-0">
+            {/* Live GPS Beacon */}
+            {(isEnRoute || isReached || isWIP) && (
+              <div className="bg-[#EAFBF2] border border-[#00D96B]/40 px-3 py-1.5 rounded-2xl flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#00D96B] animate-ping flex-shrink-0" />
+                <span className="text-[11px] font-black text-[#00A854] uppercase tracking-wider">
+                  Live Stream Active (3s)
+                </span>
+              </div>
+            )}
+
+            {/* Test Simulate GPS Movement button (Visible when tracking is active) */}
+            {(isEnRoute || isReached || isWIP || !isClosed) && (
+              <button
+                onClick={handleSimulateGPSMove}
+                disabled={simulatingPing}
+                className="px-3.5 py-2.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="Simulate technician GPS movement closer to destination"
+              >
+                <Navigation className={`w-3.5 h-3.5 text-amber-600 ${simulatingPing ? 'animate-spin' : ''}`} />
+                <span>Simulate GPS Move</span>
+              </button>
+            )}
+
             <button
               onClick={handleRefresh}
               disabled={refreshing}

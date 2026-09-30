@@ -612,8 +612,15 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
     const { latitude, longitude, speed, heading } = req.body;
     const complaintId = Number(id);
 
-    if (!latitude || !longitude) {
+    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
       return res.status(400).json({ success: false, message: 'Latitude and Longitude are required' });
+    }
+
+    const lat = typeof latitude === 'string' ? parseFloat(latitude) : Number(latitude);
+    const lng = typeof longitude === 'string' ? parseFloat(longitude) : Number(longitude);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ success: false, message: 'Invalid numeric coordinates provided' });
     }
 
     const now = new Date().toISOString();
@@ -626,7 +633,7 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
             technician_longitude = $2,
             technician_location_updated_at = $3
            WHERE id = $4 OR complaint_number = $5`,
-          [Number(latitude), Number(longitude), now, complaintId || 0, id]
+          [lat, lng, now, complaintId || 0, id]
         );
       } catch (dbErr) {
         console.warn('[updateTechnicianLocation] DB ping error:', dbErr);
@@ -638,16 +645,16 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
     );
 
     if (complaint) {
-      complaint.technician_latitude = Number(latitude);
-      complaint.technician_longitude = Number(longitude);
+      complaint.technician_latitude = lat;
+      complaint.technician_longitude = lng;
       complaint.technician_location_updated_at = now;
     }
 
     return res.json({
       success: true,
       data: {
-        latitude: Number(latitude),
-        longitude: Number(longitude),
+        latitude: lat,
+        longitude: lng,
         updated_at: now
       }
     });

@@ -204,12 +204,20 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   useEffect(() => {
     if (mapInstanceRef.current && techMarkerRef.current && routeLineRef.current) {
       techMarkerRef.current.setLatLng([validTechLat, validTechLng]);
+      techMarkerRef.current.setPopupContent(`
+        <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
+          <strong style="color: #2563EB;">🏍️ Technician: ${technicianName}</strong><br/>
+          <span>Status: <b>${status}</b></span><br/>
+          <span style="font-size: 10px; color: #16A34A; font-weight: 700;">GPS: ${validTechLat.toFixed(5)}, ${validTechLng.toFixed(5)}</span><br/>
+          ${lastUpdated ? `<span style="font-size: 9px; color: #64748B;">Updated: ${new Date(lastUpdated).toLocaleTimeString('en-IN')}</span>` : ''}
+        </div>
+      `);
       routeLineRef.current.setLatLngs([
         [validTechLat, validTechLng],
         [validCustLat, validCustLng]
       ]);
     }
-  }, [validTechLat, validTechLng, validCustLat, validCustLng]);
+  }, [validTechLat, validTechLng, validCustLat, validCustLng, technicianName, status, lastUpdated]);
 
   const handleRecenter = () => {
     if (mapInstanceRef.current) {
