@@ -285,10 +285,10 @@ export default function ComplaintOverviewPage() {
   const isWorkDone = complaint.status === 'Work Done';
   const isClosed = complaint.status === 'Closed';
 
-  const techLat = complaint.technician_latitude || 30.2863;
-  const techLng = complaint.technician_longitude || 78.0069;
-  const custLat = complaint.latitude || 30.3256;
-  const custLng = complaint.longitude || 78.0436;
+  const techLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
+  const techLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
+  const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
+  const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
 
   const mapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}&travelmode=driving`;
 
@@ -470,7 +470,7 @@ export default function ComplaintOverviewPage() {
                 <div className="relative z-10 flex items-center justify-between">
                   <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[11px] font-mono text-slate-300 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>GPS Track Active: {techLat.toFixed(4)}° N, {techLng.toFixed(4)}° E</span>
+                    <span>GPS Track Active: {typeof techLat === 'number' && !isNaN(techLat) ? techLat.toFixed(4) : '30.2863'}° N, {typeof techLng === 'number' && !isNaN(techLng) ? techLng.toFixed(4) : '78.0069'}° E</span>
                   </div>
 
                   <a

@@ -703,10 +703,10 @@ export default function TechnicianJobsSummaryPage() {
                   const isDone = complaint.status === 'Work Done';
                   const isClosed = complaint.status === 'Closed';
 
-                  const techLat = complaint.technician_latitude || 30.2863;
-                  const techLng = complaint.technician_longitude || 78.0069;
-                  const custLat = complaint.latitude || 30.3256;
-                  const custLng = complaint.longitude || 78.0436;
+                  const techLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
+                  const techLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
+                  const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
+                  const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
                   const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}&travelmode=driving`;
 
                   // Check if there is another complaint next in line
