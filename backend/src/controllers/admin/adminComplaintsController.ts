@@ -59,9 +59,9 @@ export const getAllComplaints = async (req: AuthRequest, res: Response) => {
         let pIndex = 1;
 
         // Role-based scoping
-        if (userRole.includes('HUB') && req.user?.hub_id) {
+        if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
           whereClauses.push(`c.hub_id = $${pIndex}`);
-          params.push(req.user.hub_id);
+          params.push((req.user as any).hub_id);
           pIndex++;
         } else if (userRole.includes('TECH')) {
           whereClauses.push(`c.technician_id = $${pIndex}`);
@@ -176,8 +176,8 @@ export const getAllComplaints = async (req: AuthRequest, res: Response) => {
     let list = [...(memoryStore.complaints || [])];
 
     // Filter by role
-    if (userRole.includes('HUB') && req.user?.hub_id) {
-      list = list.filter(c => c.hub_id === req.user?.hub_id);
+    if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
+      list = list.filter(c => c.hub_id === (req.user as any)?.hub_id);
     } else if (userRole.includes('TECH')) {
       const techRecord = memoryStore.technicians.find(t => t.name.toLowerCase() === req.user?.name.toLowerCase() || t.id === userId);
       const techId = techRecord ? techRecord.id : userId;
@@ -481,7 +481,7 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
       action: 'CREATE_COMPLAINT',
       module: 'Complaints',
       recordId: newComplaint.id,
-      newData: newComplaint,
+      newValues: newComplaint,
       notes: `Logged complaint ${newComplaint.complaint_number} for customer ${newComplaint.customer_name}`
     });
 
@@ -590,7 +590,7 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
       action: 'ASSIGN_TECHNICIAN',
       module: 'Complaints',
       recordId: complaintId,
-      newData: { technician_id: tech.id, technician_name: tech.name, status: 'Assigned' },
+      newValues: { technician_id: tech.id, technician_name: tech.name, status: 'Assigned' },
       notes: `Assigned technician ${tech.name} to complaint ${complaint?.complaint_number || id}`
     });
 
@@ -891,7 +891,7 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
       action: `COMPLAINT_${status.toUpperCase().replace(/\s+/g, '_')}`,
       module: 'Complaints',
       recordId: complaint.id,
-      newData: { status: complaint.status },
+      newValues: { status: complaint.status },
       notes: eventDescription
     });
 

@@ -1083,7 +1083,7 @@ export const memoryStore = {
       updated_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
       closed_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString()
     }
-  ],
+  ] as any[],
   complaintEvents: [
     {
       id: 1,
@@ -1204,7 +1204,7 @@ export const memoryStore = {
       metadata: null,
       created_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString()
     }
-  ]
+  ] as any[]
 };
 
 // Unified Query Result Interface

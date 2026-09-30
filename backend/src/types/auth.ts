@@ -17,6 +17,8 @@ export interface AuthenticatedUser {
   roleDisplayName: string;
   permissions: UserPermission[];
   avatarUrl?: string;
+  hub_id?: number;
+  hubId?: number;
 }
 
 export interface AuthRequest extends Request {
