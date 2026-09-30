@@ -15,7 +15,11 @@ import {
   FileCheck,
   Wrench,
   Headphones,
-  Infinity
+  Infinity,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export default function HomeV2Page() {
@@ -34,310 +38,131 @@ export default function HomeV2Page() {
   const aboutVideoRef = useRef<HTMLVideoElement>(null);
   const swapVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Smooth lerp state
-  const [heroSlideProgress, setHeroSlideProgress] = useState(0);
-  const [aboutChapterProgress, setAboutChapterProgress] = useState(0);
-  const [swapSlideProgress, setSwapSlideProgress] = useState(0);
-
-  // Target times
-  const heroTargetTimeRef = useRef(0);
-  const aboutTargetTimeRef = useRef(0);
-  const swapTargetTimeRef = useRef(0);
-
-  // Refs for event handlers
+  // Refs for tracking current state inside event listeners without re-binding
   const sceneRef = useRef<0 | 1 | 2>(0);
   const heroSlideRef = useRef(0);
   const aboutChapterRef = useRef(0);
   const swapSlideRef = useRef(0);
-  const lastWheelTimeRef = useRef(0);
+  const isTransitioningRef = useRef(false);
 
   useEffect(() => {
     sceneRef.current = scene;
-    if (scene === 0 && heroVideoRef.current) {
-      heroVideoRef.current.muted = true;
-      heroVideoRef.current.play().catch(() => {});
-    } else if (scene === 1 && aboutVideoRef.current) {
-      aboutVideoRef.current.muted = true;
-      aboutVideoRef.current.play().catch(() => {});
-    } else if (scene === 2 && swapVideoRef.current) {
-      swapVideoRef.current.muted = true;
-      swapVideoRef.current.play().catch(() => {});
+    heroSlideRef.current = heroSlide;
+    aboutChapterRef.current = aboutChapter;
+    swapSlideRef.current = swapSlide;
+  }, [scene, heroSlide, aboutChapter, swapSlide]);
+
+  // Video Playback Management - Play ONLY the active scene video to ensure silky 60FPS
+  useEffect(() => {
+    if (scene === 0) {
+      if (heroVideoRef.current) {
+        heroVideoRef.current.muted = true;
+        heroVideoRef.current.play().catch(() => {});
+      }
+      aboutVideoRef.current?.pause();
+      swapVideoRef.current?.pause();
+    } else if (scene === 1) {
+      if (aboutVideoRef.current) {
+        aboutVideoRef.current.muted = true;
+        aboutVideoRef.current.play().catch(() => {});
+      }
+      heroVideoRef.current?.pause();
+      swapVideoRef.current?.pause();
+    } else if (scene === 2) {
+      if (swapVideoRef.current) {
+        swapVideoRef.current.muted = true;
+        swapVideoRef.current.play().catch(() => {});
+      }
+      heroVideoRef.current?.pause();
+      aboutVideoRef.current?.pause();
     }
   }, [scene]);
 
-  useEffect(() => {
-    heroSlideRef.current = heroSlide;
-    heroTargetTimeRef.current = (heroSlide / 2) * 5.0;
-  }, [heroSlide]);
+  // Navigation handlers with lock
+  const handleNext = useCallback(() => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
 
-  useEffect(() => {
-    aboutChapterRef.current = aboutChapter;
-    aboutTargetTimeRef.current = (aboutChapter / 2) * 9.9;
-  }, [aboutChapter]);
-
-  useEffect(() => {
-    swapSlideRef.current = swapSlide;
-    if (swapVideoRef.current) {
-      swapVideoRef.current.muted = true;
-      const dur = swapVideoRef.current.duration || 6.0;
-      const targetT = (swapSlide / 2) * Math.min(dur * 0.85, 8.0);
-      swapTargetTimeRef.current = targetT;
-      if (Math.abs(swapVideoRef.current.currentTime - targetT) > 1.2) {
-        swapVideoRef.current.currentTime = targetT;
-      }
-      swapVideoRef.current.play().catch(() => {});
-    }
-  }, [swapSlide]);
-
-  // Jump to specific slide/scene
-  const changeHeroSlide = useCallback((s: number) => {
-    if (s < 0 || s > 2) return;
-    setHeroSlide(s);
-  }, []);
-
-  const changeAboutChapter = useCallback((c: number) => {
-    if (c < 0 || c > 2) return;
-    setAboutChapter(c);
-  }, []);
-
-  const changeSwapSlide = useCallback((s: number) => {
-    if (s < 0 || s > 2) return;
-    setSwapSlide(s);
-  }, []);
-
-  const goToHeroScene = useCallback(() => {
-    setScene(0);
-    setHeroSlide(2);
-  }, []);
-
-  const goToAboutScene = useCallback((from: 'hero' | 'swap' = 'hero') => {
-    setScene(1);
-    if (from === 'hero') {
-      setAboutChapter(0);
-    } else {
-      setAboutChapter(2);
-    }
-  }, []);
-
-  const goToSwapScene = useCallback(() => {
-    setScene(2);
-    setSwapSlide(0);
-  }, []);
-
-  // Sync Loop for video playback and smooth horizontal transform
-  useEffect(() => {
-    let animId: number;
-    let smoothHero = 0;
-    let smoothAbout = 0;
-    let smoothSwap = 0;
-
-    const loop = () => {
-      // 1. Hero Slide Lerp
-      const targetH = heroSlideRef.current;
-      const diffH = targetH - smoothHero;
-      if (Math.abs(diffH) > 0.001) {
-        smoothHero += diffH * 0.14;
-        setHeroSlideProgress(smoothHero);
+    if (sceneRef.current === 0) {
+      if (heroSlideRef.current < 2) {
+        setHeroSlide((prev) => prev + 1);
       } else {
-        smoothHero = targetH;
-        setHeroSlideProgress(smoothHero);
+        setScene(1);
+        setAboutChapter(0);
       }
-
-      // 2. About Chapter Lerp
-      const targetA = aboutChapterRef.current;
-      const diffA = targetA - smoothAbout;
-      if (Math.abs(diffA) > 0.001) {
-        smoothAbout += diffA * 0.14;
-        setAboutChapterProgress(smoothAbout);
+    } else if (sceneRef.current === 1) {
+      if (aboutChapterRef.current < 2) {
+        setAboutChapter((prev) => prev + 1);
       } else {
-        smoothAbout = targetA;
-        setAboutChapterProgress(smoothAbout);
+        setScene(2);
+        setSwapSlide(0);
       }
-
-      // 3. Swap Slide Lerp
-      const targetS = swapSlideRef.current;
-      const diffS = targetS - smoothSwap;
-      if (Math.abs(diffS) > 0.001) {
-        smoothSwap += diffS * 0.14;
-        setSwapSlideProgress(smoothSwap);
-      } else {
-        smoothSwap = targetS;
-        setSwapSlideProgress(smoothSwap);
+    } else if (sceneRef.current === 2) {
+      if (swapSlideRef.current < 2) {
+        setSwapSlide((prev) => prev + 1);
       }
-
-      // 4. Hero Video Scrubbing
-      const heroVideo = heroVideoRef.current;
-      if (heroVideo && heroVideo.duration && !isNaN(heroVideo.duration)) {
-        const targetT = heroTargetTimeRef.current;
-        const timeDiff = targetT - heroVideo.currentTime;
-        if (timeDiff > 0.04 && timeDiff < 1.4) {
-          heroVideo.playbackRate = Math.min(3.0, Math.max(0.6, timeDiff * 3.0));
-          if (heroVideo.paused) heroVideo.play().catch(() => {});
-        } else if (Math.abs(timeDiff) > 0.02) {
-          if (!heroVideo.paused) heroVideo.pause();
-          heroVideo.currentTime += timeDiff * 0.35;
-        } else {
-          if (!heroVideo.paused) heroVideo.pause();
-        }
-      }
-
-      // 5. About Video Scrubbing
-      const aboutVideo = aboutVideoRef.current;
-      if (aboutVideo && aboutVideo.duration && !isNaN(aboutVideo.duration)) {
-        const targetT = aboutTargetTimeRef.current;
-        const timeDiff = targetT - aboutVideo.currentTime;
-        if (timeDiff > 0.04 && timeDiff < 1.5) {
-          aboutVideo.playbackRate = Math.min(3.0, Math.max(0.6, timeDiff * 3.0));
-          if (aboutVideo.paused) aboutVideo.play().catch(() => {});
-        } else if (Math.abs(timeDiff) > 0.02) {
-          if (!aboutVideo.paused) aboutVideo.pause();
-          aboutVideo.currentTime += timeDiff * 0.35;
-        } else {
-          if (!aboutVideo.paused) aboutVideo.pause();
-        }
-      }
-
-      // 6. Swap Video Scrubbing & Playback
-      const swapVideo = swapVideoRef.current;
-      if (swapVideo && swapVideo.duration && !isNaN(swapVideo.duration)) {
-        if (sceneRef.current === 2) {
-          if (swapVideo.paused) {
-            swapVideo.play().catch(() => {});
-          }
-        } else {
-          if (!swapVideo.paused) {
-            swapVideo.pause();
-          }
-        }
-      }
-
-      animId = requestAnimationFrame(loop);
-    };
-
-    // Pre-warm initial frames so zero black frames appear
-    if (heroVideoRef.current) {
-      heroVideoRef.current.currentTime = 0.01;
-      heroVideoRef.current.play().then(() => heroVideoRef.current?.pause()).catch(() => {});
-    }
-    if (aboutVideoRef.current) {
-      aboutVideoRef.current.currentTime = 0.01;
-      aboutVideoRef.current.play().then(() => aboutVideoRef.current?.pause()).catch(() => {});
-    }
-    if (swapVideoRef.current) {
-      swapVideoRef.current.currentTime = 0.01;
-      swapVideoRef.current.play().then(() => swapVideoRef.current?.pause()).catch(() => {});
     }
 
-    animId = requestAnimationFrame(loop);
-
-    return () => {
-      cancelAnimationFrame(animId);
-    };
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 600);
   }, []);
 
-  // Global Wheel and Gesture Controller: 100% Intercepted to eliminate any erratic native scroll
+  const handlePrev = useCallback(() => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+
+    if (sceneRef.current === 2) {
+      if (swapSlideRef.current > 0) {
+        setSwapSlide((prev) => prev - 1);
+      } else {
+        setScene(1);
+        setAboutChapter(2);
+      }
+    } else if (sceneRef.current === 1) {
+      if (aboutChapterRef.current > 0) {
+        setAboutChapter((prev) => prev - 1);
+      } else {
+        setScene(0);
+        setHeroSlide(2);
+      }
+    } else if (sceneRef.current === 0) {
+      if (heroSlideRef.current > 0) {
+        setHeroSlide((prev) => prev - 1);
+      }
+    }
+
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 600);
+  }, []);
+
+  // Keyboard, MouseWheel & Touch Event Listeners
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      // Always prevent native window scroll
+      if (Math.abs(e.deltaY) < 18 && Math.abs(e.deltaX) < 18) return;
       e.preventDefault();
 
-      const now = Date.now();
-      if (now - lastWheelTimeRef.current < 420) {
-        return;
-      }
-
-      // Scrolling Down
-      if (e.deltaY > 15) {
-        lastWheelTimeRef.current = now;
-        if (sceneRef.current === 0) {
-          // In Hero Scene
-          if (heroSlideRef.current === 0) {
-            changeHeroSlide(1); // 1st Right Scroll -> Slide 2
-          } else if (heroSlideRef.current === 1) {
-            changeHeroSlide(2); // 2nd Right Scroll -> Slide 3
-          } else if (heroSlideRef.current === 2) {
-            goToAboutScene('hero'); // 3rd Scroll Down -> Enter About Scene!
-          }
-        } else if (sceneRef.current === 1) {
-          // In About Scene
-          if (aboutChapterRef.current === 0) {
-            changeAboutChapter(1); // 1st Right Scroll -> Chapter 2
-          } else if (aboutChapterRef.current === 1) {
-            changeAboutChapter(2); // 2nd Right Scroll -> Chapter 3
-          } else if (aboutChapterRef.current === 2) {
-            goToSwapScene(); // 3rd Scroll Down -> Enter Battery Swap Scene!
-          }
-        } else if (sceneRef.current === 2) {
-          // In Battery Swap Scene
-          if (swapSlideRef.current === 0) {
-            changeSwapSlide(1); // 1st Right Scroll -> Process Slide
-          } else if (swapSlideRef.current === 1) {
-            changeSwapSlide(2); // 2nd Right Scroll -> Locations Slide
-          }
-        }
-      } 
-      // Scrolling Up
-      else if (e.deltaY < -15) {
-        lastWheelTimeRef.current = now;
-        if (sceneRef.current === 2) {
-          // In Battery Swap Scene
-          if (swapSlideRef.current === 2) {
-            changeSwapSlide(1);
-          } else if (swapSlideRef.current === 1) {
-            changeSwapSlide(0);
-          } else if (swapSlideRef.current === 0) {
-            goToAboutScene('swap'); // Scroll Up returns to About Scene!
-          }
-        } else if (sceneRef.current === 1) {
-          // In About Scene
-          if (aboutChapterRef.current === 2) {
-            changeAboutChapter(1);
-          } else if (aboutChapterRef.current === 1) {
-            changeAboutChapter(0);
-          } else if (aboutChapterRef.current === 0) {
-            goToHeroScene(); // Scroll Up returns to Hero Scene!
-          }
-        } else if (sceneRef.current === 0) {
-          // In Hero Scene
-          if (heroSlideRef.current === 2) {
-            changeHeroSlide(1);
-          } else if (heroSlideRef.current === 1) {
-            changeHeroSlide(0);
-          }
-        }
+      if (e.deltaY > 18 || e.deltaX > 18) {
+        handleNext();
+      } else if (e.deltaY < -18 || e.deltaX < -18) {
+        handlePrev();
       }
     };
 
-    // Keyboard Arrow navigation
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
-        if (sceneRef.current === 0) {
-          if (heroSlideRef.current < 2) changeHeroSlide(heroSlideRef.current + 1);
-          else goToAboutScene('hero');
-        } else if (sceneRef.current === 1) {
-          if (aboutChapterRef.current < 2) changeAboutChapter(aboutChapterRef.current + 1);
-          else goToSwapScene();
-        } else if (sceneRef.current === 2) {
-          if (swapSlideRef.current < 2) changeSwapSlide(swapSlideRef.current + 1);
-        }
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        handleNext();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
-        if (sceneRef.current === 2) {
-          if (swapSlideRef.current > 0) changeSwapSlide(swapSlideRef.current - 1);
-          else goToAboutScene('swap');
-        } else if (sceneRef.current === 1) {
-          if (aboutChapterRef.current > 0) changeAboutChapter(aboutChapterRef.current - 1);
-          else goToHeroScene();
-        } else if (sceneRef.current === 0) {
-          if (heroSlideRef.current > 0) changeHeroSlide(heroSlideRef.current - 1);
-        }
+        handlePrev();
       }
     };
 
-    // Mobile touch gestures
     let touchStartX = 0;
     let touchStartY = 0;
+
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
@@ -347,40 +172,12 @@ export default function HomeV2Page() {
       const diffX = touchStartX - e.changedTouches[0].clientX;
       const diffY = touchStartY - e.changedTouches[0].clientY;
 
-      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
-        if (diffX > 0) {
-          // Swipe Left -> Next
-          if (sceneRef.current === 0) {
-            if (heroSlideRef.current < 2) changeHeroSlide(heroSlideRef.current + 1);
-            else goToAboutScene('hero');
-          } else if (sceneRef.current === 1) {
-            if (aboutChapterRef.current < 2) changeAboutChapter(aboutChapterRef.current + 1);
-            else goToSwapScene();
-          } else if (sceneRef.current === 2) {
-            if (swapSlideRef.current < 2) changeSwapSlide(swapSlideRef.current + 1);
-          }
-        } else {
-          // Swipe Right -> Previous
-          if (sceneRef.current === 2) {
-            if (swapSlideRef.current > 0) changeSwapSlide(swapSlideRef.current - 1);
-            else goToAboutScene('swap');
-          } else if (sceneRef.current === 1) {
-            if (aboutChapterRef.current > 0) changeAboutChapter(aboutChapterRef.current - 1);
-            else goToHeroScene();
-          } else {
-            if (heroSlideRef.current > 0) changeHeroSlide(heroSlideRef.current - 1);
-          }
-        }
-      } else if (Math.abs(diffY) > 50) {
-        if (diffY > 0) {
-          // Swipe Up -> Next scene
-          if (sceneRef.current === 0) goToAboutScene('hero');
-          else if (sceneRef.current === 1) goToSwapScene();
-        } else {
-          // Swipe Down -> Previous scene
-          if (sceneRef.current === 2) goToAboutScene('swap');
-          else if (sceneRef.current === 1) goToHeroScene();
-        }
+      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 35) {
+        if (diffX > 0) handleNext();
+        else handlePrev();
+      } else if (Math.abs(diffY) > 45) {
+        if (diffY > 0) handleNext();
+        else handlePrev();
       }
     };
 
@@ -395,7 +192,10 @@ export default function HomeV2Page() {
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [changeHeroSlide, changeAboutChapter, changeSwapSlide, goToAboutScene, goToHeroScene, goToSwapScene]);
+  }, [handleNext, handlePrev]);
+
+  // Determine current active sub-slide for dots
+  const currentSubSlide = scene === 0 ? heroSlide : scene === 1 ? aboutChapter : swapSlide;
 
   return (
     <main className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#070D18] text-white font-sans select-none antialiased">
@@ -406,37 +206,38 @@ export default function HomeV2Page() {
       {/* MASTER VERTICAL SCENE CURTAIN (0vh, -100vh, -200vh) */}
       {/* ========================================================================= */}
       <div
-        className="w-full h-full flex flex-col will-change-transform transition-transform duration-700 ease-in-out"
+        className="w-full h-full flex flex-col will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={{
           transform: `translate3d(0, -${scene * 100}vh, 0)`
         }}
       >
         
         {/* ======================================================================= */}
-        {/* SCENE 1: HERO SCENE (scooter-ride.mp4, 0s - 5s) */}
+        {/* SCENE 1: HERO SCENE (scooter-ride.mp4) */}
         {/* ======================================================================= */}
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
-          {/* Fullscreen Video Canvas */}
+          {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
             <video
               ref={heroVideoRef}
               src="/videos/scooter-ride.mp4"
               autoPlay
+              loop
               playsInline
               muted
-              preload="auto"
-              className="absolute inset-0 w-full h-full !w-full !h-full !max-w-none !max-h-none object-cover"
+              preload="metadata"
+              className="absolute inset-0 w-full h-full object-cover"
             />
-            {/* Cinematic Vignette Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/20 to-[#070D18]/60 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/50 via-transparent to-[#070D18]/60 pointer-events-none" />
+            {/* Cinematic Gradient Overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/25 to-[#070D18]/60 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/60 via-transparent to-[#070D18]/60 pointer-events-none" />
           </div>
 
           {/* 300vw Horizontal Track for Hero */}
           <div
-            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 pointer-events-none will-change-transform transition-transform duration-700 ease-out"
+            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              transform: `translate3d(-${heroSlideProgress * 100}vw, 0, 0)`
+              transform: `translate3d(-${heroSlide * 100}vw, 0, 0)`
             }}
           >
             {/* SLIDE 1 (0vw to 100vw): WELCOME TO DOON RIDERS */}
@@ -449,7 +250,7 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   WELCOME TO <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     DOON RIDERS
@@ -463,14 +264,14 @@ export default function HomeV2Page() {
               <button
                 type="button"
                 onClick={() => setBookingOpen(true)}
-                className="mt-5 bg-[#00D96B] hover:bg-[#00c25e] text-[#070D18] font-black text-xs sm:text-sm tracking-wider uppercase px-8 py-4 rounded-full shadow-[0_6px_25px_rgba(0,217,107,0.45)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center gap-2 pointer-events-auto"
+                className="mt-6 bg-[#00D96B] hover:bg-[#00c25e] text-[#070D18] font-black text-xs sm:text-sm tracking-wider uppercase px-8 py-4 rounded-full shadow-[0_6px_25px_rgba(0,217,107,0.45)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center gap-2 pointer-events-auto"
               >
                 <Zap className="w-4 h-4 fill-current stroke-current" />
-                <span>Contact Us</span>
+                <span>Book a Test Drive</span>
               </button>
             </div>
 
-            {/* SLIDE 2 (100vw to 200vw): BEST EV RENTAL SCOOTY IN DEHRADUN, UTTARAKHAND */}
+            {/* SLIDE 2 (100vw to 200vw): BEST EV RENTAL SCOOTY */}
             <div className="w-[100vw] h-full flex flex-col justify-center items-center px-6 text-center shrink-0">
               <div className="space-y-4 max-w-4xl mx-auto">
                 <div className="inline-flex items-center gap-2 bg-[#0A0F1D]/80 border border-white/20 px-5 py-2 rounded-full backdrop-blur-md shadow-2xl">
@@ -480,7 +281,7 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   BEST EV RENTAL SCOOTY <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     IN DEHRADUN, UTTARAKHAND
@@ -492,15 +293,15 @@ export default function HomeV2Page() {
                 </p>
 
                 <div className="flex items-center justify-center gap-3 pt-2">
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-[#00D96B] block leading-none">₹0</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">Petrol Expense</span>
                   </div>
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-white block leading-none">5 MIN</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">KYC</span>
                   </div>
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-[#38BDF8] block leading-none">100%</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">Eco Friendly</span>
                   </div>
@@ -508,7 +309,7 @@ export default function HomeV2Page() {
               </div>
             </div>
 
-            {/* SLIDE 3 (200vw to 300vw): 2ND RIGHT SCROLL */}
+            {/* SLIDE 3 (200vw to 300vw): 5+ SWAP STATIONS */}
             <div className="w-[100vw] h-full flex flex-col justify-center items-center px-6 text-center shrink-0">
               <div className="space-y-4 max-w-4xl mx-auto">
                 <div className="inline-flex items-center gap-2 bg-[#0A0F1D]/80 border border-white/20 px-5 py-2 rounded-full backdrop-blur-md shadow-2xl">
@@ -518,7 +319,7 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   RIDE MORE. SPEND LESS. <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     Rent Your EV Scooty Today
@@ -546,30 +347,30 @@ export default function HomeV2Page() {
 
 
         {/* ======================================================================= */}
-        {/* SCENE 2: ABOUT VIDEO SECTION (about-scroll.mp4, 0s - 10s) */}
+        {/* SCENE 2: ABOUT VIDEO SECTION (about-scroll.mp4) */}
         {/* ======================================================================= */}
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
-          {/* Fullscreen Video Canvas for About Section */}
+          {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
             <video
               ref={aboutVideoRef}
               src="/videos/about-scroll.mp4"
-              autoPlay
+              loop
               playsInline
               muted
-              preload="auto"
-              className="absolute inset-0 w-full h-full !w-full !h-full !max-w-none !max-h-none object-cover"
+              preload="metadata"
+              className="absolute inset-0 w-full h-full object-cover"
             />
-            {/* Cinematic Vignette Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/20 to-[#070D18]/60 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/50 via-transparent to-[#070D18]/60 pointer-events-none" />
+            {/* Cinematic Gradient Overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/25 to-[#070D18]/60 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/60 via-transparent to-[#070D18]/60 pointer-events-none" />
           </div>
 
           {/* 300vw Horizontal Track for About */}
           <div
-            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 pointer-events-none will-change-transform transition-transform duration-700 ease-out"
+            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              transform: `translate3d(-${aboutChapterProgress * 100}vw, 0, 0)`
+              transform: `translate3d(-${aboutChapter * 100}vw, 0, 0)`
             }}
           >
             {/* CHAPTER 1 (0vw to 100vw): About Us */}
@@ -582,7 +383,7 @@ export default function HomeV2Page() {
                   </span>
                 </div>
 
-                <h2 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl text-white tracking-tight uppercase leading-[1.08] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h2 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl text-white tracking-tight uppercase leading-[1.08] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   WHO <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     WE ARE?
@@ -596,7 +397,7 @@ export default function HomeV2Page() {
             </div>
 
             {/* CHAPTER 2 (100vw to 200vw): The DOON Riders Advantage */}
-            <div className="w-[100vw] h-full flex flex-col justify-center items-end px-6 sm:px-10 lg:px-16 text-right shrink-0">
+            <div className="w-[100vw] h-full flex flex-col justify-center items-center sm:items-end px-6 sm:px-10 lg:px-16 text-center sm:text-right shrink-0">
               <div className="space-y-4 w-full max-w-[720px]">
                 <div className="inline-flex items-center gap-2 bg-[#0A0F1D]/80 border border-white/20 px-5 py-2 rounded-full backdrop-blur-md shadow-2xl">
                   <BatteryCharging className="w-3.5 h-3.5 text-[#00D96B]" />
@@ -605,58 +406,58 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
                 
-                <h2 className="font-heading font-black text-3xl sm:text-5xl md:text-6xl lg:text-[50px] text-white tracking-tight uppercase leading-[1.05] text-left drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
-                  Why Choose {" "}
-                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
+                <h2 className="font-heading font-black text-2xl sm:text-4xl md:text-5xl text-white tracking-tight uppercase leading-[1.05] text-center sm:text-right drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
+                  Why Choose <br className="hidden sm:inline" />
+                  <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     DOON RIDERS?
                   </span>
                 </h2>
 
-                <p className="text-sm sm:text-base md:text-lg text-gray-200 font-normal leading-relaxed max-w-2xl ml-auto drop-shadow-md">
+                <p className="text-xs sm:text-sm md:text-base text-gray-200 font-normal leading-relaxed max-w-2xl sm:ml-auto drop-shadow-md">
                   Everything you need to ride, earn, and save with maximum uptime, zero fuel expenses, and dedicated roadside support across Uttarakhand.
                 </p>
 
-                <div className="grid grid-cols-3 gap-3 pt-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 pt-2 text-left">
                   {/* CARD 01 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">01</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">No License Required</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Ride and earn without a driving license hassle.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">01</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">No License Required</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Ride and earn without a driving license hassle.</p>
                   </div>
 
                   {/* CARD 02 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">02</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">Free Maintenance</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Service and brake checks are covered by us.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">02</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">Free Maintenance</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Service and brake checks are covered by us.</p>
                   </div>
 
                   {/* CARD 03 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">03</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">Swap, Don't Wait</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Don't need to wait, instant battery swaps.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">03</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">Swap, Don't Wait</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Don't need to wait, instant battery swaps.</p>
                   </div>
 
                   {/* CARD 04 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">04</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">24×7 Support</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Our support team is always available.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">04</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">24×7 Support</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Our support team is always available.</p>
                   </div>
 
                   {/* CARD 05 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">05</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">19×7 RSA</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Roadside assistance whenever you need help.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">05</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">19×7 RSA</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Roadside assistance whenever you need help.</p>
                   </div>
 
                   {/* CARD 06 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-left">
-                    <span className="text-[10px] font-black text-[#00D96B]">06</span>
-                    <h3 className="text-sm font-black text-white uppercase mt-2">Unlimited KM</h3>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">Drive unlimited kilometers with zero range anxiety.</p>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5">
+                    <span className="text-[10px] font-black text-[#00D96B] font-mono">06</span>
+                    <h3 className="text-xs sm:text-sm font-black text-white uppercase mt-1">Unlimited KM</h3>
+                    <p className="text-[10px] text-gray-300 mt-1 leading-relaxed">Drive unlimited kilometers with zero range anxiety.</p>
                   </div>
                 </div>
               </div>
@@ -664,119 +465,89 @@ export default function HomeV2Page() {
 
             {/* CHAPTER 3 (200vw to 300vw): ALL-INCLUSIVE RENTAL PLAN */}
             <div className="w-[100vw] h-full shrink-0 relative flex items-center justify-center px-6 lg:px-10 overflow-hidden">
-              <div className="relative w-full max-w-[1550px] h-full flex items-center justify-center">
+              <div className="relative w-full max-w-[1400px] h-full flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-10">
+
+                {/* LEFT FEATURES */}
+                <div className="w-full lg:w-[32%] space-y-3 z-20">
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <FileCheck className="w-6 h-6 text-[#00D96B]" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">No License Required</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Ride and earn without driving license hassle.</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <BatteryCharging className="w-6 h-6 text-[#00D96B]" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">Swap, Don't Wait</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Swap battery in under 2 minutes at 5+ hubs.</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <Headphones className="w-6 h-6 text-[#00D96B]" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">24×7 Support</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Dedicated customer care assistance.</p>
+                    </div>
+                  </div>
+                </div>
 
                 {/* CENTER PRICE HUD */}
-                <div className="relative z-20 flex items-center justify-center">
-                  <div className="absolute w-[390px] h-[390px] rounded-full bg-[#00D96B]/15 blur-[90px]" />
-                  <div className="absolute w-[380px] h-[380px] rounded-full border border-[#00D96B]/30" />
-                  <div className="relative w-[330px] h-[330px] sm:w-[350px] sm:h-[350px] rounded-full bg-[#06111B]/80 backdrop-blur-xl border-[3px] border-[#00D96B] shadow-[0_0_50px_rgba(0,217,107,0.35)] flex flex-col items-center justify-center">
-                    <div className="absolute inset-[12px] rounded-full border border-[#00D96B]/40" />
-                    <div className="absolute -inset-[7px] rounded-full border-[5px] border-transparent border-t-[#00D96B] border-r-[#00D96B]/70 rotate-[25deg]" />
-                    <div className="relative z-10 border border-[#00D96B] bg-[#00D96B]/10 px-4 py-1.5 rounded-full">
-                      <span className="text-[#00D96B] text-[10px] sm:text-xs font-black tracking-[0.08em] uppercase">
+                <div className="relative z-20 flex items-center justify-center shrink-0">
+                  <div className="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full bg-[#06111B]/90 backdrop-blur-xl border-2 border-[#00D96B] shadow-[0_0_40px_rgba(0,217,107,0.3)] flex flex-col items-center justify-center">
+                    <div className="relative z-10 border border-[#00D96B] bg-[#00D96B]/10 px-3.5 py-1 rounded-full">
+                      <span className="text-[#00D96B] text-[10px] sm:text-xs font-black tracking-[0.1em] uppercase">
                         ALL-INCLUSIVE PLAN
                       </span>
                     </div>
-                    <div className="relative z-10 mt-4 flex items-baseline justify-center tracking-tight">
-                      <span className="text-5xl sm:text-6xl md:text-7xl font-black text-[#00D96B]">₹</span>
-                      <span className="text-5xl sm:text-6xl md:text-7xl font-black text-white">1,699</span>
+                    <div className="relative z-10 mt-3 flex items-baseline justify-center tracking-tight font-['Play']">
+                      <span className="text-4xl sm:text-5xl font-black text-[#00D96B]">₹</span>
+                      <span className="text-5xl sm:text-6xl font-black text-white">1,699</span>
                     </div>
-                    <div className="relative z-10 text-xl sm:text-2xl font-black text-white tracking-[0.05em] uppercase">
+                    <div className="relative z-10 text-sm sm:text-base font-black text-gray-300 tracking-[0.1em] uppercase">
                       / WEEK
                     </div>
                   </div>
                 </div>
 
-                {/* CONNECTOR LINES */}
-                <svg
-                  className="absolute inset-0 w-full h-full pointer-events-none z-10"
-                  viewBox="0 0 1550 900"
-                  preserveAspectRatio="none"
-                >
-                  <path d="M 390 270 C 500 270, 525 270, 650 350" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <path d="M 390 450 C 500 450, 540 450, 620 450" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <path d="M 390 630 C 500 630, 525 630, 650 550" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <path d="M 1160 270 C 1050 270, 1025 270, 900 350" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <path d="M 1160 450 C 1050 450, 1010 450, 930 450" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <path d="M 1160 630 C 1050 630, 1025 630, 900 550" fill="none" stroke="#00D96B" strokeWidth="2" strokeOpacity="0.8" />
-                  <circle cx="390" cy="270" r="5" fill="#00D96B" />
-                  <circle cx="390" cy="450" r="5" fill="#00D96B" />
-                  <circle cx="390" cy="630" r="5" fill="#00D96B" />
-                  <circle cx="1160" cy="270" r="5" fill="#00D96B" />
-                  <circle cx="1160" cy="450" r="5" fill="#00D96B" />
-                  <circle cx="1160" cy="630" r="5" fill="#00D96B" />
-                </svg>
-
-                {/* LEFT FEATURES */}
-                <div className="absolute left-0 lg:left-2 xl:left-4 top-1/2 -translate-y-1/2 w-[31%] max-w-[450px] space-y-5 z-20">
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <span className="absolute -left-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">01</span>
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <FileCheck className="w-8 h-8 text-[#00D96B]" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">No License Required</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Ride and earn without a driving license or RC transfer hassle.</p>
-                    </div>
-                  </div>
-
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <span className="absolute -left-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">02</span>
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <BatteryCharging className="w-8 h-8 text-[#00D96B]" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">Swap, Don't Wait</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Swap battery in under 2 minutes at 5+ Dehradun hubs.</p>
-                    </div>
-                  </div>
-
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <span className="absolute -left-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">03</span>
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <Headphones className="w-8 h-8 text-[#00D96B]" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">24×7 Customer Support</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Our dedicated support team is always available for you.</p>
-                    </div>
-                  </div>
-                </div>
-
                 {/* RIGHT FEATURES */}
-                <div className="absolute right-0 lg:right-2 xl:right-4 top-1/2 -translate-y-1/2 w-[31%] max-w-[450px] space-y-5 z-20">
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <Wrench className="w-8 h-8 text-[#00D96B]" />
+                <div className="w-full lg:w-[32%] space-y-3 z-20">
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <Wrench className="w-6 h-6 text-[#00D96B]" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">Free Maintenance</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Every service and brake check is covered by us.</p>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">Free Maintenance</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Every service & brake check is covered.</p>
                     </div>
-                    <span className="absolute -right-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">04</span>
                   </div>
 
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <ShieldCheck className="w-8 h-8 text-[#00D96B]" />
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <ShieldCheck className="w-6 h-6 text-[#00D96B]" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">19×7 RSA</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Roadside assistance whenever technical help is needed.</p>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">19×7 RSA Support</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Roadside technical help whenever needed.</p>
                     </div>
-                    <span className="absolute -right-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">05</span>
                   </div>
 
-                  <div className="relative h-[108px] rounded-[24px] border border-[#00D96B]/50 bg-[#07131D]/70 backdrop-blur-xl shadow-[0_0_25px_rgba(0,217,107,0.08)] flex items-center px-4 gap-4">
-                    <div className="w-[64px] h-[64px] shrink-0 rounded-full border-2 border-[#00D96B] bg-[#00D96B]/10 flex items-center justify-center shadow-[0_0_25px_rgba(0,217,107,0.25)]">
-                      <Infinity className="w-8 h-8 text-[#00D96B]" />
+                  <div className="rounded-2xl border border-[#00D96B]/40 bg-[#07131D]/80 backdrop-blur-xl p-3.5 flex items-center gap-3.5 shadow-lg">
+                    <div className="w-11 h-11 shrink-0 rounded-xl border border-[#00D96B] bg-[#00D96B]/15 flex items-center justify-center">
+                      <Infinity className="w-6 h-6 text-[#00D96B]" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase">Unlimited Daily KM</h3>
-                      <p className="text-xs text-gray-300 mt-2 leading-relaxed">Ride without any daily distance or mileage limits.</p>
+                      <h3 className="text-xs sm:text-sm font-black text-white uppercase">Unlimited Daily KM</h3>
+                      <p className="text-[10px] text-gray-300 mt-0.5 leading-relaxed">Zero distance or mileage restrictions.</p>
                     </div>
-                    <span className="absolute -right-5 top-1/2 -translate-y-1/2 text-[#00D96B] text-sm font-black">06</span>
                   </div>
                 </div>
 
@@ -787,33 +558,30 @@ export default function HomeV2Page() {
 
 
         {/* ======================================================================= */}
-        {/* SCENE 3: OUR BATTERY SWAP SYSTEM SECTION (battery-swap.mp4, 0926.mp4) */}
+        {/* SCENE 3: OUR BATTERY SWAP SYSTEM SECTION (battery-swap.mp4) */}
         {/* ======================================================================= */}
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
-          {/* Fullscreen Video Canvas for Battery Swap Section */}
+          {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
             <video
               ref={swapVideoRef}
-              autoPlay
+              src="/videos/battery-swap.mp4"
+              loop
               playsInline
               muted
-              loop
-              preload="auto"
-              className="absolute inset-0 w-full h-full !w-full !h-full !max-w-none !max-h-none object-cover"
-            >
-              <source src="/videos/battery-swap.mp4" type="video/mp4" />
-              <source src="/videos/0926.mp4" type="video/mp4" />
-            </video>
-            {/* Cinematic Vignette Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/20 to-[#070D18]/60 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/50 via-transparent to-[#070D18]/60 pointer-events-none" />
+              preload="metadata"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* Cinematic Gradient Overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/90 via-black/25 to-[#070D18]/60 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#070D18]/60 via-transparent to-[#070D18]/60 pointer-events-none" />
           </div>
 
           {/* 300vw Horizontal Track for Battery Swap */}
           <div
-            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 pointer-events-none will-change-transform transition-transform duration-700 ease-out"
+            className="absolute top-0 left-0 h-full w-[300vw] flex items-center z-20 will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              transform: `translate3d(-${swapSlideProgress * 100}vw, 0, 0)`
+              transform: `translate3d(-${swapSlide * 100}vw, 0, 0)`
             }}
           >
             {/* SLIDE 1 (0vw to 100vw): OUR BATTERY SWAP SYSTEM */}
@@ -826,7 +594,7 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-7xl lg:text-[76px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   OUR BATTERY <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     SWAP SYSTEM
@@ -838,22 +606,22 @@ export default function HomeV2Page() {
                 </p>
 
                 <div className="flex items-center justify-center gap-3 pt-2">
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-[#00D96B] block leading-none">&lt; 2 MINS</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">Instant Swap</span>
                   </div>
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-white block leading-none">100%</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">Smart Li-Ion</span>
                   </div>
-                  <div className="bg-[#0A0F1D]/60 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
+                  <div className="bg-[#0A0F1D]/70 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-2.5 shadow-lg">
                     <span className="text-base sm:text-lg font-black font-mono text-[#38BDF8] block leading-none">₹0</span>
                     <span className="text-[9px] sm:text-[10px] text-gray-300 uppercase font-bold mt-0.5 block">Fuel Cost</span>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-center pointer-events-auto">
+              <div className="pt-5 flex justify-center pointer-events-auto">
                 <button
                   type="button"
                   onClick={() => setBookingOpen(true)}
@@ -865,7 +633,7 @@ export default function HomeV2Page() {
               </div>
             </div>
 
-            {/* SLIDE 2 (100vw to 200vw): PROCESS (HOW IT WORKS) */}
+            {/* SLIDE 2 (100vw to 200vw): HOW IT WORKS */}
             <div className="w-[100vw] h-full flex flex-col justify-center items-center px-6 text-center shrink-0">
               <div className="space-y-4 max-w-4xl mx-auto">
                 <div className="inline-flex items-center gap-2 bg-[#0A0F1D]/80 border border-white/20 px-5 py-2 rounded-full backdrop-blur-md shadow-2xl">
@@ -875,58 +643,58 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-6xl lg:text-[70px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-2xl sm:text-4xl md:text-6xl text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   HOW IT WORKS <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     2-MINUTE SWAP PROCESS
                   </span>
                 </h1>
 
-                <p className="text-sm sm:text-base md:text-lg text-gray-200 font-normal leading-relaxed max-w-2xl mx-auto drop-shadow-md">
+                <p className="text-xs sm:text-sm md:text-base text-gray-200 font-normal leading-relaxed max-w-2xl mx-auto drop-shadow-md">
                   Quick, automated, and seamless. Never wait hours for charging again.
                 </p>
 
                 {/* 3 Step Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 max-w-4xl mx-auto w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2 max-w-4xl mx-auto w-full">
                   {/* STEP 01 */}
-                  <div className="bg-white/[0.07] backdrop-blur-xl border border-white/15 rounded-2xl p-5 text-left transition-transform hover:scale-[1.02] shadow-xl">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-1 rounded-full border border-[#00D96B]/30">STEP 01</span>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-left shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-0.5 rounded-full border border-[#00D96B]/30">STEP 01</span>
                       <Navigation className="w-4 h-4 text-[#00D96B]" />
                     </div>
-                    <h3 className="text-base font-black text-white uppercase tracking-wide">
+                    <h3 className="text-sm font-black text-white uppercase tracking-wide">
                       Arrive at Station
                     </h3>
-                    <p className="text-xs text-gray-300 mt-2 leading-relaxed">
+                    <p className="text-[11px] text-gray-300 mt-1 leading-relaxed">
                       Pull up at any nearby DOON Riders swap station across Dehradun.
                     </p>
                   </div>
 
                   {/* STEP 02 */}
-                  <div className="bg-white/[0.07] backdrop-blur-xl border border-[#00D96B]/40 rounded-2xl p-5 text-left transition-transform hover:scale-[1.02] shadow-[0_0_30px_rgba(0,217,107,0.15)]">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-black font-mono text-[#00D96B] bg-[#00D96B]/20 px-2.5 py-1 rounded-full border border-[#00D96B]/50">STEP 02</span>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-[#00D96B]/50 rounded-2xl p-4 text-left shadow-[0_0_30px_rgba(0,217,107,0.15)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/25 px-2.5 py-0.5 rounded-full border border-[#00D96B]/50">STEP 02</span>
                       <RefreshCw className="w-4 h-4 text-[#00D96B]" />
                     </div>
-                    <h3 className="text-base font-black text-white uppercase tracking-wide">
+                    <h3 className="text-sm font-black text-white uppercase tracking-wide">
                       Swap in 90 Sec
                     </h3>
-                    <p className="text-xs text-gray-300 mt-2 leading-relaxed">
-                      Insert your drained pack into the dock and release a 100% charged battery.
+                    <p className="text-[11px] text-gray-300 mt-1 leading-relaxed">
+                      Insert your drained pack and release a 100% charged smart battery.
                     </p>
                   </div>
 
                   {/* STEP 03 */}
-                  <div className="bg-white/[0.07] backdrop-blur-xl border border-white/15 rounded-2xl p-5 text-left transition-transform hover:scale-[1.02] shadow-xl">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-1 rounded-full border border-[#00D96B]/30">STEP 03</span>
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-left shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-0.5 rounded-full border border-[#00D96B]/30">STEP 03</span>
                       <Zap className="w-4 h-4 text-[#00D96B]" />
                     </div>
-                    <h3 className="text-base font-black text-white uppercase tracking-wide">
+                    <h3 className="text-sm font-black text-white uppercase tracking-wide">
                       Lock & Ride
                     </h3>
-                    <p className="text-xs text-gray-300 mt-2 leading-relaxed">
-                      Snap the fresh battery in, turn on the ignition, and resume your ride instantly!
+                    <p className="text-[11px] text-gray-300 mt-1 leading-relaxed">
+                      Snap the fresh battery in, turn on ignition, and resume your ride!
                     </p>
                   </div>
                 </div>
@@ -943,57 +711,57 @@ export default function HomeV2Page() {
                   </h2>
                 </div>
 
-                <h1 className="font-heading font-black text-3xl sm:text-5xl md:text-6xl lg:text-[70px] text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)]">
+                <h1 className="font-heading font-black text-2xl sm:text-4xl md:text-6xl text-white tracking-tight uppercase leading-[1.05] drop-shadow-[0_4px_30px_rgba(0,0,0,0.9)] font-['Play']">
                   BATTERY STATION <br />
                   <span className="bg-gradient-to-r from-[#00D96B] via-[#75FFAE] to-[#38BDF8] bg-clip-text text-transparent">
                     LOCATIONS
                   </span>
                 </h1>
 
-                <p className="text-sm sm:text-base md:text-lg text-gray-200 font-normal leading-relaxed max-w-2xl mx-auto drop-shadow-md">
+                <p className="text-xs sm:text-sm md:text-base text-gray-200 font-normal leading-relaxed max-w-2xl mx-auto drop-shadow-md">
                   Strategically located across Dehradun’s busiest hubs for fast & seamless battery swapping on the go.
                 </p>
 
                 {/* Location Grid Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 max-w-5xl mx-auto w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2 max-w-5xl mx-auto w-full">
                   {/* HUB 1 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-center hover:border-[#00D96B]/50 transition-all">
-                    <MapPin className="w-5 h-5 text-[#00D96B] mx-auto mb-2" />
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                    <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Canal Road</h4>
-                    <p className="text-[10px] text-gray-300 mt-1">Kishanpur corridor</p>
-                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-2">Active 19x7</span>
+                    <p className="text-[10px] text-gray-300">Kishanpur corridor</p>
+                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
                   {/* HUB 2 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-center hover:border-[#00D96B]/50 transition-all">
-                    <MapPin className="w-5 h-5 text-[#00D96B] mx-auto mb-2" />
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                    <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Sewla Kalan</h4>
-                    <p className="text-[10px] text-gray-300 mt-1">Saharanpur Road</p>
-                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-2">Active 19x7</span>
+                    <p className="text-[10px] text-gray-300">Saharanpur Road</p>
+                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
                   {/* HUB 3 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-center hover:border-[#00D96B]/50 transition-all">
-                    <MapPin className="w-5 h-5 text-[#00D96B] mx-auto mb-2" />
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                    <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Balliwala</h4>
-                    <p className="text-[10px] text-gray-300 mt-1">GMS Road Junction</p>
-                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-2">Active 19x7</span>
+                    <p className="text-[10px] text-gray-300">GMS Road Junction</p>
+                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
                   {/* HUB 4 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-center hover:border-[#00D96B]/50 transition-all">
-                    <MapPin className="w-5 h-5 text-[#00D96B] mx-auto mb-2" />
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                    <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Premnagar</h4>
-                    <p className="text-[10px] text-gray-300 mt-1">University Zone</p>
-                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-2">Active 19x7</span>
+                    <p className="text-[10px] text-gray-300">University Zone</p>
+                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
                   {/* HUB 5 */}
-                  <div className="bg-white/[0.06] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-center hover:border-[#00D96B]/50 transition-all col-span-2 sm:col-span-1">
-                    <MapPin className="w-5 h-5 text-[#00D96B] mx-auto mb-2" />
+                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all col-span-2 sm:col-span-1">
+                    <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Ajabpur Kalan</h4>
-                    <p className="text-[10px] text-gray-300 mt-1">Bypass Connectivity</p>
-                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-2">Active 19x7</span>
+                    <p className="text-[10px] text-gray-300">Bypass Connectivity</p>
+                    <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
                 </div>
               </div>
@@ -1012,6 +780,70 @@ export default function HomeV2Page() {
           </div>
         </section>
 
+      </div>
+
+      {/* ========================================================================= */}
+      {/* FLOATING NAVIGATION HUD CONTROLS (RIGHT VERTICAL & BOTTOM HORIZONTAL) */}
+      {/* ========================================================================= */}
+      
+      {/* Right Vertical Scene Switcher */}
+      <div className="fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-4 bg-[#0A0F1D]/80 backdrop-blur-md p-2 rounded-full border border-white/10 shadow-2xl">
+        <button
+          onClick={() => { setScene(0); setHeroSlide(0); }}
+          title="Scene 1: Experience"
+          className={`w-3 h-3 rounded-full transition-all duration-300 cursor-pointer ${
+            scene === 0 ? 'bg-[#00D96B] ring-4 ring-[#00D96B]/30 scale-125' : 'bg-white/40 hover:bg-white/80'
+          }`}
+        />
+        <button
+          onClick={() => { setScene(1); setAboutChapter(0); }}
+          title="Scene 2: About Us"
+          className={`w-3 h-3 rounded-full transition-all duration-300 cursor-pointer ${
+            scene === 1 ? 'bg-[#00D96B] ring-4 ring-[#00D96B]/30 scale-125' : 'bg-white/40 hover:bg-white/80'
+          }`}
+        />
+        <button
+          onClick={() => { setScene(2); setSwapSlide(0); }}
+          title="Scene 3: Battery Swapping"
+          className={`w-3 h-3 rounded-full transition-all duration-300 cursor-pointer ${
+            scene === 2 ? 'bg-[#00D96B] ring-4 ring-[#00D96B]/30 scale-125' : 'bg-white/40 hover:bg-white/80'
+          }`}
+        />
+      </div>
+
+      {/* Bottom Horizontal Sub-Slide Indicators & Arrows */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-[#0A0F1D]/85 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-2xl">
+        <button
+          onClick={handlePrev}
+          title="Previous slide"
+          className="p-1.5 rounded-full hover:bg-white/10 text-white/80 hover:text-[#00D96B] transition cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-center gap-2 px-1">
+          {[0, 1, 2].map((idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                if (scene === 0) setHeroSlide(idx);
+                else if (scene === 1) setAboutChapter(idx);
+                else setSwapSlide(idx);
+              }}
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                currentSubSlide === idx ? 'w-6 bg-[#00D96B]' : 'w-2 bg-white/30 hover:bg-white/60'
+              }`}
+            />
+          ))}
+        </div>
+
+        <button
+          onClick={handleNext}
+          title="Next slide"
+          className="p-1.5 rounded-full hover:bg-white/10 text-white/80 hover:text-[#00D96B] transition cursor-pointer"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Booking Test Drive Modal */}
