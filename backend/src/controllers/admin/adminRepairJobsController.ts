@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { logAuditEvent } from '../../helpers/auditLogger';
@@ -1535,7 +1535,7 @@ export const submitJobReview = async (req: Request, res: Response) => {
       performed_by_id: 0,
       performed_by_name: reviewer_name || job.rider_name || 'Customer',
       performed_by_role: 'Customer',
-      metadata: { rating: numRating, tags: tagsList, comment: reviewComment },
+      metadata: { rating: numRating, tags: tagsList, comment: reviewComment } as any,
       created_at: nowIso
     });
 
