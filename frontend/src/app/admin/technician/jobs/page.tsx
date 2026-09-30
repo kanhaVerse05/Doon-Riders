@@ -333,27 +333,6 @@ export default function TechnicianJobsSummaryPage() {
     }
   };
 
-  const handleSimulateTechMove = async (complaint: Complaint) => {
-    try {
-      const currentTechLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
-      const currentTechLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
-      const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
-      const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
-
-      const nextLat = currentTechLat + (custLat - currentTechLat) * 0.25;
-      const nextLng = currentTechLng + (custLng - currentTechLng) * 0.25;
-
-      await adminApi.post(`/admin/complaints/${complaint.id}/location`, {
-        latitude: Number(nextLat.toFixed(6)),
-        longitude: Number(nextLng.toFixed(6))
-      });
-      showToast('Simulated movement closer to customer breakdown spot!');
-      fetchData();
-    } catch (err: any) {
-      alert('Error: ' + err.message);
-    }
-  };
-
   // Pull to Refresh Touch Event Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     if (typeof window !== 'undefined' && window.scrollY <= 10) {
@@ -969,17 +948,7 @@ export default function TechnicianJobsSummaryPage() {
                                 className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold flex items-center gap-1 border border-slate-700 active:scale-95 transition"
                               >
                                 <Radio className={`w-3 h-3 text-[#00D96B] ${sendingManualPing ? 'animate-spin' : ''}`} />
-                                <span>GPS Ping</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSimulateTechMove(complaint)}
-                                className="px-2.5 py-1.5 rounded-xl bg-amber-900/60 hover:bg-amber-800 text-amber-200 text-[11px] font-bold flex items-center gap-1 border border-amber-700/50 active:scale-95 transition"
-                                title="Move 25% closer along route (Test simulation)"
-                              >
-                                <Navigation className="w-3 h-3 text-amber-400" />
-                                <span>Move Closer (Test)</span>
+                                <span>Broadcast GPS</span>
                               </button>
                             </div>
 
