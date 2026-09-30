@@ -13,6 +13,12 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
       { code: 'dashboard.view', scope: 'ALL' },
       { code: 'dashboard.view_all', scope: 'ALL' },
       { code: 'dashboard.view_sales', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.delete', scope: 'ALL' },
+      { code: 'complaints.track', scope: 'ALL' },
       { code: 'leads.view', scope: 'ALL' },
       { code: 'leads.view_all', scope: 'ALL' },
       { code: 'leads.create', scope: 'ALL' },
@@ -46,6 +52,11 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
     return [
       { code: 'dashboard.view', scope: 'ALL' },
       { code: 'dashboard.view_all', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.track', scope: 'ALL' },
       { code: 'leads.view', scope: 'ALL' },
       { code: 'leads.view_all', scope: 'ALL' },
       { code: 'leads.create', scope: 'ALL' },
@@ -69,6 +80,11 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
   if (norm === 'MANAGER') {
     return [
       { code: 'dashboard.view', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.track', scope: 'ALL' },
       { code: 'leads.view', scope: 'ALL' },
       { code: 'leads.create', scope: 'ALL' },
       { code: 'leads.edit', scope: 'ALL' },
@@ -84,8 +100,23 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
     ];
   }
 
+  if (norm === 'CUSTOMER_SUPPORT' || norm.includes('SUPPORT') || norm.includes('CARE')) {
+    return [
+      { code: 'dashboard.view', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.track', scope: 'ALL' },
+      { code: 'customers.view', scope: 'ALL' },
+      { code: 'fleet.view', scope: 'ALL' }
+    ];
+  }
+
   if (norm === 'TECHNICIAN' || norm.includes('TECH')) {
     return [
+      { code: 'complaints.view', scope: 'ASSIGNED' },
+      { code: 'complaints.update', scope: 'ASSIGNED' },
+      { code: 'complaints.track', scope: 'ASSIGNED' },
       { code: 'repairs.view', scope: 'ASSIGNED' },
       { code: 'repairs.update', scope: 'ASSIGNED' },
       { code: 'inventory.view', scope: 'ALL' },
@@ -95,6 +126,11 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
 
   if (norm === 'HUB_INCHARGE' || norm.includes('HUB')) {
     return [
+      { code: 'dashboard.view', scope: 'TEAM' },
+      { code: 'complaints.view', scope: 'TEAM' },
+      { code: 'complaints.assign', scope: 'TEAM' },
+      { code: 'complaints.update', scope: 'TEAM' },
+      { code: 'complaints.track', scope: 'TEAM' },
       { code: 'repairs.view', scope: 'TEAM' },
       { code: 'repairs.create', scope: 'TEAM' },
       { code: 'repairs.update', scope: 'TEAM' },
@@ -108,6 +144,8 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
   return [
     { code: 'dashboard.view', scope: 'ASSIGNED' },
     { code: 'dashboard.view_sales', scope: 'ASSIGNED' },
+    { code: 'complaints.view', scope: 'ALL' },
+    { code: 'complaints.create', scope: 'ALL' },
     { code: 'leads.view', scope: 'ASSIGNED' },
     { code: 'leads.view_assigned', scope: 'ASSIGNED' },
     { code: 'leads.create', scope: 'OWN' },

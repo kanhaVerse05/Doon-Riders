@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   Home,
   ClipboardList,
-  User
+  User,
+  AlertCircle
 } from 'lucide-react';
 
 export const MobileBottomNav: React.FC = () => {
@@ -88,6 +89,7 @@ export const MobileBottomNav: React.FC = () => {
       ].filter(item => item.show);
 
   const moreItems = [
+    { name: 'Complaints', href: '/admin/complaints', icon: AlertCircle, show: hasPermission('complaints.view') },
     { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') },
     { name: 'Inventory', href: '/admin/inventory', icon: Boxes, show: hasPermission('inventory.view') },
     { name: 'Pricing Plans', href: '/admin/pricing', icon: Tag, show: hasPermission('settings.view') },

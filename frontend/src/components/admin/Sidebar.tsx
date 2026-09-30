@@ -20,6 +20,7 @@ import {
   Ticket,
   Wrench,
   CheckCircle2,
+  AlertCircle,
   LucideIcon
 } from 'lucide-react';
 
@@ -73,6 +74,13 @@ export const Sidebar: React.FC = () => {
               href: '/admin/dashboard',
               icon: LayoutDashboard,
               permission: 'dashboard.view'
+            },
+            {
+              name: 'Complaints',
+              href: '/admin/complaints',
+              icon: AlertCircle,
+              permission: 'complaints.view',
+              badge: 'Field RSA'
             },
             {
               name: 'Repair Jobs',
