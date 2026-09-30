@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AdminLayout } from '../../../../components/admin/AdminLayout';
+import { OpenStreetMapTracker } from '../../../../components/admin/OpenStreetMapTracker';
 import { useAuth } from '../../../../context/AuthContext';
 import { adminApi } from '../../../../lib/adminApi';
 import {
@@ -378,9 +379,9 @@ export default function ComplaintOverviewPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main 2-Span Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* 1. Live Tracking & Radar Map Section */}
-            <div className="bg-[#0A0F1D] text-white p-6 rounded-3xl border border-slate-800 shadow-xl space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-4">
+            {/* 1. Live Tracking & Interactive OpenStreetMap Section */}
+            <div className="bg-[#0A0F1D] text-white p-5 rounded-3xl border border-slate-800 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-2xl bg-[#00D96B]/15 border border-[#00D96B]/30 flex items-center justify-center text-[#00D96B]">
                     <Radio className="w-4 h-4 animate-pulse" />
@@ -390,7 +391,7 @@ export default function ComplaintOverviewPage() {
                       Real-Time Field Dispatch
                     </span>
                     <h2 className="text-base font-black text-white flex items-center gap-2">
-                      Live Technician Tracking
+                      Live OpenStreetMap Tracking
                       {isEnRoute && (
                         <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 animate-pulse">
                           EN ROUTE
@@ -417,7 +418,7 @@ export default function ComplaintOverviewPage() {
               </div>
 
               {/* Status Banner Summary */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
                 <div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase">Technician</p>
                   <p className="text-xs font-black text-white mt-0.5 truncate">
@@ -440,86 +441,20 @@ export default function ComplaintOverviewPage() {
                 </div>
               </div>
 
-              {/* Interactive Live Route Radar Visualizer */}
-              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-[#060A14] h-72 flex flex-col justify-between p-4">
-                {/* Visual Map Grid Pattern */}
-                <div
-                  className="absolute inset-0 opacity-15"
-                  style={{
-                    backgroundImage: 'radial-gradient(#00D96B 1px, transparent 1px), radial-gradient(#60A5FA 1px, #060A14 1px)',
-                    backgroundSize: '24px 24px',
-                    backgroundPosition: '0 0, 12px 12px'
-                  }}
-                />
-
-                {/* Animated Route Line */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <line
-                    x1="20%"
-                    y1="65%"
-                    x2="80%"
-                    y2="35%"
-                    stroke="#00D96B"
-                    strokeWidth="2.5"
-                    strokeDasharray="6 6"
-                    className="animate-pulse"
-                  />
-                </svg>
-
-                {/* Top Badge on Map */}
-                <div className="relative z-10 flex items-center justify-between">
-                  <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[11px] font-mono text-slate-300 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>GPS Track Active: {typeof techLat === 'number' && !isNaN(techLat) ? techLat.toFixed(4) : '30.2863'}° N, {typeof techLng === 'number' && !isNaN(techLng) ? techLng.toFixed(4) : '78.0069'}° E</span>
-                  </div>
-
-                  <a
-                    href={mapsDirectionsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-extrabold text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md transition cursor-pointer"
-                  >
-                    <span>Open in Maps</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-
-                {/* Map Pins */}
-                <div className="relative z-10 flex items-center justify-between px-8">
-                  {/* Technician Pin */}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-11 h-11 rounded-2xl bg-blue-600/90 border-2 border-blue-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/40 relative">
-                      <Navigation className="w-5 h-5" />
-                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-blue-400 animate-ping" />
-                    </div>
-                    <span className="text-[10px] font-bold bg-black/80 px-2 py-0.5 rounded text-blue-300">
-                      Technician ({complaint.technician_name || 'Amit'})
-                    </span>
-                  </div>
-
-                  {/* Route Indicator Info */}
-                  <div className="text-center bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Estimated Distance</p>
-                    <p className="text-xs font-black text-[#00D96B]">~ 3.8 KM &bull; 12 mins ETA</p>
-                  </div>
-
-                  {/* Customer Pin */}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-11 h-11 rounded-2xl bg-red-600/90 border-2 border-red-400 flex items-center justify-center text-white shadow-lg shadow-red-500/40 relative">
-                      <MapPin className="w-5 h-5" />
-                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-400 animate-ping" />
-                    </div>
-                    <span className="text-[10px] font-bold bg-black/80 px-2 py-0.5 rounded text-red-300">
-                      Breakdown Spot ({complaint.scooter_number})
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bottom Route Status */}
-                <div className="relative z-10 bg-black/60 backdrop-blur-md p-2.5 rounded-xl border border-white/10 text-center text-xs text-slate-300">
-                  <span>Destination: <strong>{complaint.location_address}</strong></span>
-                </div>
-              </div>
+              {/* Real OpenStreetMap Live GPS Tracker Map */}
+              <OpenStreetMapTracker
+                technicianLat={techLat}
+                technicianLng={techLng}
+                customerLat={custLat}
+                customerLng={custLng}
+                technicianName={complaint.technician_name || 'Technician'}
+                scooterNumber={complaint.scooter_number}
+                customerName={complaint.customer_name}
+                customerAddress={complaint.location_address}
+                isEnRoute={isEnRoute}
+                status={complaint.status}
+                lastUpdated={complaint.technician_location_updated_at}
+              />
             </div>
 
             {/* 2. Complaint & Scooty Breakdown Information Card */}
