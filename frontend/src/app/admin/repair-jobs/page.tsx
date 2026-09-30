@@ -385,13 +385,7 @@ export default function RepairJobsPage() {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://doon-riders.vercel.app';
     const reviewUrl = `${origin}/review/${job.job_number || job.id}`;
     
-    const text = `Namaste ${job.rider_name || 'Rider'}, 
-Your DOON Riders EV service for Scooter *${job.scooter_number}* (Job #${job.job_number}) has been completed by Technician *${job.technician_name || 'our service team'}*. 🛵⚡
-
-Please share your valuable feedback and rating for our technician here:
-👉 ${reviewUrl}
-
-Thank you for choosing DOON Riders! 🌿✨`;
+    const text = `Namaste ${job.rider_name || 'Rider'},\n\nYour DOON Riders EV service for Scooter *${job.scooter_number}* (Job #${job.job_number}) has been completed by Lead Technician *${job.technician_name || 'our service team'}*.\n\nPlease share your valuable feedback and rating for our technician here:\n${reviewUrl}\n\nThank you for choosing DOON Riders - Smart Electric Scooter Workshop!`;
 
     const waUrl = cleanPhone 
       ? `https://wa.me/91${cleanPhone.length === 10 ? cleanPhone : cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
