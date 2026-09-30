@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
   Star,
@@ -215,8 +216,15 @@ export default function CustomerReviewPage() {
       <header className="w-full border-b border-white/[0.08] bg-[#0A0F1D]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-xl bg-[#00D96B] flex items-center justify-center text-[#0A0F1D] font-black shadow-md shadow-[#00D96B]/20">
-              <Bike className="w-4 h-4 stroke-[2.5]" />
+            <div className="relative w-8 h-8 rounded-xl bg-white/[0.06] border border-white/10 p-1 flex items-center justify-center flex-shrink-0 shadow-xs">
+              <Image
+                src="/images/doon-riders-logo.png"
+                alt="DOON RIDERS"
+                width={28}
+                height={20}
+                className="object-contain"
+                priority
+              />
             </div>
             <div>
               <span className="font-heading font-black text-sm tracking-tight text-white block leading-none">
@@ -228,8 +236,7 @@ export default function CustomerReviewPage() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/15 text-gray-200 text-[11px] font-semibold tracking-tight shadow-xs">
-            <Sparkles className="w-3 h-3 text-[#00D96B]" />
+          <div className="px-3.5 py-1 rounded-full bg-white/[0.04] border border-white/15 text-gray-200 text-[11px] font-semibold tracking-tight shadow-xs">
             <span>Customer Feedback</span>
           </div>
         </div>
@@ -318,14 +325,16 @@ export default function CustomerReviewPage() {
               )}
             </div>
 
-            <div className="pt-1">
-              <Link
-                href="/"
-                className="w-full py-3 px-4 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-heading font-black text-xs transition shadow-md shadow-[#00D96B]/20 inline-flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Return to DOON Riders Portal</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+            {/* Thank You Confirmation Footer (No CTA button) */}
+            <div className="pt-2">
+              <div className="py-3.5 px-4 rounded-xl bg-white/[0.03] border border-white/[0.08] text-center space-y-1">
+                <p className="text-xs font-bold text-[#00D96B] tracking-wide">
+                  Thank You for Your Feedback!
+                </p>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Your review has been recorded successfully. Have a safe and smooth electric ride with DOON Riders.
+                </p>
+              </div>
             </div>
           </div>
         ) : (
