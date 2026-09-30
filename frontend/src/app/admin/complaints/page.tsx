@@ -334,57 +334,57 @@ export default function ComplaintsListPage() {
     switch (status) {
       case 'New':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            New (Unassigned)
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+            <span>New (Unassigned)</span>
           </span>
         );
       case 'Assigned':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            Assigned
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+            <span>Assigned</span>
           </span>
         );
       case 'En Route':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
-            En Route
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping flex-shrink-0" />
+            <span>En Route</span>
           </span>
         );
       case 'Reached':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            Reached Location
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+            <span>Reached Location</span>
           </span>
         );
       case 'Work In Progress':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-spin" />
-            Work In Progress
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-spin flex-shrink-0" />
+            <span>Work In Progress</span>
           </span>
         );
       case 'Work Done':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <Check className="w-3 h-3 text-emerald-600" />
-            Work Done
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+            <Check className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+            <span>Work Done</span>
           </span>
         );
       case 'Closed':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-            <CheckCircle2 className="w-3 h-3 text-slate-500" />
-            Closed
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+            <CheckCircle2 className="w-3 h-3 text-slate-500 flex-shrink-0" />
+            <span>Closed</span>
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-gray-100 text-gray-700">
-            {status}
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-gray-100 text-gray-700 whitespace-nowrap">
+            <span>{status}</span>
           </span>
         );
     }
@@ -393,11 +393,11 @@ export default function ComplaintsListPage() {
   const getPriorityBadge = (priority: Complaint['priority']) => {
     switch (priority) {
       case 'Urgent':
-        return <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-red-100 text-red-700 border border-red-200">URGENT</span>;
+        return <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">URGENT</span>;
       case 'High':
-        return <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-amber-100 text-amber-800 border border-amber-200">HIGH</span>;
+        return <span className="px-2 py-0.5 text-[10px] font-extrabold rounded bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">HIGH</span>;
       default:
-        return <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-600">NORMAL</span>;
+        return <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-600 whitespace-nowrap">NORMAL</span>;
     }
   };
 
@@ -725,21 +725,21 @@ export default function ComplaintsListPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left text-xs min-w-[1100px]">
                 <thead>
                   <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB] text-[10px] font-extrabold text-[#667085] uppercase tracking-wider">
-                    <th className="py-3 px-4">Complaint ID & Priority</th>
-                    <th className="py-3 px-4">Scooty Number</th>
-                    <th className="py-3 px-4">Customer & Location</th>
-                    <th className="py-3 px-4">Issue Category</th>
-                    <th className="py-3 px-4">Service Hub</th>
-                    <th className="py-3 px-4">Technician</th>
-                    <th className="py-3 px-4">Status & Tracking</th>
-                    <th className="py-3 px-4">Logged Time</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Complaint ID &amp; Priority</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Scooty Number</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap min-w-[200px]">Customer &amp; Location</th>
+                    <th className="py-3 px-3.5 min-w-[180px] max-w-[260px]">Issue Category</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Service Hub</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Technician</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Status &amp; Tracking</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">Logged Time</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E7EB] text-xs">
+                <tbody className="divide-y divide-[#E5E7EB]">
                   {filteredComplaints.map(complaint => {
                     const isNew = complaint.status === 'New';
                     const isAssigned = complaint.status === 'Assigned';
@@ -752,9 +752,9 @@ export default function ComplaintsListPage() {
                         onClick={() => router.push(`/admin/complaints/${complaint.id}`)}
                       >
                         {/* ID & Priority */}
-                        <td className="py-3.5 px-4">
-                          <div className="space-y-1">
-                            <span className="font-extrabold text-[#111827] text-xs font-mono block">
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-[#111827] text-xs font-mono whitespace-nowrap">
                               {complaint.complaint_number}
                             </span>
                             {getPriorityBadge(complaint.priority)}
@@ -762,73 +762,73 @@ export default function ComplaintsListPage() {
                         </td>
 
                         {/* Scooty Number */}
-                        <td className="py-3.5 px-4 font-bold text-[#111827]">
-                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 font-mono text-xs border border-slate-200">
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <span className="bg-[#111827] text-white text-[11px] px-2.5 py-1 rounded-md font-mono font-bold whitespace-nowrap inline-block tracking-wide">
                             {complaint.scooter_number}
-                          </div>
+                          </span>
                         </td>
 
                         {/* Customer & Location */}
-                        <td className="py-3.5 px-4">
-                          <div className="space-y-0.5 max-w-xs">
-                            <p className="font-bold text-[#111827]">{complaint.customer_name}</p>
-                            <div className="flex items-center gap-2 text-[11px] text-[#667085]">
-                              <span className="font-mono">{complaint.customer_phone}</span>
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="space-y-0.5 min-w-[200px] max-w-[260px]">
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span className="font-bold text-[#111827] whitespace-nowrap">{complaint.customer_name}</span>
+                              <span className="font-mono text-[11px] text-[#667085] whitespace-nowrap">{complaint.customer_phone}</span>
                               <button
                                 onClick={e => {
                                   e.stopPropagation();
                                   handleOpenWhatsApp(complaint.customer_phone, complaint.customer_name, complaint.complaint_number);
                                 }}
                                 title="WhatsApp Customer"
-                                className="text-emerald-600 hover:text-emerald-700"
+                                className="text-emerald-600 hover:text-emerald-700 flex-shrink-0 cursor-pointer"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                            <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate mt-1">
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate mt-0.5">
                               <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{complaint.location_address}</span>
+                              <span className="truncate" title={complaint.location_address}>{complaint.location_address}</span>
                             </div>
                           </div>
                         </td>
 
                         {/* Issue */}
-                        <td className="py-3.5 px-4">
-                          <p className="font-bold text-[#111827] line-clamp-1">{complaint.issue_category}</p>
-                          <p className="text-[11px] text-[#667085] line-clamp-1 mt-0.5">{complaint.description}</p>
+                        <td className="py-3.5 px-3.5 min-w-[180px] max-w-[260px]">
+                          <p className="font-bold text-[#111827] line-clamp-1" title={complaint.issue_category}>{complaint.issue_category}</p>
+                          <p className="text-[11px] text-[#667085] line-clamp-1 mt-0.5" title={complaint.description}>{complaint.description}</p>
                         </td>
 
                         {/* Service Hub */}
-                        <td className="py-3.5 px-4 font-semibold text-[#111827]">
-                          <div className="flex items-center gap-1.5">
-                            <Building className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{complaint.hub_name}</span>
+                        <td className="py-3.5 px-3.5 font-semibold text-[#111827] whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap">
+                            <Building className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="whitespace-nowrap">{complaint.hub_name}</span>
                           </div>
                         </td>
 
                         {/* Technician */}
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
                           {complaint.technician_name ? (
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-[#111827]">{complaint.technician_name}</p>
-                              <p className="text-[10px] text-slate-500 font-mono">
+                            <div className="space-y-0.5 whitespace-nowrap">
+                              <p className="font-bold text-[#111827] whitespace-nowrap">{complaint.technician_name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono whitespace-nowrap">
                                 {complaint.technician_code || complaint.technician_phone}
                               </p>
                             </div>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200 whitespace-nowrap">
                               Unassigned
                             </span>
                           )}
                         </td>
 
                         {/* Status */}
-                        <td className="py-3.5 px-4">
-                          <div className="space-y-1">
+                        <td className="py-3.5 px-3.5 whitespace-nowrap">
+                          <div className="space-y-1 whitespace-nowrap">
                             {getStatusBadge(complaint.status)}
                             {isEnRoute && complaint.journey_duration_formatted && (
-                              <p className="text-[10px] text-purple-700 font-extrabold flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
+                              <p className="text-[10px] text-purple-700 font-extrabold flex items-center gap-1 whitespace-nowrap">
+                                <Clock className="w-3 h-3 flex-shrink-0" />
                                 <span>{complaint.journey_duration_formatted}</span>
                               </p>
                             )}
@@ -836,14 +836,14 @@ export default function ComplaintsListPage() {
                         </td>
 
                         {/* Created At */}
-                        <td className="py-3.5 px-4 text-[11px] text-[#667085]">
-                          <p>{new Date(complaint.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
-                          <p className="text-[10px] text-slate-400">{new Date(complaint.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                        <td className="py-3.5 px-3.5 text-[11px] text-[#667085] whitespace-nowrap">
+                          <p className="font-medium whitespace-nowrap">{new Date(complaint.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                          <p className="text-[10px] text-slate-400 whitespace-nowrap">{new Date(complaint.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 px-4 text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="py-3.5 px-3.5 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             {/* Hub Incharge Assign Button */}
                             {(isNew || isAssigned) && (
                               <button
@@ -851,7 +851,7 @@ export default function ComplaintsListPage() {
                                   setAssigningComplaint(complaint);
                                   setSelectedTechId(complaint.technician_id || technicians[0]?.id || null);
                                 }}
-                                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition"
+                                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition cursor-pointer whitespace-nowrap"
                               >
                                 {complaint.technician_name ? 'Reassign' : 'Assign Tech'}
                               </button>
@@ -859,8 +859,8 @@ export default function ComplaintsListPage() {
 
                             <Link
                               href={`/admin/complaints/${complaint.id}`}
-                              className="p-1.5 rounded-xl text-slate-400 hover:text-[#00A854] hover:bg-[#EAFBF2] transition"
-                              title="View Complaint & Live Tracking"
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-[#00A854] hover:bg-[#EAFBF2] transition cursor-pointer"
+                              title="View Complaint &amp; Live Tracking"
                             >
                               <ChevronRight className="w-4 h-4" />
                             </Link>
