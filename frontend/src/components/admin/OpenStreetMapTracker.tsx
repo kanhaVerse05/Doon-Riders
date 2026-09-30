@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Navigation, MapPin, ExternalLink, RotateCw, ZoomIn, ZoomOut, Crosshair, Sparkles, Bike } from 'lucide-react';
+import { Navigation, MapPin, ExternalLink, RotateCw, ZoomIn, ZoomOut, Crosshair, Sparkles, Bike, Eye } from 'lucide-react';
 
 interface OpenStreetMapTrackerProps {
   technicianLat: number;
@@ -48,7 +48,9 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   const custMarkerRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
   const glowLineRef = useRef<any>(null);
+  const lastFetchedCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
+  const [autoFollow, setAutoFollow] = useState(true);
   const [routeInfo, setRouteInfo] = useState<{
     distanceKm: number;
     durationMins: number;
@@ -60,6 +62,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   });
 
   const [loadingRoute, setLoadingRoute] = useState(false);
+  const [lastMovedAt, setLastMovedAt] = useState<Date>(new Date());
 
   const validTechLat = typeof technicianLat === 'number' && !isNaN(technicianLat) && technicianLat !== 0 ? technicianLat : 30.2863;
   const validTechLng = typeof technicianLng === 'number' && !isNaN(technicianLng) && technicianLng !== 0 ? technicianLng : 78.0069;
@@ -97,6 +100,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
           isRealRoad: true
         });
 
+        lastFetchedCoordsRef.current = { lat: startLat, lng: startLng };
         return coordinates;
       }
     } catch (err) {
@@ -123,13 +127,29 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
 
       const L = (await import('leaflet')).default;
 
-      // Inject Leaflet CSS
+      // Inject Leaflet CSS & Radar Keyframes if missing
       if (!document.getElementById('leaflet-css')) {
         const link = document.createElement('link');
         link.id = 'leaflet-css';
         link.rel = 'stylesheet';
         link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
         document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('leaflet-custom-animations')) {
+        const style = document.createElement('style');
+        style.id = 'leaflet-custom-animations';
+        style.innerHTML = `
+          @keyframes leaflet-rider-ping {
+            0% { transform: scale(0.6); opacity: 0.9; }
+            50% { transform: scale(1.6); opacity: 0.35; }
+            100% { transform: scale(2.2); opacity: 0; }
+          }
+          .animate-rider-pulse {
+            animation: leaflet-rider-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+          }
+        `;
+        document.head.appendChild(style);
       }
 
       if (!isMounted || !mapContainerRef.current) return;
@@ -139,23 +159,23 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
         mapInstanceRef.current = null;
       }
 
-      // 1. Modern Delivery Rider Pulse Marker (Swiggy / Uber Style)
+      // 1. Delivery Rider Pulse Marker (Live GPS)
       const techIcon = L.divIcon({
         className: 'delivery-tech-marker',
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-            <div style="position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(0, 217, 107, 0.25); animation: leaflet-pulse 2s infinite ease-out;"></div>
-            <div style="width: 38px; height: 38px; border-radius: 50%; background: #0A0F1D; border: 3px solid #00D96B; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0, 217, 107, 0.5); z-index: 2;">
-              <span style="font-size: 18px;">🏍️</span>
+            <div class="animate-rider-pulse" style="position: absolute; width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 217, 107, 0.4);"></div>
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: #0A0F1D; border: 3px solid #00D96B; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0, 217, 107, 0.6); z-index: 2;">
+              <span style="font-size: 19px;">🏍️</span>
             </div>
-            <div style="background: #0A0F1D; color: #FFFFFF; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 20px; margin-top: 4px; white-space: nowrap; border: 1px solid rgba(0, 217, 107, 0.4); box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 3; display: flex; align-items: center; gap: 4px;">
+            <div style="background: #0A0F1D; color: #FFFFFF; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 20px; margin-top: 4px; white-space: nowrap; border: 1.5px solid #00D96B; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 3; display: flex; align-items: center; gap: 4px;">
               <span style="width: 6px; height: 6px; border-radius: 50%; background: #00D96B; display: inline-block;"></span>
               <span>${technicianName}</span>
             </div>
           </div>
         `,
-        iconSize: [48, 68],
-        iconAnchor: [24, 34]
+        iconSize: [50, 70],
+        iconAnchor: [25, 35]
       });
 
       // 2. Customer Breakdown Destination Marker
@@ -163,7 +183,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
         className: 'delivery-customer-marker',
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-            <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(239, 68, 68, 0.2); animation: leaflet-pulse 2s infinite ease-out;"></div>
+            <div class="animate-rider-pulse" style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(239, 68, 68, 0.3);"></div>
             <div style="width: 36px; height: 36px; border-radius: 50%; background: #DC2626; border: 3px solid #FFFFFF; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(220, 38, 38, 0.5); z-index: 2;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
@@ -266,7 +286,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
     };
   }, [validCustLat, validCustLng, fetchRealRoadRoute]);
 
-  // Dynamic Realtime Position Updates: When technician GPS changes every 2-3s
+  // Dynamic Realtime Position Updates: When technician GPS changes dynamically
   useEffect(() => {
     if (!mapInstanceRef.current || !techMarkerRef.current) return;
 
@@ -281,34 +301,51 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       </div>
     `);
 
-    // 2. Fetch updated driving road geometry from new position
-    fetchRealRoadRoute(validTechLat, validTechLng, validCustLat, validCustLng).then((newCoords) => {
-      const updatedPoints = newCoords && newCoords.length > 0 ? newCoords : [
-        [validTechLat, validTechLng],
-        [validCustLat, validCustLng]
-      ];
+    setLastMovedAt(new Date());
 
-      if (routeLineRef.current) {
-        routeLineRef.current.setLatLngs(updatedPoints as any);
-      }
-      if (glowLineRef.current) {
-        glowLineRef.current.setLatLngs(updatedPoints as any);
-      }
-    });
-  }, [validTechLat, validTechLng, validCustLat, validCustLng, technicianName, status, lastUpdated, fetchRealRoadRoute]);
+    // 2. Auto-follow camera if enabled: smoothly pans along with rider
+    if (autoFollow) {
+      mapInstanceRef.current.panTo([validTechLat, validTechLng], {
+        animate: true,
+        duration: 1.0
+      });
+    }
+
+    // 3. Fetch updated driving road geometry from new position
+    const lastFetched = lastFetchedCoordsRef.current;
+    const movedSignificant = !lastFetched || 
+      Math.abs(lastFetched.lat - validTechLat) > 0.0001 || 
+      Math.abs(lastFetched.lng - validTechLng) > 0.0001;
+
+    if (movedSignificant) {
+      fetchRealRoadRoute(validTechLat, validTechLng, validCustLat, validCustLng).then((newCoords) => {
+        const updatedPoints = newCoords && newCoords.length > 0 ? newCoords : [
+          [validTechLat, validTechLng],
+          [validCustLat, validCustLng]
+        ];
+
+        if (routeLineRef.current) {
+          routeLineRef.current.setLatLngs(updatedPoints as any);
+        }
+        if (glowLineRef.current) {
+          glowLineRef.current.setLatLngs(updatedPoints as any);
+        }
+      });
+    }
+  }, [validTechLat, validTechLng, validCustLat, validCustLng, technicianName, status, lastUpdated, autoFollow, fetchRealRoadRoute]);
 
   // Recenter to show whole route
   const handleFitRoute = () => {
     if (mapInstanceRef.current) {
       if (routeLineRef.current && routeLineRef.current.getLatLngs().length > 0) {
         const bounds = routeLineRef.current.getBounds();
-        mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55], maxZoom: 16 });
+        mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55], maxZoom: 16, animate: true });
       } else {
         const bounds = [
           [validTechLat, validTechLng],
           [validCustLat, validCustLng]
         ];
-        mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55] });
+        mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55], animate: true });
       }
     }
   };
@@ -329,7 +366,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   return (
     <div className="relative rounded-3xl overflow-hidden border border-[#E5E7EB] bg-white shadow-sm flex flex-col">
       {/* Top Floating Control Bar */}
-      <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between pointer-events-none gap-2">
+      <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between pointer-events-none gap-2 flex-wrap">
         <div className="bg-[#0A0F1D]/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-700 text-xs font-mono text-white flex items-center gap-2.5 shadow-xl pointer-events-auto">
           <span className="w-2.5 h-2.5 rounded-full bg-[#00D96B] animate-ping flex-shrink-0" />
           <div className="space-y-0.5">
@@ -347,7 +384,23 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pointer-events-auto">
+        <div className="flex items-center gap-2 pointer-events-auto flex-wrap">
+          {/* Auto-Follow Toggle */}
+          <button
+            type="button"
+            onClick={() => setAutoFollow(!autoFollow)}
+            className={`px-3 py-1.5 rounded-2xl text-xs font-bold border transition flex items-center gap-1.5 shadow-md cursor-pointer ${
+              autoFollow
+                ? 'bg-[#0A0F1D] text-[#00D96B] border-[#00D96B]/50'
+                : 'bg-white/95 text-slate-600 border-slate-300'
+            }`}
+            title="Toggle camera auto-follow rider"
+          >
+            <Crosshair className={`w-3.5 h-3.5 ${autoFollow ? 'text-[#00D96B]' : 'text-slate-400'}`} />
+            <span className="text-[11px] font-extrabold">{autoFollow ? 'Auto-Follow: ON' : 'Auto-Follow: OFF'}</span>
+          </button>
+
+          {/* Live ETA / Distance */}
           <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-slate-200 shadow-lg flex items-center gap-2 text-xs">
             <span className="text-slate-500 font-bold">ETA:</span>
             <span className="text-emerald-700 font-black font-mono">
@@ -373,7 +426,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       </div>
 
       {/* Map Container Element */}
-      <div ref={mapContainerRef} className="w-full h-[400px] sm:h-[450px] z-0 bg-[#F7F9FA]" />
+      <div ref={mapContainerRef} className="w-full h-[400px] sm:h-[460px] z-0 bg-[#F7F9FA]" />
 
       {/* Floating Bottom Right Controls: Zoom, Focus Rider, Fit Route */}
       <div className="absolute bottom-16 right-3 z-[400] flex flex-col gap-1.5 shadow-md">

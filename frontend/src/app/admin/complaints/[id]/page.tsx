@@ -201,7 +201,7 @@ export default function ComplaintOverviewPage() {
 
     const pollInterval = setInterval(() => {
       fetchComplaintDetails(true);
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [complaintId, complaint?.status]);

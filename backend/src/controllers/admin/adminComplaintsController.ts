@@ -795,7 +795,7 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
 export const updateTechnicianLocation = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { latitude, longitude, speed, heading } = req.body;
+    const { latitude, longitude, speed, heading, accuracy } = req.body;
     const complaintId = Number(id);
 
     if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
@@ -805,7 +805,7 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
     const lat = typeof latitude === 'string' ? parseFloat(latitude) : Number(latitude);
     const lng = typeof longitude === 'string' ? parseFloat(longitude) : Number(longitude);
 
-    if (isNaN(lat) || isNaN(lng)) {
+    if (isNaN(lat) || isNaN(lng) || !isValidLatLng(lat, lng)) {
       return res.status(400).json({ success: false, message: 'Invalid numeric coordinates provided' });
     }
 
@@ -834,13 +834,27 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
       complaint.technician_latitude = lat;
       complaint.technician_longitude = lng;
       complaint.technician_location_updated_at = now;
+
+      // Also update technician row in memoryStore if available
+      if (complaint.technician_id) {
+        const tech = (memoryStore.technicians || []).find(t => t.id === complaint.technician_id);
+        if (tech) {
+          (tech as any).current_latitude = lat;
+          (tech as any).current_longitude = lng;
+          (tech as any).last_seen_at = now;
+        }
+      }
     }
 
     return res.json({
       success: true,
       data: {
+        complaint_id: complaint?.id || complaintId,
         latitude: lat,
         longitude: lng,
+        accuracy: accuracy || null,
+        speed: speed || null,
+        heading: heading || null,
         updated_at: now
       }
     });

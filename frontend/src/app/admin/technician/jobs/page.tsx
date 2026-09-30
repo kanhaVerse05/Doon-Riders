@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminLayout } from '../../../../components/admin/AdminLayout';
@@ -36,7 +36,9 @@ import {
   Package,
   Plus,
   Trash2,
-  Building
+  Building,
+  Crosshair,
+  Activity
 } from 'lucide-react';
 
 interface RepairJob {
@@ -255,77 +257,182 @@ export default function TechnicianJobsSummaryPage() {
     fetchData();
   }, [selectedTechId, isTechnicianRole, user]);
 
-  // Live Background Geolocation Tracker when En Route
+  // -------------------------------------------------------------
+  // Live Continuous High-Accuracy GPS Broadcaster Engine
+  // -------------------------------------------------------------
+  const [gpsTelemetry, setGpsTelemetry] = useState<{
+    isSupported: boolean;
+    isWatching: boolean;
+    latitude: number | null;
+    longitude: number | null;
+    accuracy: number | null;
+    speed: number | null;
+    heading: number | null;
+    lastSentAt: string | null;
+    pingCount: number;
+    errorMessage: string | null;
+    isTransmitting: boolean;
+  }>({
+    isSupported: true,
+    isWatching: false,
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    speed: null,
+    heading: null,
+    lastSentAt: null,
+    pingCount: 0,
+    errorMessage: null,
+    isTransmitting: false
+  });
+
+  const fieldComplaintsRef = useRef<Complaint[]>([]);
   useEffect(() => {
-    const activeEnRouteComplaint = fieldComplaints.find(c => c.status === 'En Route');
-    if (!activeEnRouteComplaint || typeof window === 'undefined') return;
+    fieldComplaintsRef.current = fieldComplaints;
+  }, [fieldComplaints]);
 
-    const broadcastLocation = (pos: GeolocationPosition) => {
-      const { latitude, longitude, speed, heading } = pos.coords;
-      adminApi.post(`/admin/complaints/${activeEnRouteComplaint.id}/location`, {
-        latitude,
-        longitude,
-        speed,
-        heading
-      }).catch(() => {});
-    };
+  // Robust location broadcaster to server
+  const broadcastCoordinates = useCallback(async (
+    lat: number,
+    lng: number,
+    accuracy?: number,
+    speed?: number,
+    heading?: number
+  ) => {
+    const activeComplaints = fieldComplaintsRef.current.filter(
+      c => c.status === 'En Route' || c.status === 'Assigned' || c.status === 'Reached' || c.status === 'Work In Progress'
+    );
 
-    let watchId: number | null = null;
-    let intervalId: any = null;
+    if (activeComplaints.length === 0) return;
 
-    if (navigator.geolocation) {
-      // 1. Immediate position broadcast
-      navigator.geolocation.getCurrentPosition(
-        broadcastLocation,
-        err => console.warn('GPS initial error:', err.message),
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
+    setGpsTelemetry(prev => ({ ...prev, isTransmitting: true }));
+    const now = new Date().toISOString();
 
-      // 2. Continuous watchPosition
-      watchId = navigator.geolocation.watchPosition(
-        broadcastLocation,
-        err => console.warn('GPS watch error:', err.message),
-        { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
-      );
-
-      // 3. Heartbeat interval broadcast every 4s
-      intervalId = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(
-          broadcastLocation,
-          () => {},
-          { enableHighAccuracy: true, timeout: 5000 }
-        );
-      }, 4000);
+    for (const c of activeComplaints) {
+      try {
+        await adminApi.post(`/admin/complaints/${c.id}/location`, {
+          latitude: lat,
+          longitude: lng,
+          accuracy: accuracy || null,
+          speed: speed || null,
+          heading: heading || null
+        });
+      } catch (err) {
+        console.warn(`[GPS Sync Failed] complaint #${c.complaint_number}:`, err);
+      }
     }
 
-    return () => {
-      if (watchId !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+    setGpsTelemetry(prev => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      accuracy: accuracy ? Math.round(accuracy) : prev.accuracy,
+      speed: speed ? Math.round(speed * 3.6) : prev.speed,
+      heading: heading !== undefined ? heading : prev.heading,
+      lastSentAt: now,
+      pingCount: prev.pingCount + 1,
+      errorMessage: null,
+      isTransmitting: false
+    }));
+  }, []);
+
+  // Persistent Continuous Watcher with maximumAge: 0
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!navigator.geolocation) {
+      setGpsTelemetry(prev => ({
+        ...prev,
+        isSupported: false,
+        errorMessage: 'GPS is not supported on this browser'
+      }));
+      return;
+    }
+
+    setGpsTelemetry(prev => ({ ...prev, isSupported: true, isWatching: true, errorMessage: null }));
+
+    const handleSuccess = (pos: GeolocationPosition) => {
+      const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+      broadcastCoordinates(latitude, longitude, accuracy, speed || undefined, heading || undefined);
     };
-  }, [fieldComplaints]);
+
+    const handleError = (err: GeolocationPositionError) => {
+      let msg = 'Acquiring satellite GPS fix...';
+      if (err.code === 1) {
+        msg = 'Location permission denied. Please allow GPS access in browser settings.';
+      } else if (err.code === 2) {
+        msg = 'GPS unavailable. Please enable device Location / GPS.';
+      } else if (err.code === 3) {
+        msg = 'GPS request timed out. Retrying satellite lock...';
+      }
+      setGpsTelemetry(prev => ({ ...prev, errorMessage: msg, isTransmitting: false }));
+    };
+
+    // 1. Initial lock
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10000
+    });
+
+    // 2. High-Accuracy watchPosition with maximumAge: 0 (No stale cache)
+    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000
+    });
+
+    // 3. Periodic 2.5s heartbeat ping when any job is active
+    const heartbeatTimer = setInterval(() => {
+      const hasActiveJobs = fieldComplaintsRef.current.some(
+        c => c.status === 'En Route' || c.status === 'Work In Progress' || c.status === 'Reached' || c.status === 'Assigned'
+      );
+      if (hasActiveJobs) {
+        navigator.geolocation.getCurrentPosition(handleSuccess, () => {}, {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 6000
+        });
+      }
+    }, 2500);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(heartbeatTimer);
+    };
+  }, [broadcastCoordinates]);
 
   const [sendingManualPing, setSendingManualPing] = useState(false);
 
-  const handleManualGPSPing = async (complaintId: number) => {
+  // Manual GPS Ping Trigger
+  const handleManualGPSPing = async (complaintId?: number) => {
     try {
       setSendingManualPing(true);
-      if (navigator.geolocation) {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 6000, enableHighAccuracy: true });
-        });
-        await adminApi.post(`/admin/complaints/${complaintId}/location`, {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude
-        });
-        showToast('Live GPS coordinates broadcasted successfully!');
-        fetchData();
-      } else {
+      if (!navigator.geolocation) {
         alert('Geolocation is not supported on this browser');
+        return;
       }
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 7000,
+          enableHighAccuracy: true,
+          maximumAge: 0
+        });
+      });
+
+      const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+      await broadcastCoordinates(latitude, longitude, accuracy, speed || undefined, heading || undefined);
+
+      if (complaintId) {
+        await adminApi.post(`/admin/complaints/${complaintId}/location`, {
+          latitude,
+          longitude,
+          accuracy
+        });
+      }
+
+      showToast('Live GPS coordinates broadcasted successfully!');
+      fetchData();
     } catch (err: any) {
       alert('Failed to get GPS: ' + (err.message || 'Permission denied'));
     } finally {
@@ -685,6 +792,88 @@ export default function TechnicianJobsSummaryPage() {
               ))}
             </select>
           )}
+        </div>
+
+        {/* Live GPS Telemetry Status Banner */}
+        <div
+          className={`p-3.5 sm:p-4 rounded-3xl border transition-all shadow-sm ${
+            gpsTelemetry.errorMessage
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-[#0A0F1D] text-white border-slate-800'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                  gpsTelemetry.errorMessage
+                    ? 'bg-amber-200 text-amber-900'
+                    : 'bg-emerald-950 border border-[#00D96B]/40 text-[#00D96B]'
+                }`}
+              >
+                <Radio className={`w-5 h-5 ${gpsTelemetry.errorMessage ? '' : 'animate-ping'}`} />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black tracking-tight">
+                    {gpsTelemetry.errorMessage
+                      ? 'GPS Satellite Lock Needed'
+                      : 'Live High-Accuracy GPS Broadcaster'}
+                  </span>
+                  {!gpsTelemetry.errorMessage && (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#00D96B]/20 text-[#00D96B] border border-[#00D96B]/40 uppercase tracking-wider">
+                      Streaming
+                    </span>
+                  )}
+                  {gpsTelemetry.isTransmitting && (
+                    <span className="w-2 h-2 rounded-full bg-[#00D96B] animate-spin" />
+                  )}
+                </div>
+                <p className="text-[11px] font-mono text-slate-300">
+                  {gpsTelemetry.errorMessage ? (
+                    <span className="text-amber-800 font-bold">{gpsTelemetry.errorMessage}</span>
+                  ) : gpsTelemetry.latitude && gpsTelemetry.longitude ? (
+                    <span className="flex items-center gap-1.5 flex-wrap">
+                      <strong className="text-[#00D96B] font-black">
+                        {gpsTelemetry.latitude.toFixed(4)}° N, {gpsTelemetry.longitude.toFixed(4)}° E
+                      </strong>
+                      {gpsTelemetry.accuracy ? (
+                        <span className="text-slate-400">(&plusmn;{gpsTelemetry.accuracy}m accuracy)</span>
+                      ) : null}
+                      <span className="text-slate-500">&bull;</span>
+                      <span className="text-slate-400">Pings Sent: <b>#{gpsTelemetry.pingCount}</b></span>
+                    </span>
+                  ) : (
+                    <span>Acquiring device GPS satellite fix...</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {gpsTelemetry.errorMessage ? (
+                <button
+                  type="button"
+                  onClick={() => handleManualGPSPing()}
+                  className="px-3.5 py-2 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs transition cursor-pointer shadow-md active:scale-95 flex items-center gap-1.5"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Grant / Retry GPS</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleManualGPSPing()}
+                  disabled={sendingManualPing}
+                  className="px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[#00D96B] font-extrabold text-xs transition cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-sm"
+                  title="Broadcast current live position immediately"
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${sendingManualPing ? 'animate-spin' : ''}`} />
+                  <span>Force GPS Ping</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Top Mode Switcher Tabs */}
