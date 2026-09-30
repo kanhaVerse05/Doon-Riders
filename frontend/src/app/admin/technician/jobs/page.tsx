@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AdminLayout } from '../../../../components/admin/AdminLayout';
 import { useAuth } from '../../../../context/AuthContext';
 import { adminApi } from '../../../../lib/adminApi';
+import { buildNavigationUrl, getExactLocationUrl, extractCoordsFromUrl, isValidLatLng } from '../../../../lib/locationUtils';
 import {
   Wrench,
   Search,
@@ -778,11 +779,24 @@ export default function TechnicianJobsSummaryPage() {
                   const isDone = complaint.status === 'Work Done';
                   const isClosed = complaint.status === 'Closed';
 
-                  const techLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
-                  const techLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
-                  const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
-                  const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
-                  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}&travelmode=driving`;
+                  let custLat = parseFloat(String(complaint.latitude || ''));
+                  let custLng = parseFloat(String(complaint.longitude || ''));
+
+                  // Auto-extract from location_url if coordinates are not valid numbers
+                  if (!isValidLatLng(custLat, custLng) && complaint.location_url) {
+                    const parsed = extractCoordsFromUrl(complaint.location_url);
+                    if (parsed) {
+                      custLat = parsed.lat;
+                      custLng = parsed.lng;
+                    }
+                  }
+
+                  const techLat = parseFloat(String(complaint.technician_latitude || ''));
+                  const techLng = parseFloat(String(complaint.technician_longitude || ''));
+
+                  // Exact Google Maps turn-by-turn navigation
+                  const navigateUrl = buildNavigationUrl(custLat, custLng, techLat, techLng, complaint.location_url);
+                  const exactPinUrl = getExactLocationUrl(complaint.location_url, custLat, custLng);
 
                   // Check if there is another complaint next in line
                   const remainingAssigned = fieldComplaints.filter(c => c.id !== complaint.id && (c.status === 'Assigned' || c.status === 'En Route'));
@@ -865,22 +879,51 @@ export default function TechnicianJobsSummaryPage() {
                           </div>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-200/60 flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-                            <span className="text-[11px] text-slate-700 font-medium leading-tight">
-                              {complaint.location_address}
-                            </span>
+                        <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-1.5 min-w-0">
+                              <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+                              <span className="text-[11px] text-slate-700 font-medium leading-tight">
+                                {complaint.location_address}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {complaint.location_url && (
+                                <a
+                                  href={complaint.location_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] border border-slate-300 flex items-center gap-1 shrink-0"
+                                  title="Open exact Google Maps URL provided in complaint"
+                                >
+                                  <ExternalLink className="w-3 h-3 text-blue-600" />
+                                  <span>Pin Link</span>
+                                </a>
+                              )}
+                              <a
+                                href={navigateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] flex items-center gap-1 shrink-0 shadow-sm shadow-emerald-600/20"
+                                title="Start GPS turn-by-turn navigation in Google Maps"
+                              >
+                                <Navigation className="w-3 h-3" />
+                                <span>Navigate</span>
+                              </a>
+                            </div>
                           </div>
-                          <a
-                            href={mapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] border border-blue-200 flex items-center gap-1 shrink-0"
-                          >
-                            <Navigation className="w-3 h-3" />
-                            <span>Navigate</span>
-                          </a>
+
+                          {/* Exact GPS Coords Tag */}
+                          {isValidLatLng(custLat, custLng) && (
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200/80">
+                              <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Target GPS: {custLat.toFixed(4)}, {custLng.toFixed(4)}</span>
+                              </span>
+                              <span className="text-emerald-700 font-bold font-sans">Exact Spot</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -940,15 +983,28 @@ export default function TechnicianJobsSummaryPage() {
                               </button>
                             </div>
 
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#00D96B] font-bold hover:underline flex items-center gap-1 text-[11px]"
-                            >
-                              <span>Open Maps</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                            <div className="flex items-center gap-2">
+                              {complaint.location_url && (
+                                <a
+                                  href={complaint.location_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1"
+                                >
+                                  <span>Pin Link</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                              <a
+                                href={navigateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#00D96B] font-bold hover:underline flex items-center gap-1 text-[11px]"
+                              >
+                                <span>Open Maps</span>
+                                <Navigation className="w-3 h-3" />
+                              </a>
+                            </div>
                           </div>
                         </div>
                       )}

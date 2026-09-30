@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AdminLayout } from '../../../components/admin/AdminLayout';
 import { useAuth } from '../../../context/AuthContext';
 import { adminApi } from '../../../lib/adminApi';
+import { extractCoordsFromUrl, isValidLatLng } from '../../../lib/locationUtils';
 import {
   AlertCircle,
   Plus,
@@ -173,6 +174,45 @@ export default function ComplaintsListPage() {
     priority: 'Normal' as 'Normal' | 'High' | 'Urgent',
     hub_id: 1
   });
+
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+
+  // Auto-parse GPS coordinates when location_url or location_address changes
+  const handleLocationUrlChange = async (urlStr: string) => {
+    const trimmed = urlStr.trim();
+    // 1. Direct Regex Extraction
+    const direct = extractCoordsFromUrl(trimmed);
+    if (direct) {
+      setNewComplaintForm(prev => ({
+        ...prev,
+        location_url: urlStr,
+        latitude: String(direct.lat),
+        longitude: String(direct.lng)
+      }));
+      return;
+    }
+
+    setNewComplaintForm(prev => ({ ...prev, location_url: urlStr }));
+
+    // 2. If it's a web link (e.g. short link maps.app.goo.gl), resolve via backend
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      try {
+        setResolvingLocation(true);
+        const res = await adminApi.post('/admin/complaints/parse-location', { url: trimmed });
+        if (res && res.success && res.data) {
+          setNewComplaintForm(prev => ({
+            ...prev,
+            latitude: String(res.data.lat),
+            longitude: String(res.data.lng)
+          }));
+        }
+      } catch (err) {
+        // Silently skip
+      } finally {
+        setResolvingLocation(false);
+      }
+    }
+  };
 
   // Assign Technician Modal (Hub Incharge Action)
   const [assigningComplaint, setAssigningComplaint] = useState<Complaint | null>(null);
@@ -1003,16 +1043,39 @@ export default function ComplaintsListPage() {
 
                 {/* Location URL / Google Maps URL */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Google Maps URL or Pin Location (Optional)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      Google Maps URL or Pin Location (Optional)
+                    </label>
+                    {resolvingLocation && (
+                      <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1 animate-pulse">
+                        <RotateCw className="w-3 h-3 animate-spin" />
+                        <span>Resolving GPS...</span>
+                      </span>
+                    )}
+                  </div>
                   <input
-                    type="url"
+                    type="text"
                     value={newComplaintForm.location_url}
-                    onChange={e => setNewComplaintForm({ ...newComplaintForm, location_url: e.target.value })}
-                    placeholder="https://maps.google.com/?q=30.3256,78.0436"
+                    onChange={e => handleLocationUrlChange(e.target.value)}
+                    placeholder="https://maps.app.goo.gl/... or https://maps.google.com/?q=30.3702,78.1042"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-[#00D96B] focus:bg-white"
                   />
+                  {/* GPS Auto-detected feedback pill */}
+                  {isValidLatLng(newComplaintForm.latitude, newComplaintForm.longitude) && (
+                    <div className="mt-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-[11px]">
+                      <span className="text-emerald-800 font-bold flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>GPS Coordinates Detected:</span>
+                        <strong className="font-mono text-emerald-950">
+                          {Number(newComplaintForm.latitude).toFixed(4)}, {Number(newComplaintForm.longitude).toFixed(4)}
+                        </strong>
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200/60 text-emerald-900">
+                        Exact Pin Ready
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Issue Category */}

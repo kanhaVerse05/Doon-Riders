@@ -18,6 +18,156 @@ export const formatDuration = (seconds: number): string => {
   return `${secs}s`;
 };
 
+// Helper to validate latitude & longitude
+export function isValidLatLng(lat: any, lng: any): boolean {
+  const numLat = typeof lat === 'number' ? lat : parseFloat(String(lat));
+  const numLng = typeof lng === 'number' ? lng : parseFloat(String(lng));
+  return (
+    !isNaN(numLat) &&
+    !isNaN(numLng) &&
+    numLat >= -90 &&
+    numLat <= 90 &&
+    numLng >= -180 &&
+    numLng <= 180
+  );
+}
+
+// Helper to extract GPS coordinates from any Maps URL or coordinate string
+export function extractCoordsFromUrl(input: string | null | undefined): { lat: number; lng: number } | null {
+  if (!input || typeof input !== 'string') return null;
+  const str = decodeURIComponent(input.trim());
+
+  // 1. Google Maps @lat,lng e.g. /@30.3702123,78.1042456,17z
+  const atMatch = str.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 2. Query param style: q=lat,lng, query=lat,lng, ll=lat,lng, daddr=lat,lng, destination=lat,lng, loc=lat,lng
+  const qMatch = str.match(/[?&](?:q|query|ll|daddr|destination|loc|point)=(-?\d+\.\d+)[,\s%20]+(-?\d+\.\d+)/i);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 3. OpenStreetMap / mlat & mlon query parameters
+  const osmMatch = str.match(/[?&]mlat=(-?\d+\.\d+).*?[?&]mlo[ng]{1,2}=(-?\d+\.\d+)/i);
+  if (osmMatch) {
+    const lat = parseFloat(osmMatch[1]);
+    const lng = parseFloat(osmMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 4. OpenStreetMap hash format: #map=16/30.3702/78.1042
+  const osmHashMatch = str.match(/#map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/i);
+  if (osmHashMatch) {
+    const lat = parseFloat(osmHashMatch[1]);
+    const lng = parseFloat(osmHashMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 5. Google Maps place coordinates: /place/30.3702,78.1042 or /place/30.3702+78.1042
+  const placeMatch = str.match(/\/place\/(-?\d+\.\d+)[,\s+%20]+(-?\d+\.\d+)/i);
+  if (placeMatch) {
+    const lat = parseFloat(placeMatch[1]);
+    const lng = parseFloat(placeMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 6. geo: URI scheme e.g. geo:30.3702,78.1042
+  const geoMatch = str.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/i);
+  if (geoMatch) {
+    const lat = parseFloat(geoMatch[1]);
+    const lng = parseFloat(geoMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 7. Plain string coordinate pattern: "30.3702, 78.1042" or "30.3702,78.1042"
+  const rawCoordMatch = str.match(/^(-?\d{1,2}\.\d+)[,\s]+(-?\d{1,3}\.\d+)$/);
+  if (rawCoordMatch) {
+    const lat = parseFloat(rawCoordMatch[1]);
+    const lng = parseFloat(rawCoordMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 8. General coordinate pattern inside any text
+  const genericMatch = str.match(/(-?\d{1,2}\.\d{3,})[,\s%20]+(-?\d{1,3}\.\d{3,})/);
+  if (genericMatch) {
+    const lat = parseFloat(genericMatch[1]);
+    const lng = parseFloat(genericMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  return null;
+}
+
+// Helper to resolve short links and extract coordinates
+export const resolveCoordinatesFromUrl = async (
+  urlStr: string
+): Promise<{ lat: number; lng: number; resolvedUrl?: string } | null> => {
+  if (!urlStr || typeof urlStr !== 'string') return null;
+  const trimmed = urlStr.trim();
+
+  const direct = extractCoordsFromUrl(trimmed);
+  if (direct) return direct;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(trimmed, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      clearTimeout(timeoutId);
+
+      const finalUrl = res.url;
+      if (finalUrl && finalUrl !== trimmed) {
+        const fromFinal = extractCoordsFromUrl(finalUrl);
+        if (fromFinal) {
+          return { ...fromFinal, resolvedUrl: finalUrl };
+        }
+      }
+    } catch (e) {
+      // Ignore network timeout/failure
+    }
+  }
+
+  return null;
+};
+
+// API Endpoint to parse/resolve coordinates from a URL or coordinate string
+export const parseLocationUrlHandler = async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ success: false, message: 'URL or coordinate string is required' });
+    }
+    const resolved = await resolveCoordinatesFromUrl(String(url));
+    if (resolved) {
+      return res.json({
+        success: true,
+        data: resolved
+      });
+    }
+    return res.json({
+      success: false,
+      message: 'Could not extract GPS coordinates from provided URL or text'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || 'Error resolving coordinates' });
+  }
+};
+
 // Helper to auto-generate sequential Complaint Number CMP-00125 etc.
 const generateComplaintNumber = (): string => {
   const existingNumbers = (memoryStore.complaints || [])
@@ -340,6 +490,42 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
     const complaintNumber = generateComplaintNumber();
     const now = new Date().toISOString();
 
+    let resolvedLat = latitude !== undefined && latitude !== null && latitude !== '' ? Number(latitude) : null;
+    let resolvedLng = longitude !== undefined && longitude !== null && longitude !== '' ? Number(longitude) : null;
+    let finalLocationUrl = (location_url || '').trim();
+
+    // 1. If coordinates not provided or invalid, extract from location_url
+    if (!isValidLatLng(resolvedLat, resolvedLng) && finalLocationUrl) {
+      const extracted = await resolveCoordinatesFromUrl(finalLocationUrl);
+      if (extracted) {
+        resolvedLat = extracted.lat;
+        resolvedLng = extracted.lng;
+        if (extracted.resolvedUrl && !finalLocationUrl.includes('@') && !finalLocationUrl.includes('?q=')) {
+          finalLocationUrl = extracted.resolvedUrl;
+        }
+      }
+    }
+
+    // 2. If still not valid, try extracting from location_address text
+    if (!isValidLatLng(resolvedLat, resolvedLng) && location_address) {
+      const extractedAddr = extractCoordsFromUrl(location_address);
+      if (extractedAddr) {
+        resolvedLat = extractedAddr.lat;
+        resolvedLng = extractedAddr.lng;
+      }
+    }
+
+    // 3. Fallback to target Hub coordinates only if neither coordinates nor URL were resolved
+    if (!isValidLatLng(resolvedLat, resolvedLng)) {
+      resolvedLat = targetHub.id === 1 ? 30.3256 : 30.3427;
+      resolvedLng = targetHub.id === 1 ? 78.0436 : 78.0645;
+    }
+
+    // 4. Ensure finalLocationUrl is populated with exact destination coordinates if missing
+    if (!finalLocationUrl && isValidLatLng(resolvedLat, resolvedLng)) {
+      finalLocationUrl = `https://maps.google.com/?q=${resolvedLat},${resolvedLng}`;
+    }
+
     const newComplaint: any = {
       id: (memoryStore.complaints?.length || 0) + 1,
       complaint_number: complaintNumber,
@@ -348,9 +534,9 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
       customer_name: customer_name.trim(),
       customer_phone: customer_phone.trim(),
       location_address: location_address.trim(),
-      location_url: location_url || (latitude && longitude ? `https://maps.google.com/?q=${latitude},${longitude}` : ''),
-      latitude: latitude ? Number(latitude) : (targetHub.id === 1 ? 30.3256 : 30.3427),
-      longitude: longitude ? Number(longitude) : (targetHub.id === 1 ? 78.0436 : 78.0645),
+      location_url: finalLocationUrl,
+      latitude: resolvedLat,
+      longitude: resolvedLng,
       issue_category: issue_category || 'Breakdown / Mechanical Issue',
       description: description.trim(),
       priority: priority || 'Normal',

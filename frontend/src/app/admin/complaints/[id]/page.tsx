@@ -7,6 +7,7 @@ import { AdminLayout } from '../../../../components/admin/AdminLayout';
 import { OpenStreetMapTracker } from '../../../../components/admin/OpenStreetMapTracker';
 import { useAuth } from '../../../../context/AuthContext';
 import { adminApi } from '../../../../lib/adminApi';
+import { buildNavigationUrl, getExactLocationUrl, extractCoordsFromUrl, isValidLatLng } from '../../../../lib/locationUtils';
 import {
   ArrowLeft,
   AlertCircle,
@@ -335,12 +336,22 @@ export default function ComplaintOverviewPage() {
   const isWorkDone = complaint.status === 'Work Done';
   const isClosed = complaint.status === 'Closed';
 
-  const techLat = parseFloat(String(complaint.technician_latitude || '')) || 30.2863;
-  const techLng = parseFloat(String(complaint.technician_longitude || '')) || 78.0069;
-  const custLat = parseFloat(String(complaint.latitude || '')) || 30.3256;
-  const custLng = parseFloat(String(complaint.longitude || '')) || 78.0436;
+  let custLat = parseFloat(String(complaint.latitude || ''));
+  let custLng = parseFloat(String(complaint.longitude || ''));
 
-  const mapsDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}&travelmode=driving`;
+  if (!isValidLatLng(custLat, custLng) && complaint.location_url) {
+    const parsed = extractCoordsFromUrl(complaint.location_url);
+    if (parsed) {
+      custLat = parsed.lat;
+      custLng = parsed.lng;
+    }
+  }
+
+  const techLat = parseFloat(String(complaint.technician_latitude || ''));
+  const techLng = parseFloat(String(complaint.technician_longitude || ''));
+
+  const mapsDirectionsUrl = buildNavigationUrl(custLat, custLng, techLat, techLng, complaint.location_url);
+  const exactPinUrl = getExactLocationUrl(complaint.location_url, custLat, custLng);
 
   return (
     <AdminLayout>
@@ -681,20 +692,41 @@ export default function ComplaintOverviewPage() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100">
+              <div className="pt-2 border-t border-slate-100 space-y-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Breakdown Location</span>
-                <p className="text-xs font-semibold text-slate-800 mt-1">{complaint.location_address}</p>
-                {complaint.location_url && (
+                <p className="text-xs font-semibold text-slate-800 leading-tight">{complaint.location_address}</p>
+
+                {/* GPS Coordinates Tag */}
+                {isValidLatLng(custLat, custLng) && (
+                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-500">GPS:</span>
+                    <span className="text-emerald-700 font-bold">{custLat.toFixed(4)}, {custLng.toFixed(4)}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {complaint.location_url && (
+                    <a
+                      href={complaint.location_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold text-center flex items-center justify-center gap-1.5 border border-slate-300 transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Open Customer Pin Link</span>
+                    </a>
+                  )}
+
                   <a
-                    href={complaint.location_url}
+                    href={mapsDirectionsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline mt-1"
+                    className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm transition"
                   >
-                    <span>View Customer Pin on Google Maps</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>Navigate in Google Maps</span>
                   </a>
-                )}
+                </div>
               </div>
             </div>
 
