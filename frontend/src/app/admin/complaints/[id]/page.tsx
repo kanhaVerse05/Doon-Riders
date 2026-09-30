@@ -380,20 +380,20 @@ export default function ComplaintOverviewPage() {
           {/* Main 2-Span Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* 1. Live Tracking & Interactive OpenStreetMap Section */}
-            <div className="bg-[#0A0F1D] text-white p-5 rounded-3xl border border-slate-800 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl bg-[#00D96B]/15 border border-[#00D96B]/30 flex items-center justify-center text-[#00D96B]">
+                  <div className="w-9 h-9 rounded-2xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854]">
                     <Radio className="w-4 h-4 animate-pulse" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase">
+                    <span className="text-[10px] font-extrabold text-[#98A2B3] tracking-widest uppercase">
                       Real-Time Field Dispatch
                     </span>
-                    <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <h2 className="text-base font-black text-[#111827] flex items-center gap-2">
                       Live OpenStreetMap Tracking
                       {isEnRoute && (
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 animate-pulse">
+                        <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 animate-pulse">
                           EN ROUTE
                         </span>
                       )}
@@ -403,13 +403,13 @@ export default function ComplaintOverviewPage() {
 
                 {/* Live Timer Widget */}
                 {(isEnRoute || isWIP || complaint.journey_duration_formatted) && (
-                  <div className="bg-slate-900/90 border border-slate-700/80 px-4 py-2 rounded-2xl flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-[#00D96B]" />
+                  <div className="bg-[#EAFBF2] border border-[#00D96B]/30 px-4 py-2 rounded-2xl flex items-center gap-3 shadow-xs">
+                    <Clock className="w-4 h-4 text-[#00A854]" />
                     <div>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase">
+                      <p className="text-[9px] font-extrabold text-[#00A854] uppercase tracking-wider">
                         {isEnRoute ? 'Journey Time' : isWIP ? 'Work Duration' : 'Total Travel Time'}
                       </p>
-                      <p className="text-base font-black font-mono text-[#00D96B]">
+                      <p className="text-base font-black font-mono text-[#111827]">
                         {isEnRoute || isWIP ? formatTimer(liveSeconds) : complaint.journey_duration_formatted}
                       </p>
                     </div>
@@ -418,24 +418,24 @@ export default function ComplaintOverviewPage() {
               </div>
 
               {/* Status Banner Summary */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#F7F9FA] p-3.5 rounded-2xl border border-[#E5E7EB]">
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Technician</p>
-                  <p className="text-xs font-black text-white mt-0.5 truncate">
+                  <p className="text-[10px] text-[#667085] font-extrabold uppercase">Technician</p>
+                  <p className="text-xs font-black text-[#111827] mt-0.5 truncate">
                     {complaint.technician_name || 'Unassigned'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Current State</p>
-                  <p className="text-xs font-black text-[#00D96B] mt-0.5">{complaint.status}</p>
+                  <p className="text-[10px] text-[#667085] font-extrabold uppercase">Current State</p>
+                  <p className="text-xs font-black text-[#00A854] mt-0.5">{complaint.status}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Breakdown Spot</p>
-                  <p className="text-xs font-semibold text-slate-300 mt-0.5 truncate">{complaint.location_address}</p>
+                  <p className="text-[10px] text-[#667085] font-extrabold uppercase">Breakdown Spot</p>
+                  <p className="text-xs font-semibold text-[#475467] mt-0.5 truncate">{complaint.location_address}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">GPS Sync</p>
-                  <p className="text-xs font-mono text-slate-400 mt-0.5">
+                  <p className="text-[10px] text-[#667085] font-extrabold uppercase">GPS Sync</p>
+                  <p className="text-xs font-mono text-[#667085] mt-0.5">
                     {complaint.technician_location_updated_at ? 'Live Synced' : 'Ready'}
                   </p>
                 </div>
