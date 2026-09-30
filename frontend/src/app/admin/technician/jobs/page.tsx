@@ -325,6 +325,28 @@ export default function TechnicianJobsSummaryPage() {
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  const getTechnicianStatus = (status: string) => {
+    switch (status) {
+      case 'Pending Inspection':
+      case 'Technician Assigned':
+        return { label: 'Assigned (Inspection Pending)', pill: 'bg-amber-50 text-amber-700 border border-amber-200' };
+      case 'Inspection Completed':
+        return { label: 'Inspection Done (Pending Approval)', pill: 'bg-purple-50 text-purple-700 border border-purple-200' };
+      case 'Repair Approved':
+        return { label: 'Repair Approved (Ready to Start)', pill: 'bg-blue-50 text-blue-700 border border-blue-200' };
+      case 'Repairing':
+        return { label: 'Repair in Progress', pill: 'bg-[#EAFBF2] text-[#00A854] border border-[#00D96B]/30' };
+      case 'Repair Completed':
+      case 'Billing Completed':
+      case 'Payment Pending':
+      case 'Payment Received':
+      case 'Closed':
+        return { label: 'Repair Completed', pill: 'bg-gray-100 text-[#475467] border border-gray-200' };
+      default:
+        return { label: status, pill: 'bg-gray-50 text-gray-700 border border-gray-200' };
+    }
+  };
+
   // Field Service Workflow Actions:
   // 1. START JOURNEY
   const handleStartJourney = async (complaintId: number) => {
@@ -501,6 +523,49 @@ export default function TechnicianJobsSummaryPage() {
   const totalAssignedWorkshop = jobs.length;
   const activeFieldComplaints = fieldComplaints.filter(c => c.status !== 'Closed');
   const activeEnRouteCount = fieldComplaints.filter(c => c.status === 'En Route' || c.status === 'Reached' || c.status === 'Work In Progress').length;
+
+  // Filtered Workshop Jobs based on search, filterTab, priority, date
+  const filteredJobs = jobs.filter(job => {
+    // 1. Search Query
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchNumber = job.job_number?.toLowerCase().includes(q);
+      const matchScooter = job.scooter_number?.toLowerCase().includes(q);
+      const matchRider = job.rider_name?.toLowerCase().includes(q);
+      const matchComplaint = job.complaint?.toLowerCase().includes(q);
+      if (!matchNumber && !matchScooter && !matchRider && !matchComplaint) return false;
+    }
+
+    // 2. Filter Tab
+    if (filterTab === 'INSPECTION_PENDING') {
+      if (job.status !== 'Pending Inspection' && job.status !== 'Technician Assigned') return false;
+    } else if (filterTab === 'WORK_PENDING') {
+      if (job.status !== 'Inspection Completed' && job.status !== 'Repair Approved') return false;
+    } else if (filterTab === 'WORK_IN_PROGRESS') {
+      if (job.status !== 'Repairing') return false;
+    } else if (filterTab === 'COMPLETED_TODAY') {
+      const completedStatuses = ['Repair Completed', 'Billing Completed', 'Payment Pending', 'Payment Received', 'Closed'];
+      if (!completedStatuses.includes(job.status)) return false;
+    }
+
+    // 3. Priority Filter
+    if (priorityFilter !== 'all' && job.priority !== priorityFilter) {
+      return false;
+    }
+
+    // 4. Date Filter
+    if (dateFilter === 'today') {
+      const jobDate = new Date(job.created_at).toDateString();
+      const today = new Date().toDateString();
+      if (jobDate !== today) return false;
+    } else if (dateFilter === 'week') {
+      const jobTime = new Date(job.created_at).getTime();
+      const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (jobTime < oneWeekAgo) return false;
+    }
+
+    return true;
+  });
 
   return (
     <AdminLayout>
@@ -889,21 +954,25 @@ export default function TechnicianJobsSummaryPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div
                 onClick={() => setFilterTab('ALL')}
-                className={`p-3 rounded-2xl border transition cursor-pointer ${
-                  filterTab === 'ALL' ? 'bg-white border-emerald-500 shadow-sm' : 'bg-white border-slate-200'
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  filterTab === 'ALL'
+                    ? 'bg-white border-[#00D96B] shadow-sm ring-2 ring-[#00D96B]/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Assigned</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">All Assigned</span>
                 <p className="text-xl font-black text-slate-900 mt-1">{jobs.length}</p>
               </div>
 
               <div
                 onClick={() => setFilterTab('INSPECTION_PENDING')}
-                className={`p-3 rounded-2xl border transition cursor-pointer ${
-                  filterTab === 'INSPECTION_PENDING' ? 'bg-amber-50 border-amber-400 shadow-sm' : 'bg-white border-slate-200'
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  filterTab === 'INSPECTION_PENDING'
+                    ? 'bg-amber-50 border-amber-400 shadow-sm ring-2 ring-amber-400/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <span className="text-[10px] font-bold text-amber-700 uppercase">Inspect Pending</span>
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Inspect Pending</span>
                 <p className="text-xl font-black text-amber-900 mt-1">
                   {jobs.filter(j => j.status === 'Pending Inspection' || j.status === 'Technician Assigned').length}
                 </p>
@@ -911,11 +980,13 @@ export default function TechnicianJobsSummaryPage() {
 
               <div
                 onClick={() => setFilterTab('WORK_PENDING')}
-                className={`p-3 rounded-2xl border transition cursor-pointer ${
-                  filterTab === 'WORK_PENDING' ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-slate-200'
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  filterTab === 'WORK_PENDING'
+                    ? 'bg-blue-50 border-blue-400 shadow-sm ring-2 ring-blue-400/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <span className="text-[10px] font-bold text-blue-700 uppercase">Work Pending</span>
+                <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Work Pending</span>
                 <p className="text-xl font-black text-blue-900 mt-1">
                   {jobs.filter(j => j.status === 'Inspection Completed' || j.status === 'Repair Approved').length}
                 </p>
@@ -923,65 +994,227 @@ export default function TechnicianJobsSummaryPage() {
 
               <div
                 onClick={() => setFilterTab('WORK_IN_PROGRESS')}
-                className={`p-3 rounded-2xl border transition cursor-pointer ${
-                  filterTab === 'WORK_IN_PROGRESS' ? 'bg-emerald-50 border-emerald-400 shadow-sm' : 'bg-white border-slate-200'
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  filterTab === 'WORK_IN_PROGRESS'
+                    ? 'bg-emerald-50 border-[#00D96B] shadow-sm ring-2 ring-[#00D96B]/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <span className="text-[10px] font-bold text-emerald-700 uppercase">Repairing</span>
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Repairing</span>
                 <p className="text-xl font-black text-emerald-900 mt-1">
                   {jobs.filter(j => j.status === 'Repairing').length}
                 </p>
               </div>
             </div>
 
+            {/* Search and Secondary Filter Bar */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#98A2B3]" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by Job #, Scooty #, Rider or Complaint..."
+                  className="w-full pl-9 pr-8 py-2.5 bg-white border border-[#E5E7EB] rounded-2xl text-xs font-semibold text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] transition shadow-xs"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#98A2B3] hover:text-[#111827]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={priorityFilter}
+                  onChange={(e: any) => setPriorityFilter(e.target.value)}
+                  className="text-xs font-bold bg-white border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-[#111827] focus:outline-none shadow-xs"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Urgent">Urgent</option>
+                </select>
+
+                <select
+                  value={dateFilter}
+                  onChange={(e: any) => setDateFilter(e.target.value)}
+                  className="text-xs font-bold bg-white border border-[#E5E7EB] rounded-2xl px-3 py-2.5 text-[#111827] focus:outline-none shadow-xs"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="today">Today</option>
+                  <option value="week">Past 7 Days</option>
+                </select>
+              </div>
+            </div>
+
             {/* Workshop Jobs List */}
-            {jobs.length === 0 ? (
+            {filteredJobs.length === 0 ? (
               <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
                 <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                 </div>
-                <h3 className="text-sm font-black text-slate-900">No Workshop Jobs Assigned</h3>
+                <h3 className="text-sm font-black text-slate-900">No Workshop Jobs Found</h3>
                 <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  No workshop in-house repair tasks currently assigned.
+                  {search || filterTab !== 'ALL' || priorityFilter !== 'all' || dateFilter !== 'all'
+                    ? 'No repair jobs match the selected filter or search query.'
+                    : 'No workshop in-house repair tasks currently assigned.'}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {jobs.map(job => (
-                  <Link
-                    key={job.id}
-                    href={`/admin/technician/jobs/${job.id}`}
-                    className="block bg-white p-4 rounded-3xl border border-slate-200 hover:border-slate-300 transition shadow-sm space-y-2 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">
-                          {job.job_number}
-                        </span>
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
-                          job.priority === 'Urgent' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {job.priority}
+                {filteredJobs.map(job => {
+                  const techStatus = getTechnicianStatus(job.status);
+                  const isRepairing = job.status === 'Repairing';
+                  const isUrgent = job.priority === 'Urgent';
+
+                  return (
+                    <div
+                      key={job.id}
+                      className="bg-white rounded-3xl border border-[#E5E7EB] p-4 sm:p-5 space-y-3 shadow-xs hover:shadow-md transition-all"
+                    >
+                      {/* Top Job Header: Job Number, Priority & Status Pill */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-base text-[#111827] tracking-tight">
+                            {job.job_number}
+                          </span>
+                          {isUrgent ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-600 border border-red-200 flex items-center gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5 text-red-500" />
+                              <span>URGENT</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-[#475467] border border-gray-200">
+                              NORMAL
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Status Badge Pill */}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${techStatus.pill}`}
+                        >
+                          {isRepairing && (
+                            <span className="w-2 h-2 rounded-full bg-[#00A854] animate-ping" />
+                          )}
+                          {techStatus.label}
                         </span>
                       </div>
-                      <span className="text-xs font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
-                        {job.status}
-                      </span>
-                    </div>
 
-                    <div className="text-xs">
-                      <p className="font-bold text-slate-900">{job.scooter_number} - {job.rider_name}</p>
-                      <p className="text-slate-600 line-clamp-1 mt-0.5">{job.complaint}</p>
-                    </div>
+                      {/* Main Information: Scooter & Rider Info */}
+                      <div className="space-y-3 pt-0.5">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                          {/* Scooter */}
+                          <div className="flex items-start gap-2.5">
+                            <Bike className="w-4 h-4 text-[#667085] mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-bold text-xs sm:text-sm text-[#111827] font-mono leading-tight">
+                                {job.scooter_number}
+                              </p>
+                              <span className="text-[11px] text-[#98A2B3] font-medium block mt-0.5">
+                                Scooter
+                              </span>
+                            </div>
+                          </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
-                      <span>{job.hub_name}</span>
-                      <span className="text-[#00A854] font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                        Open Job Card &rarr;
-                      </span>
+                          {/* Rider */}
+                          <div className="flex items-start gap-2.5">
+                            <User className="w-4 h-4 text-[#667085] mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-bold text-xs sm:text-sm text-[#111827] leading-tight truncate">
+                                {job.rider_name}
+                              </p>
+                              <span className="text-[11px] text-[#98A2B3] font-medium block mt-0.5">
+                                Rider
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Complaint / Issue Description */}
+                        <div className="bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl p-2.5 sm:p-3 space-y-1">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#475467] uppercase tracking-wider">
+                            <FileText className="w-3.5 h-3.5 text-[#00A854]" />
+                            <span>Complaint / Issue Description</span>
+                          </div>
+                          <p className="text-xs text-[#111827] font-medium leading-relaxed">
+                            {job.complaint ? job.complaint : 'General vehicle diagnostic inspection & service check requested.'}
+                          </p>
+                        </div>
+
+                        {/* Bottom Row: Assigned Time & Primary Action Button */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          {/* Assigned Time & Live Timer */}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Clock className="w-3.5 h-3.5 text-[#98A2B3] flex-shrink-0" />
+                            <span className="text-xs text-[#667085] font-medium truncate">
+                              {new Date(job.created_at).toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                            {isRepairing && (
+                              <span className="font-mono text-[10px] font-bold bg-[#EAFBF2] text-[#00A854] px-1.5 py-0.5 rounded border border-[#00D96B]/30 ml-1">
+                                {getTimerString(job.repair_started_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Action Button */}
+                          <div>
+                            {job.status === 'Pending Inspection' || job.status === 'Technician Assigned' ? (
+                              <Link
+                                href={`/admin/technician/jobs/${job.id}?action=inspect`}
+                                className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
+                              >
+                                <span>Inspect</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            ) : job.status === 'Inspection Completed' ? (
+                              <Link
+                                href={`/admin/technician/jobs/${job.id}`}
+                                className="inline-flex items-center justify-center gap-1 px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 font-bold text-xs rounded-xl transition whitespace-nowrap cursor-pointer hover:bg-purple-100"
+                              >
+                                <span>Awaiting Approval</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            ) : job.status === 'Repair Approved' ? (
+                              <Link
+                                href={`/admin/technician/jobs/${job.id}?action=start`}
+                                className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#0066FF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
+                              >
+                                <span>Start Work</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            ) : job.status === 'Repairing' ? (
+                              <Link
+                                href={`/admin/technician/jobs/${job.id}?action=complete`}
+                                className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#00A854] hover:bg-[#008744] text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
+                              >
+                                <span>Continue Work</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            ) : (
+                              <Link
+                                href={`/admin/technician/jobs/${job.id}`}
+                                className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#EAFBF2] hover:bg-emerald-100 text-[#00A854] border border-[#00D96B]/30 font-bold text-xs rounded-xl transition whitespace-nowrap cursor-pointer"
+                              >
+                                <span>View Work</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

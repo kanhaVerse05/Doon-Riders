@@ -36,7 +36,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
   const norm = (roleName || '').toUpperCase();
 
-  if (norm === 'SUPER_ADMIN') {
+  if (norm === 'SUPER_ADMIN' || norm.includes('SUPER')) {
     return [
       { code: 'dashboard.view', scope: 'ALL' },
       { code: 'dashboard.view_all', scope: 'ALL' },
@@ -53,6 +53,10 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'repairs.view', scope: 'ALL' },
       { code: 'repairs.create', scope: 'ALL' },
       { code: 'repairs.update', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'inventory.manage', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
@@ -64,7 +68,7 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     ];
   }
 
-  if (norm === 'ADMIN') {
+  if (norm === 'ADMIN' || norm.includes('ADMIN')) {
     return [
       { code: 'dashboard.view', scope: 'ALL' },
       { code: 'dashboard.view_all', scope: 'ALL' },
@@ -78,6 +82,10 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'repairs.view', scope: 'ALL' },
       { code: 'repairs.create', scope: 'ALL' },
       { code: 'repairs.update', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' },
@@ -97,6 +105,10 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'repairs.view', scope: 'ALL' },
       { code: 'repairs.create', scope: 'ALL' },
       { code: 'repairs.update', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'complaints.assign', scope: 'ALL' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' }
@@ -107,6 +119,8 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     return [
       { code: 'repairs.view', scope: 'ASSIGNED' },
       { code: 'repairs.update', scope: 'ASSIGNED' },
+      { code: 'complaints.view', scope: 'ASSIGNED' },
+      { code: 'complaints.update', scope: 'ASSIGNED' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'fleet.view', scope: 'ASSIGNED' }
     ];
@@ -117,9 +131,24 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'repairs.view', scope: 'TEAM' },
       { code: 'repairs.create', scope: 'TEAM' },
       { code: 'repairs.update', scope: 'TEAM' },
+      { code: 'complaints.view', scope: 'TEAM' },
+      { code: 'complaints.create', scope: 'TEAM' },
+      { code: 'complaints.update', scope: 'TEAM' },
+      { code: 'complaints.assign', scope: 'TEAM' },
       { code: 'inventory.view', scope: 'TEAM' },
       { code: 'fleet.view', scope: 'TEAM' },
       { code: 'pre_bookings.view', scope: 'TEAM' }
+    ];
+  }
+
+  if (norm === 'CUSTOMER_SUPPORT' || norm.includes('SUPPORT') || norm.includes('CARE')) {
+    return [
+      { code: 'dashboard.view', scope: 'ALL' },
+      { code: 'customers.view', scope: 'ALL' },
+      { code: 'complaints.view', scope: 'ALL' },
+      { code: 'complaints.create', scope: 'ALL' },
+      { code: 'complaints.update', scope: 'ALL' },
+      { code: 'leads.view', scope: 'ALL' }
     ];
   }
 
@@ -132,6 +161,8 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     { code: 'leads.create', scope: 'OWN' },
     { code: 'leads.edit', scope: 'ASSIGNED' },
     { code: 'customers.view', scope: 'ASSIGNED' },
+    { code: 'complaints.view', scope: 'ASSIGNED' },
+    { code: 'complaints.create', scope: 'ASSIGNED' },
     { code: 'pre_bookings.view', scope: 'OWN' },
     { code: 'fleet.view', scope: 'ALL' }
   ];
@@ -295,27 +326,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = (permissionCode: string, requiredScope?: string): boolean => {
     if (!user) return false;
-    if (user.roleName === 'SUPER_ADMIN') return true;
-
-    if (!user.permissions || !Array.isArray(user.permissions)) {
-      return false;
+    const normRole = (user.roleName || '').toUpperCase();
+    if (normRole === 'SUPER_ADMIN' || normRole === 'ADMIN' || normRole.includes('SUPER') || normRole.includes('ADMIN')) {
+      return true;
     }
 
-    const perm = user.permissions.find(p => p.code === permissionCode);
-    if (!perm) return false;
-
-    if (requiredScope && perm.scope !== requiredScope && perm.scope !== 'ALL') {
-      return false;
+    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+      const perm = user.permissions.find(p => p.code === permissionCode);
+      if (perm) {
+        if (requiredScope && perm.scope !== requiredScope && perm.scope !== 'ALL') {
+          return false;
+        }
+        return true;
+      }
     }
 
-    return true;
+    const defaults = getDefaultRolePermissions(user.roleName);
+    const defPerm = defaults.find(p => p.code === permissionCode);
+    if (defPerm) {
+      if (requiredScope && defPerm.scope !== requiredScope && defPerm.scope !== 'ALL') {
+        return false;
+      }
+      return true;
+    }
+
+    return false;
   };
 
   const canAccess = (module: string): boolean => {
     if (!user) return false;
-    if (user.roleName === 'SUPER_ADMIN') return true;
-    if (!user.permissions || !Array.isArray(user.permissions)) return false;
-    return user.permissions.some(p => p.code.startsWith(`${module.toLowerCase()}.`));
+    const normRole = (user.roleName || '').toUpperCase();
+    if (normRole === 'SUPER_ADMIN' || normRole === 'ADMIN' || normRole.includes('SUPER') || normRole.includes('ADMIN')) {
+      return true;
+    }
+
+    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+      const has = user.permissions.some(p => p.code.startsWith(`${module.toLowerCase()}.`));
+      if (has) return true;
+    }
+
+    const defaults = getDefaultRolePermissions(user.roleName);
+    return defaults.some(p => p.code.startsWith(`${module.toLowerCase()}.`));
   };
 
   return (
