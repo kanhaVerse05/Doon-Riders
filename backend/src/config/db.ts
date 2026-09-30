@@ -134,23 +134,7 @@ export const memoryStore = {
       status: 'Available'
     }
   ],
-  leads: [
-    {
-      id: 1,
-      lead_code: 'LD-1042',
-      name: 'Rohan Mehra',
-      phone: '+91 98111 22334',
-      email: 'rohan.mehra@gmail.com',
-      location: 'Dehradun (Rajpur Road)',
-      vehicle_interested_in: 'DOON Electro Pro',
-      rental_duration_days: 7,
-      rental_plan: 'Weekly',
-      lead_source: 'Meta Ads',
-      status: 'Interested',
-      assigned_to: 4,
-      notes: 'Customer wants electric scooty for daily office commute.'
-    }
-  ],
+  leads: [] as any[],
   vehicles: [
     {
       id: 1,
@@ -366,40 +350,7 @@ export const memoryStore = {
       display_order: 1
     }
   ],
-  preBookings: [
-    {
-      id: 1,
-      booking_code: 'DR-PB-1001',
-      customer_name: 'Aarav Sharma',
-      mobile_number: '+91 98970 12345',
-      booking_date: '2026-09-27',
-      unit_price: 499.00,
-      quantity: 1,
-      total_amount: 499.00,
-      payment_mode: 'UPI',
-      payment_status: 'PAID',
-      notes: 'Customer pre-booked for Rajpur Road hub pickup',
-      created_by_id: 1,
-      created_by_name: 'Ankit Kumar (Super Admin)',
-      created_at: '2026-09-27T10:30:00.000Z'
-    },
-    {
-      id: 2,
-      booking_code: 'DR-PB-1002',
-      customer_name: 'Sneha Rawat',
-      mobile_number: '+91 98123 45678',
-      booking_date: '2026-09-27',
-      unit_price: 499.00,
-      quantity: 2,
-      total_amount: 998.00,
-      payment_mode: 'Cash',
-      payment_status: 'PAID',
-      notes: '2 EV Scooty units booked for college commute',
-      created_by_id: 4,
-      created_by_name: 'Rahul Verma',
-      created_at: '2026-09-27T11:45:00.000Z'
-    }
-  ],
+  preBookings: [] as any[],
   inventory: [
     {
       id: 1,
@@ -992,51 +943,12 @@ export const checkDbConnection = async (): Promise<boolean> => {
       }
     }
 
-    // 7. Seed Repair Jobs if empty
-    const jobCount = await pgPool.query('SELECT COUNT(*) FROM repair_jobs');
-    if (parseInt(jobCount.rows[0].count, 10) === 0) {
-      for (const j of memoryStore.repairJobs) {
-        await pgPool.query(`
-          INSERT INTO repair_jobs (id, job_number, scooter_id, scooter_number, rider_name, rider_contact, hub_id, hub_name, technician_id, technician_name, complaint, priority, status, created_by_id, created_by_name)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-          ON CONFLICT (job_number) DO NOTHING
-        `, [j.id, j.job_number, j.scooter_id, j.scooter_number, j.rider_name, j.rider_contact, j.hub_id, j.hub_name, j.technician_id, j.technician_name, j.complaint, j.priority, j.status, j.created_by_id, j.created_by_name]);
-      }
-    }
-
-    // 8. Seed Complaints if empty
-    const complaintCount = await pgPool.query('SELECT COUNT(*) FROM complaints');
-    if (parseInt(complaintCount.rows[0].count, 10) === 0) {
-      for (const c of memoryStore.complaints) {
-        await pgPool.query(`
-          INSERT INTO complaints (
-            id, complaint_number, scooter_id, scooter_number, customer_name, customer_phone, location_address,
-            location_url, latitude, longitude, issue_category, description, priority, hub_id, hub_name,
-            hub_incharge_id, hub_incharge_name, technician_id, technician_name, technician_phone, technician_code,
-            technician_latitude, technician_longitude, status, journey_started_at, reached_at,
-            journey_duration_seconds, journey_duration_formatted, work_started_at, work_completed_at,
-            work_duration_seconds, work_duration_formatted, work_performed, parts_used, technician_remarks,
-            proof_photos, completion_notes, created_by_id, created_by_name, created_by_role, created_at, updated_at, closed_at
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7,
-            $8, $9, $10, $11, $12, $13, $14, $15,
-            $16, $17, $18, $19, $20, $21,
-            $22, $23, $24, $25, $26,
-            $27, $28, $29, $30,
-            $31, $32, $33, $34, $35,
-            $36, $37, $38, $39, $40, $41, $42, $43
-          ) ON CONFLICT (complaint_number) DO NOTHING
-        `, [
-          c.id, c.complaint_number, c.scooter_id, c.scooter_number, c.customer_name, c.customer_phone, c.location_address,
-          c.location_url, c.latitude, c.longitude, c.issue_category, c.description, c.priority, c.hub_id, c.hub_name,
-          c.hub_incharge_id, c.hub_incharge_name, c.technician_id, c.technician_name, c.technician_phone, c.technician_code,
-          c.technician_latitude, c.technician_longitude, c.status, c.journey_started_at, c.reached_at,
-          c.journey_duration_seconds, c.journey_duration_formatted, c.work_started_at, c.work_completed_at,
-          c.work_duration_seconds, c.work_duration_formatted, c.work_performed, JSON.stringify(c.parts_used || []), c.technician_remarks,
-          JSON.stringify(c.proof_photos || []), c.completion_notes, c.created_by_id, c.created_by_name, c.created_by_role, c.created_at, c.updated_at, c.closed_at
-        ]);
-      }
-    }
+    // 7. Wipe out all transactional demo data from PostgreSQL so database starts 100% fresh
+    await pgPool.query(`
+      TRUNCATE TABLE complaints, complaint_events, repair_jobs, repair_inspections, repair_parts, repair_timing, repair_audit_logs, leads, pre_bookings RESTART IDENTITY CASCADE;
+    `).catch(err => {
+      console.log('DB Clean wipe notice:', err.message);
+    });
 
     return true;
   } catch (err: any) {
