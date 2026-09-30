@@ -6,6 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'public',
   server: {
     url: 'https://doon-riders.vercel.app/technician/login',
+    errorPath: 'offline.html',
     cleartext: true,
     androidScheme: 'https'
   },

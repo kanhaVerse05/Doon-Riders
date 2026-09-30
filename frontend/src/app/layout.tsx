@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Play, Manrope, Inter, Kalam } from "next/font/google";
 import "./globals.css";
+import GlobalOfflineBanner from "@/components/GlobalOfflineBanner";
 
 const play = Play({
   weight: ["400", "700"],
@@ -52,6 +53,7 @@ export default function RootLayout({
       className={`${play.variable} ${manrope.variable} ${inter.variable} ${kalam.variable} overflow-x-hidden`}
     >
       <body className="bg-white text-[#101828] font-sans antialiased selection:bg-[#00D96B] selection:text-white overflow-x-hidden min-w-[320px]">
+        <GlobalOfflineBanner />
         {children}
       </body>
     </html>
