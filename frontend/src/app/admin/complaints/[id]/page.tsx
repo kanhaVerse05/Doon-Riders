@@ -656,7 +656,7 @@ export default function ComplaintOverviewPage() {
                 {isValidLatLng(custLat, custLng) && (
                   <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-[11px] font-mono">
                     <span className="text-slate-500">GPS:</span>
-                    <span className="text-emerald-700 font-bold">{custLat.toFixed(4)}, {custLng.toFixed(4)}</span>
+                    <span className="text-emerald-700 font-bold">{Number(custLat).toFixed(4)}, {Number(custLng).toFixed(4)}</span>
                   </div>
                 )}
 

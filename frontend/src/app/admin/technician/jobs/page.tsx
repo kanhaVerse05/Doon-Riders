@@ -898,7 +898,7 @@ export default function TechnicianJobsSummaryPage() {
                             <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200/80">
                               <span className="flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                <span>Target GPS: {custLat.toFixed(4)}, {custLng.toFixed(4)}</span>
+                                <span>Target GPS: {Number(custLat).toFixed(4)}, {Number(custLng).toFixed(4)}</span>
                               </span>
                               <span className="text-emerald-700 font-bold font-sans">Exact Spot</span>
                             </div>
@@ -934,7 +934,9 @@ export default function TechnicianJobsSummaryPage() {
                           <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[11px] font-mono">
                             <span className="text-slate-400">GPS Stream:</span>
                             <span className="text-[#00D96B] font-bold">
-                              {complaint.technician_latitude ? `${complaint.technician_latitude.toFixed(4)}, ${complaint.technician_longitude?.toFixed(4)}` : 'Broadcasting Live'}
+                              {isValidLatLng(complaint.technician_latitude, complaint.technician_longitude)
+                                ? `${Number(complaint.technician_latitude).toFixed(4)}, ${Number(complaint.technician_longitude).toFixed(4)}`
+                                : 'Broadcasting Live'}
                             </span>
                           </div>
 

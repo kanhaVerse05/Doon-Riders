@@ -203,7 +203,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
           <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
             <strong style="color: #00A854;">🏍️ Technician: ${technicianName}</strong><br/>
             <span>Status: <b>${status}</b></span><br/>
-            <span style="font-size: 10px; color: #64748B;">GPS: ${validTechLat.toFixed(5)}, ${validTechLng.toFixed(5)}</span>
+            <span style="font-size: 10px; color: #64748B;">GPS: ${Number(validTechLat).toFixed(4)}, ${Number(validTechLng).toFixed(4)}</span>
           </div>
         `);
       techMarkerRef.current = techMarker;
@@ -216,7 +216,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
             <strong style="color: #DC2626;">📍 Breakdown Spot: ${scooterNumber}</strong><br/>
             <span>Customer: <b>${customerName}</b></span><br/>
             <span style="font-size: 11px; color: #475569;">${customerAddress}</span><br/>
-            <span style="font-size: 10px; color: #64748B;">GPS: ${validCustLat.toFixed(5)}, ${validCustLng.toFixed(5)}</span>
+            <span style="font-size: 10px; color: #64748B;">GPS: ${Number(validCustLat).toFixed(4)}, ${Number(validCustLng).toFixed(4)}</span>
           </div>
         `);
       custMarkerRef.current = custMarker;
@@ -276,7 +276,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
         <strong style="color: #00A854;">🏍️ Technician: ${technicianName}</strong><br/>
         <span>Status: <b>${status}</b></span><br/>
-        <span style="font-size: 10px; color: #00A854; font-weight: 700;">GPS: ${validTechLat.toFixed(5)}, ${validTechLng.toFixed(5)}</span><br/>
+        <span style="font-size: 10px; color: #00A854; font-weight: 700;">GPS: ${Number(validTechLat).toFixed(4)}, ${Number(validTechLng).toFixed(4)}</span><br/>
         ${lastUpdated ? `<span style="font-size: 9px; color: #64748B;">Synced: ${new Date(lastUpdated).toLocaleTimeString('en-IN')}</span>` : ''}
       </div>
     `);
@@ -342,7 +342,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
               )}
             </div>
             <span className="font-black text-[#00D96B] text-[11px]">
-              {validTechLat.toFixed(4)}° N, {validTechLng.toFixed(4)}° E
+              {Number(validTechLat).toFixed(4)}° N, {Number(validTechLng).toFixed(4)}° E
             </span>
           </div>
         </div>
