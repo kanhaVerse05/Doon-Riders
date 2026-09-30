@@ -1431,3 +1431,128 @@ export const clearAllRepairJobs = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// 15. GET JOB REVIEW INFO (PUBLIC & ADMIN)
+export const getJobReviewInfo = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const jobId = Number(id);
+
+    let job = isNaN(jobId)
+      ? memoryStore.repairJobs.find(j => j.job_number.toLowerCase() === id.toLowerCase())
+      : memoryStore.repairJobs.find(j => j.id === jobId);
+
+    if (!job && getDbStatus()) {
+      const q = isNaN(jobId)
+        ? await pool.query('SELECT * FROM repair_jobs WHERE LOWER(job_number) = LOWER($1)', [id])
+        : await pool.query('SELECT * FROM repair_jobs WHERE id = $1', [jobId]);
+      if (q.rows.length > 0) {
+        job = q.rows[0];
+      }
+    }
+
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Repair Job not found.' });
+    }
+
+    const tech = memoryStore.technicians.find(t => t.id === job.technician_id) || null;
+
+    return res.json({
+      success: true,
+      data: {
+        id: job.id,
+        job_number: job.job_number,
+        scooter_number: job.scooter_number,
+        rider_name: job.rider_name,
+        rider_contact: job.rider_contact,
+        hub_name: job.hub_name,
+        technician_id: job.technician_id,
+        technician_name: job.technician_name || tech?.name || 'Assigned Technician',
+        technician_code: tech?.technician_code || 'TECH',
+        technician_specialization: tech?.specialization || 'EV Diagnostics & Repair',
+        status: job.status,
+        customer_rating: (job as any).customer_rating || null,
+        customer_review: (job as any).customer_review || null,
+        customer_tags: (job as any).customer_tags || [],
+        reviewed_at: (job as any).reviewed_at || null
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// 16. SUBMIT CUSTOMER REVIEW & RATING
+export const submitJobReview = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { rating, tags, comment, reviewer_name } = req.body;
+    const jobId = Number(id);
+
+    let job = isNaN(jobId)
+      ? memoryStore.repairJobs.find(j => j.job_number.toLowerCase() === id.toLowerCase())
+      : memoryStore.repairJobs.find(j => j.id === jobId);
+
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Repair Job not found.' });
+    }
+
+    const numRating = Number(rating);
+    if (!numRating || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5 stars.' });
+    }
+
+    const tagsList = Array.isArray(tags) ? tags : [];
+    const reviewComment = (comment || '').trim();
+    const nowIso = new Date().toISOString();
+
+    (job as any).customer_rating = numRating;
+    (job as any).customer_review = reviewComment;
+    (job as any).customer_tags = tagsList;
+    (job as any).reviewed_at = nowIso;
+    job.updated_at = nowIso;
+
+    // Update Technician Rating
+    if (job.technician_id) {
+      const tech = memoryStore.technicians.find(t => t.id === job.technician_id);
+      if (tech) {
+        const ratedJobs = memoryStore.repairJobs.filter(
+          j => j.technician_id === tech.id && (j as any).customer_rating
+        );
+        if (ratedJobs.length > 0) {
+          const sum = ratedJobs.reduce((acc, curr: any) => acc + Number(curr.customer_rating), 0);
+          tech.rating = Number((sum / ratedJobs.length).toFixed(1));
+        }
+      }
+    }
+
+    // Add Timeline Audit Event
+    memoryStore.repairEvents.push({
+      id: memoryStore.repairEvents.length + 1,
+      job_id: job.id,
+      event_type: 'CUSTOMER_RATING_SUBMITTED',
+      title: 'Customer Rating & Review Received',
+      description: `Customer ${reviewer_name || job.rider_name} submitted ${numRating} ⭐ rating: "${reviewComment || 'Great service'}" (Tags: ${tagsList.join(', ') || 'None'})`,
+      performed_by_id: 0,
+      performed_by_name: reviewer_name || job.rider_name || 'Customer',
+      performed_by_role: 'Customer',
+      metadata: { rating: numRating, tags: tagsList, comment: reviewComment },
+      created_at: nowIso
+    });
+
+    return res.json({
+      success: true,
+      message: 'Thank you! Your review and rating have been recorded successfully.',
+      data: {
+        job_number: job.job_number,
+        rating: numRating,
+        tags: tagsList,
+        comment: reviewComment,
+        reviewed_at: nowIso
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+

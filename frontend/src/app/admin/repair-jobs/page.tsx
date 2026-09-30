@@ -44,7 +44,9 @@ import {
   Square,
   ArrowRight,
   Package,
-  ChevronDown
+  ChevronDown,
+  Star,
+  MessageCircle
 } from 'lucide-react';
 
 interface RepairJob {
@@ -89,6 +91,10 @@ interface RepairJob {
   payment_status?: 'Paid' | 'Pending' | 'Failed' | null;
   payment_amount?: number | null;
   payment_paid_at?: string | null;
+  customer_rating?: number | null;
+  customer_review?: string | null;
+  customer_tags?: string[] | null;
+  reviewed_at?: string | null;
 }
 
 interface Hub {
@@ -363,7 +369,7 @@ export default function RepairJobsPage() {
         technician_id: Number(assignTechId)
       });
       if (res && res.success) {
-        showToast(res.message || 'Technician assigned!');
+        showToast(res.message || 'Technician assigned successfully!');
         setShowAssignModal(false);
         fetchJobs();
       } else {
@@ -372,6 +378,26 @@ export default function RepairJobsPage() {
     } catch (err: any) {
       showToast(err.message);
     }
+  };
+
+  const shareReviewOnWhatsApp = (job: RepairJob) => {
+    const cleanPhone = (job.rider_contact || '').replace(/\D/g, '');
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://doon-riders.vercel.app';
+    const reviewUrl = `${origin}/review/${job.job_number || job.id}`;
+    
+    const text = `Namaste ${job.rider_name || 'Rider'}, 
+Your DOON Riders EV service for Scooter *${job.scooter_number}* (Job #${job.job_number}) has been completed by Technician *${job.technician_name || 'our service team'}*. 🛵⚡
+
+Please share your valuable feedback and rating for our technician here:
+👉 ${reviewUrl}
+
+Thank you for choosing DOON Riders! 🌿✨`;
+
+    const waUrl = cleanPhone 
+      ? `https://wa.me/91${cleanPhone.length === 10 ? cleanPhone : cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    
+    window.open(waUrl, '_blank');
   };
 
   // 3. Open Inspection Modal
@@ -1189,12 +1215,24 @@ export default function RepairJobsPage() {
                             <Building className="w-3.5 h-3.5 text-[#667085] flex-shrink-0" />
                             <span>{job.hub_name}</span>
                           </div>
-                          <div className="mt-1">
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                             {job.technician_name ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#344054] bg-[#F2F4F7] px-2 py-0.5 rounded-md whitespace-nowrap">
-                                <UserCheck className="w-3 h-3 text-[#00A854] flex-shrink-0" />
-                                <span>{job.technician_name}</span>
-                              </span>
+                              <>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#344054] bg-[#F2F4F7] px-2 py-0.5 rounded-md whitespace-nowrap">
+                                  <UserCheck className="w-3 h-3 text-[#00A854] flex-shrink-0" />
+                                  <span>{job.technician_name}</span>
+                                </span>
+                                {job.status !== 'Closed' && job.status !== 'Cancelled' && (
+                                  <button
+                                    onClick={() => openAssignModal(job)}
+                                    title="Change / Reassign Technician"
+                                    className="p-1 rounded text-[#0066FF] hover:bg-blue-50 text-[10px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                  >
+                                    <RefreshCw className="w-2.5 h-2.5" />
+                                    <span>Change</span>
+                                  </button>
+                                )}
+                              </>
                             ) : (
                               <button
                                 onClick={() => openAssignModal(job)}
@@ -1229,7 +1267,15 @@ export default function RepairJobsPage() {
 
                         {/* Current Status */}
                         <td className="py-3 px-3.5 whitespace-nowrap">
-                          {renderStatusBadge(job.status, job)}
+                          <div className="space-y-1">
+                            {renderStatusBadge(job.status, job)}
+                            {job.customer_rating && (
+                              <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-amber-800 text-[10px] font-bold w-fit">
+                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                                <span>{job.customer_rating} ⭐ Rating</span>
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         {/* Duration */}
@@ -1329,6 +1375,22 @@ export default function RepairJobsPage() {
                               >
                                 <DollarSign className="w-3.5 h-3.5 text-[#00D96B] flex-shrink-0" />
                                 <span>Generate Bill</span>
+                              </button>
+                            )}
+
+                            {/* WhatsApp Review Share for Completed Repairs */}
+                            {(job.status === 'Repair Completed' ||
+                              job.status === 'Billing Completed' ||
+                              job.status === 'Payment Pending' ||
+                              job.status === 'Payment Received' ||
+                              job.status === 'Closed') && (
+                              <button
+                                onClick={() => shareReviewOnWhatsApp(job)}
+                                className="px-2.5 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold shadow-xs transition inline-flex items-center gap-1 cursor-pointer whitespace-nowrap flex-shrink-0"
+                                title="Share Review & Rating Link on WhatsApp"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 fill-white flex-shrink-0" />
+                                <span>WhatsApp Rating</span>
                               </button>
                             )}
 
@@ -1529,7 +1591,9 @@ export default function RepairJobsPage() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E5E7EB] space-y-4 animate-scaleUp">
             <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
               <div>
-                <h3 className="font-heading font-black text-base text-[#111827]">Assign Technician</h3>
+                <h3 className="font-heading font-black text-base text-[#111827]">
+                  {selectedJob.technician_id ? 'Change / Reassign Technician' : 'Assign Technician'}
+                </h3>
                 <p className="text-xs text-[#00A854] font-bold">{selectedJob.job_number} ({selectedJob.scooter_number})</p>
               </div>
               <button onClick={() => setShowAssignModal(false)} className="p-1.5 text-[#98A2B3]">
@@ -1586,7 +1650,7 @@ export default function RepairJobsPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-[#00D96B] hover:bg-[#00A854] text-white text-xs font-bold"
                 >
-                  Confirm Assignment
+                  {selectedJob.technician_id ? 'Confirm Reassignment' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

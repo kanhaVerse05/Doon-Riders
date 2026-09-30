@@ -43,6 +43,7 @@ app.use('/api/faqs', faqRouter);
 app.use('/api/testimonials', testimonialRouter);
 app.use('/api/gallery', galleryRoutes);
 app.use('/api/pricing-plans', pricingRoutes);
+app.use('/api/repair-jobs', adminRepairJobsRoutes);
 
 // Static uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

@@ -38,7 +38,9 @@ import {
   UserCheck,
   Tag,
   Package,
-  ChevronDown
+  ChevronDown,
+  Star,
+  Copy
 } from 'lucide-react';
 
 interface RepairJob {
@@ -73,6 +75,10 @@ interface RepairJob {
   created_at: string;
   updated_at: string;
   closed_at?: string | null;
+  customer_rating?: number | null;
+  customer_review?: string | null;
+  customer_tags?: string[] | null;
+  reviewed_at?: string | null;
 }
 
 interface RepairPart {
@@ -120,6 +126,7 @@ export default function RepairJobDetailsPage() {
 
   const [loading, setLoading] = useState(true);
   const [jobData, setJobData] = useState<any>(null);
+  const [techniciansList, setTechniciansList] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'inspection' | 'parts' | 'repair' | 'billing' | 'payment' | 'timeline'>('overview');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -132,6 +139,8 @@ export default function RepairJobDetailsPage() {
 
   // Modals for in-page execution
   const [submitting, setSubmitting] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignTechId, setAssignTechId] = useState<number | string>('');
   const [showInspectModal, setShowInspectModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -180,6 +189,21 @@ export default function RepairJobDetailsPage() {
       } else {
         showToast('Job not found');
       }
+
+      // Fetch technicians list for assignment / reassignment
+      try {
+        const metaRes = await adminApi.get('/admin/repair-jobs/meta/hubs-and-technicians');
+        if (metaRes && metaRes.success && metaRes.technicians) {
+          setTechniciansList(metaRes.technicians);
+        } else {
+          const allRes = await adminApi.get('/admin/repair-jobs?limit=1');
+          if (allRes && allRes.technicians) {
+            setTechniciansList(allRes.technicians);
+          }
+        }
+      } catch (mErr) {
+        console.warn('Meta fetch error', mErr);
+      }
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Error loading job details');
@@ -222,6 +246,68 @@ export default function RepairJobDetailsPage() {
   const isStepActive = (stepStatuses: string[]) => {
     if (!job) return false;
     return stepStatuses[0] === job.status;
+  };
+
+  // Reassign Technician Handler
+  const openAssignModalHandler = () => {
+    if (!job) return;
+    setAssignTechId(job.technician_id || '');
+    setShowAssignModal(true);
+  };
+
+  const handleAssignTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!job || !assignTechId) {
+      showToast('Please select a technician');
+      return;
+    }
+    try {
+      const res = await adminApi.patch(`/admin/repair-jobs/${job.id}/assign-technician`, {
+        technician_id: Number(assignTechId)
+      });
+      if (res && res.success) {
+        showToast(res.message || 'Technician updated successfully!');
+        setShowAssignModal(false);
+        fetchJobDetails();
+      } else {
+        showToast(res.message || 'Failed to update technician');
+      }
+    } catch (err: any) {
+      showToast(err.message);
+    }
+  };
+
+  const getReviewUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://doon-riders.vercel.app';
+    return `${origin}/review/${job?.job_number || job?.id || jobId}`;
+  };
+
+  const shareReviewOnWhatsApp = () => {
+    if (!job) return;
+    const cleanPhone = (job.rider_contact || '').replace(/\D/g, '');
+    const reviewUrl = getReviewUrl();
+    
+    const text = `Namaste ${job.rider_name || 'Rider'}, 
+Your DOON Riders EV service for Scooter *${job.scooter_number}* (Job #${job.job_number}) has been completed by Technician *${job.technician_name || 'our service team'}*. 🛵⚡
+
+Please share your valuable feedback and rating for our technician here:
+👉 ${reviewUrl}
+
+Thank you for choosing DOON Riders! 🌿✨`;
+
+    const waUrl = cleanPhone 
+      ? `https://wa.me/91${cleanPhone.length === 10 ? cleanPhone : cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    
+    window.open(waUrl, '_blank');
+  };
+
+  const copyReviewLink = () => {
+    const url = getReviewUrl();
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      showToast('Rating & Review link copied to clipboard!');
+    }
   };
 
   // Quick Action Handlers
@@ -562,8 +648,23 @@ export default function RepairJobDetailsPage() {
                 title="Share on WhatsApp"
               >
                 <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="hidden sm:inline">WhatsApp</span>
+                <span className="hidden sm:inline">WhatsApp Receipt</span>
               </button>
+
+              {(job.status === 'Repair Completed' ||
+                job.status === 'Billing Completed' ||
+                job.status === 'Payment Pending' ||
+                job.status === 'Payment Received' ||
+                job.status === 'Closed') && (
+                <button
+                  onClick={shareReviewOnWhatsApp}
+                  className="p-2 rounded-xl bg-[#25D366] text-white hover:bg-[#1EBE5D] text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                  title="Share Customer Review & Rating Link on WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 fill-white" />
+                  <span>WhatsApp Rating</span>
+                </button>
+              )}
 
               {/* Primary Contextual Action Button */}
               {job.status === 'Pending Inspection' && (
@@ -789,9 +890,21 @@ export default function RepairJobDetailsPage() {
 
                   {/* Assigned Tech & Hub */}
                   <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 text-blue-600">
-                      <Building className="w-4 h-4" />
-                      <span className="font-bold text-xs text-[#111827]">Service Hub & Technician</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <Building className="w-4 h-4" />
+                        <span className="font-bold text-xs text-[#111827]">Service Hub &amp; Technician</span>
+                      </div>
+                      {job.status !== 'Closed' && job.status !== 'Cancelled' && (
+                        <button
+                          type="button"
+                          onClick={openAssignModalHandler}
+                          className="text-[11px] font-bold text-[#0066FF] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>{job.technician_id ? 'Change Tech' : 'Assign Tech'}</span>
+                        </button>
+                      )}
                     </div>
                     <div className="space-y-1 text-xs">
                       <p className="text-[#667085]">Hub: <span className="font-bold text-[#111827]">{job.hub_name}</span></p>
@@ -800,6 +913,91 @@ export default function RepairJobDetailsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Customer Review & Rating Display Card */}
+                {(job.customer_rating || (jobData?.job as any)?.customer_rating) ? (
+                  <div className="bg-gradient-to-br from-amber-500/10 via-white to-amber-500/5 rounded-2xl border border-amber-300 p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                          <Star className="w-5 h-5 fill-amber-500 text-amber-500" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-[#111827]">Customer Rating &amp; Review</h4>
+                          <span className="text-[11px] text-[#667085]">
+                            Submitted by {job.rider_name} on {job.reviewed_at ? new Date(job.reviewed_at).toLocaleDateString('en-IN') : 'Recent'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-amber-100 px-3 py-1 rounded-xl text-amber-900 text-sm font-black">
+                        <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                        <span>{job.customer_rating || (jobData?.job as any)?.customer_rating} / 5</span>
+                      </div>
+                    </div>
+
+                    {(job.customer_tags || (jobData?.job as any)?.customer_tags)?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {(job.customer_tags || (jobData?.job as any)?.customer_tags).map((t: string, i: number) => (
+                          <span key={i} className="text-xs bg-white border border-amber-200 text-amber-900 px-2.5 py-1 rounded-lg font-semibold">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {(job.customer_review || (jobData?.job as any)?.customer_review) && (
+                      <p className="text-xs text-[#344054] bg-white p-3 rounded-xl border border-amber-200/70 italic font-medium leading-relaxed">
+                        &ldquo;{job.customer_review || (jobData?.job as any)?.customer_review}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  /* Completed: WhatsApp Rating Share Card */
+                  (job.status === 'Repair Completed' ||
+                    job.status === 'Billing Completed' ||
+                    job.status === 'Payment Pending' ||
+                    job.status === 'Payment Received' ||
+                    job.status === 'Closed') && (
+                    <div className="bg-gradient-to-br from-[#128C7E]/10 via-white to-[#25D366]/10 rounded-2xl border border-[#25D366]/40 p-4 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-[#25D366] text-white flex items-center justify-center shadow-xs">
+                            <MessageCircle className="w-5 h-5 fill-white" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-[#111827]">Request Customer Review &amp; Rating</h4>
+                            <p className="text-xs text-[#667085]">Send WhatsApp link to customer to rate assigned technician {job.technician_name}</p>
+                          </div>
+                        </div>
+
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
+                          Ready to Share
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={shareReviewOnWhatsApp}
+                          className="py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold shadow-md shadow-[#25D366]/30 flex items-center justify-center gap-2 transition cursor-pointer"
+                        >
+                          <MessageCircle className="w-4 h-4 fill-white" />
+                          <span>Share Rating Link on WhatsApp</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={copyReviewLink}
+                          className="py-2.5 px-3.5 rounded-xl border border-[#E5E7EB] hover:bg-[#F9FAFB] text-[#344054] text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Link</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             )}
 
@@ -1119,6 +1317,79 @@ export default function RepairJobDetailsPage() {
       {/* ------------------------------------------------------------- */}
       {/* MODALS IN PAGE                                                */}
       {/* ------------------------------------------------------------- */}
+      {/* 0. ASSIGN / REASSIGN TECHNICIAN MODAL */}
+      {showAssignModal && job && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E5E7EB] space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+              <div>
+                <h3 className="font-heading font-black text-base text-[#111827]">
+                  {job.technician_id ? 'Change / Reassign Technician' : 'Assign Technician'}
+                </h3>
+                <p className="text-xs text-[#00A854] font-bold">{job.job_number} ({job.scooter_number})</p>
+              </div>
+              <button onClick={() => setShowAssignModal(false)} className="p-1.5 text-[#98A2B3] hover:text-black">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignTechnician} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#344054] block">Select Certified Technician</label>
+                {techniciansList.map((t: any) => (
+                  <label
+                    key={t.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${
+                      assignTechId === t.id
+                        ? 'border-[#00D96B] bg-[#EAFBF2] shadow-xs'
+                        : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="technician_reassign"
+                        checked={assignTechId === t.id}
+                        onChange={() => setAssignTechId(t.id)}
+                        className="text-[#00D96B] focus:ring-[#00D96B]"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-[#111827]">{t.name} ({t.technician_code})</p>
+                        <p className="text-[11px] text-[#667085]">{t.specialization} • {t.phone}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        t.status === 'Available' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {t.status}
+                      </span>
+                      <span className="text-[10px] text-[#98A2B3] block mt-0.5">{t.active_jobs_count} active jobs</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 rounded-xl border text-xs font-bold text-[#475467]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#00D96B] hover:bg-[#00A854] text-white text-xs font-bold"
+                >
+                  {job.technician_id ? 'Confirm Reassignment' : 'Confirm Assignment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* 1. Inspection Modal */}
       {showInspectModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">

@@ -30,7 +30,12 @@ import {
   Bike,
   ShieldAlert,
   Package,
-  ChevronDown
+  ChevronDown,
+  Star,
+  MessageCircle,
+  Share2,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 
 export default function TechnicianJobDetailsPage() {
@@ -398,6 +403,39 @@ export default function TechnicianJobDetailsPage() {
       showToast(err?.message || 'Failed to complete repair', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const getReviewUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://doon-riders.vercel.app';
+    return `${origin}/review/${job?.job_number || job?.id || jobId}`;
+  };
+
+  const shareReviewWhatsApp = () => {
+    if (!job) return;
+    const cleanPhone = (job.rider_contact || '').replace(/\D/g, '');
+    const reviewUrl = getReviewUrl();
+    
+    const text = `Namaste ${job.rider_name || 'Rider'}, 
+Your DOON Riders EV service for Scooter *${job.scooter_number}* (Job #${job.job_number}) has been completed by Technician *${job.technician_name || 'DOON Riders Tech'}*. 🛵⚡
+
+Please share your valuable feedback and rating for our technician here:
+👉 ${reviewUrl}
+
+Thank you for choosing DOON Riders! 🌿✨`;
+
+    const waUrl = cleanPhone 
+      ? `https://wa.me/91${cleanPhone.length === 10 ? cleanPhone : cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    
+    window.open(waUrl, '_blank');
+  };
+
+  const copyReviewLink = () => {
+    const url = getReviewUrl();
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      showToast('Rating & Review link copied to clipboard!', 'success');
     }
   };
 
@@ -783,23 +821,103 @@ export default function TechnicianJobDetailsPage() {
           </div>
         )}
 
-        {/* STEP 3: WORK COMPLETED SUMMARY */}
+        {/* STEP 3: WORK COMPLETED SUMMARY & CUSTOMER REVIEW SHARE */}
         {isWorkCompleted && (
-          <div className="bg-white rounded-2xl border border-[#00D96B]/50 p-4 shadow-xs flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#00A854] flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 className="w-4 h-4" />
+          <div className="space-y-3">
+            <div className="bg-white rounded-2xl border border-[#00D96B]/50 p-4 shadow-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#00A854] flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900">Work Completed</h4>
+                  <p className="text-xs text-gray-500">
+                    Total duration: {timing?.total_duration_formatted || 'Completed'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="text-sm font-bold text-gray-900">Work Completed</h4>
-                <p className="text-xs text-gray-500">
-                  Total duration: {timing?.total_duration_formatted || 'Completed'}
-                </p>
-              </div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                Ready for Billing
+              </span>
             </div>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              Ready for Billing
-            </span>
+
+            {/* Customer Rating & Review Card if already submitted */}
+            {((job as any).customer_rating || jobData?.job?.customer_rating) ? (
+              <div className="bg-gradient-to-br from-amber-500/10 via-white to-amber-500/5 rounded-2xl border border-amber-300 p-4 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                      <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900">Customer Rating Received</h4>
+                      <span className="text-[10px] text-gray-500">
+                        Submitted by {job.rider_name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-100 px-2.5 py-1 rounded-xl text-amber-800 text-xs font-extrabold">
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                    <span>{(job as any).customer_rating || jobData?.job?.customer_rating} / 5</span>
+                  </div>
+                </div>
+
+                {((job as any).customer_tags || jobData?.job?.customer_tags)?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {((job as any).customer_tags || jobData?.job?.customer_tags).map((t: string, i: number) => (
+                      <span key={i} className="text-[10px] bg-white border border-amber-200 text-amber-900 px-2 py-0.5 rounded-md font-medium">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {((job as any).customer_review || jobData?.job?.customer_review) && (
+                  <p className="text-xs text-gray-700 bg-white/80 p-2.5 rounded-xl border border-amber-200/60 italic">
+                    &ldquo;{(job as any).customer_review || jobData?.job?.customer_review}&rdquo;
+                  </p>
+                )}
+              </div>
+            ) : (
+              /* WhatsApp Share Action Card */
+              <div className="bg-gradient-to-br from-[#128C7E]/10 via-white to-[#25D366]/10 rounded-2xl border border-[#25D366]/40 p-4 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-[#25D366] text-white flex items-center justify-center shadow-sm">
+                      <MessageCircle className="w-4 h-4 fill-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-gray-900">Customer Review &amp; Rating</h4>
+                      <p className="text-[11px] text-gray-500">Share review link on WhatsApp with customer</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    WhatsApp Ready
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={shareReviewWhatsApp}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold shadow-md shadow-[#25D366]/30 flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4 fill-white" />
+                    <span>Share on WhatsApp</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={copyReviewLink}
+                    className="py-2.5 px-3 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    title="Copy Review Link"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

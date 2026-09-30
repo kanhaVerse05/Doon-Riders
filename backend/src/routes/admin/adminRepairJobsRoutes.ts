@@ -15,10 +15,16 @@ import {
   getRepairMeta,
   getRepairNotifications,
   markNotificationRead,
-  clearAllRepairJobs
+  clearAllRepairJobs,
+  getJobReviewInfo,
+  submitJobReview
 } from '../../controllers/admin/adminRepairJobsController';
 
 const router = Router();
+
+// Review & Rating Routes (Public / Customer & Admin)
+router.get('/:id/review-info', getJobReviewInfo);
+router.post('/:id/review', submitJobReview);
 
 // Meta and Notifications
 router.get('/meta/hubs-and-technicians', getRepairMeta);
