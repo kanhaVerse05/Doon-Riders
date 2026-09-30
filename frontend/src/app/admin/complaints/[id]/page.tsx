@@ -307,21 +307,21 @@ export default function ComplaintOverviewPage() {
         )}
 
         {/* Top Breadcrumb & Actions Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-sm">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-[#E5E7EB] shadow-sm">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <button
               onClick={() => router.push('/admin/complaints')}
-              className="p-2 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+              className="p-2 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition flex-shrink-0 cursor-pointer"
               title="Back to complaints"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight font-mono">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl font-black text-slate-900 tracking-tight font-mono whitespace-nowrap">
                   {complaint.complaint_number}
                 </h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold whitespace-nowrap flex-shrink-0 ${
                   complaint.priority === 'Urgent'
                     ? 'bg-red-100 text-red-700 border border-red-200'
                     : complaint.priority === 'High'
@@ -331,17 +331,17 @@ export default function ComplaintOverviewPage() {
                   {complaint.priority} Priority
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
                 Vehicle <strong className="font-mono text-slate-800">{complaint.scooter_number}</strong> &bull; Routed to {complaint.hub_name}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap flex-shrink-0">
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition flex items-center justify-center"
+              className="p-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition flex items-center justify-center flex-shrink-0 cursor-pointer"
               title="Refresh GPS & Status"
             >
               <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -354,7 +354,7 @@ export default function ComplaintOverviewPage() {
                   setSelectedTechId(complaint.technician_id || technicians[0]?.id || null);
                   setShowAssignModal(true);
                 }}
-                className="px-4 py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs border border-blue-200 transition flex items-center gap-2"
+                className="px-4 py-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs border border-blue-200 transition flex items-center gap-2 whitespace-nowrap flex-shrink-0 cursor-pointer"
               >
                 <User className="w-4 h-4" />
                 <span>{complaint.technician_name ? 'Reassign Technician' : 'Assign Technician'}</span>
@@ -366,7 +366,7 @@ export default function ComplaintOverviewPage() {
               <button
                 onClick={handleCloseComplaint}
                 disabled={closingComplaint}
-                className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs flex items-center gap-2 shadow-lg transition"
+                className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs flex items-center gap-2 shadow-lg transition whitespace-nowrap flex-shrink-0 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4 text-[#00D96B]" />
                 <span>Mark Complaint as Closed</span>

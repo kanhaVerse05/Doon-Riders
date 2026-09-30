@@ -948,7 +948,7 @@ export default function RepairJobsPage() {
         {/* ========================================================= */}
         <div className="space-y-6">
           {/* Top 8 KPI Metrics Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2.5 sm:gap-3">
             <div className="bg-white border border-[#E5E7EB] rounded-2xl p-3.5 shadow-xs">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-extrabold text-[#667085] tracking-wider uppercase">Total Jobs</span>

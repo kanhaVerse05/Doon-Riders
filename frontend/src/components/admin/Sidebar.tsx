@@ -50,6 +50,7 @@ export const Sidebar: React.FC = () => {
 
   const isSalesExec = user?.roleName === 'SALES_EXECUTIVE';
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
+  const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
 
   const navGroups: NavGroup[] = isTechnician
     ? [
@@ -61,6 +62,32 @@ export const Sidebar: React.FC = () => {
               href: '/admin/technician/jobs',
               icon: CheckCircle2,
               badge: 'My Tasks'
+            }
+          ]
+        }
+      ]
+    : isHubIncharge
+    ? [
+        {
+          title: 'HUB INCHARGE WORKSPACE',
+          items: [
+            {
+              name: 'Complaints',
+              href: '/admin/complaints',
+              icon: AlertCircle,
+              badge: 'Field RSA'
+            },
+            {
+              name: 'Repair Jobs',
+              href: '/admin/repair-jobs',
+              icon: Wrench,
+              badge: 'Workshop'
+            },
+            {
+              name: 'Inventory',
+              href: '/admin/inventory',
+              icon: Boxes,
+              badge: 'Stock'
             }
           ]
         }
@@ -169,7 +196,7 @@ export const Sidebar: React.FC = () => {
       ];
 
   return (
-    <aside className="w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between hidden md:flex flex-shrink-0 h-screen sticky top-0 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] z-30">
+    <aside className="w-56 lg:w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between hidden md:flex flex-shrink-0 h-screen sticky top-0 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] z-30">
       <div className="flex flex-col flex-1 overflow-y-auto">
         {/* Brand Header */}
         <div className="p-5 border-b border-[#E5E7EB] flex items-center gap-3">

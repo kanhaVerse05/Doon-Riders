@@ -33,6 +33,7 @@ export const MobileBottomNav: React.FC = () => {
 
   const isSalesExec = user?.roleName === 'SALES_EXECUTIVE';
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
+  const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
 
   const navItems = isTechnician
     ? [
@@ -40,6 +41,38 @@ export const MobileBottomNav: React.FC = () => {
           name: 'My Tasks',
           href: '/admin/technician/jobs',
           icon: Home,
+          show: true
+        },
+        {
+          name: 'Profile',
+          href: '#profile',
+          icon: User,
+          show: true,
+          onClick: () => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('open-technician-profile'));
+            }
+          }
+        }
+      ]
+    : isHubIncharge
+    ? [
+        {
+          name: 'Complaints',
+          href: '/admin/complaints',
+          icon: AlertCircle,
+          show: true
+        },
+        {
+          name: 'Repair Jobs',
+          href: '/admin/repair-jobs',
+          icon: Wrench,
+          show: true
+        },
+        {
+          name: 'Inventory',
+          href: '/admin/inventory',
+          icon: Boxes,
           show: true
         },
         {

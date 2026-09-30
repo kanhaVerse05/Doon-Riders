@@ -25,6 +25,7 @@ export default function AdminLoginPage() {
         const saved = localStorage.getItem('dr_admin_user');
         const parsed = saved ? JSON.parse(saved) : null;
         const isTech = parsed?.roleName === 'TECHNICIAN' || parsed?.roleName?.includes('TECH');
+        const isHub = parsed?.roleName === 'HUB_INCHARGE' || parsed?.roleName?.includes('HUB');
 
         if (isTech) {
           // Block technician login on /admin/login
@@ -35,7 +36,11 @@ export default function AdminLoginPage() {
           return;
         }
 
-        router.push('/admin/dashboard');
+        if (isHub) {
+          router.push('/admin/complaints');
+        } else {
+          router.push('/admin/dashboard');
+        }
       } else {
         setError('Invalid credentials. Please check your email and password.');
       }

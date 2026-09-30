@@ -27,6 +27,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const pathname = usePathname();
 
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
+  const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
 
   useEffect(() => {
     setMounted(true);
@@ -54,8 +55,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } else if (mounted && !isLoading && user) {
       const isTech = user.roleName === 'TECHNICIAN' || user.roleName?.includes('TECH');
+      const isHub = user.roleName === 'HUB_INCHARGE' || user.roleName?.includes('HUB');
       if (isTech && !pathname?.startsWith('/admin/technician')) {
         router.replace('/admin/technician/jobs');
+      } else if (isHub && (pathname === '/admin' || pathname === '/admin/dashboard' || pathname?.startsWith('/admin/leads') || pathname?.startsWith('/admin/customers') || pathname?.startsWith('/admin/gallery') || pathname?.startsWith('/admin/pricing') || pathname?.startsWith('/admin/reports') || pathname?.startsWith('/admin/users') || pathname?.startsWith('/admin/roles') || pathname?.startsWith('/admin/pre-bookings'))) {
+        router.replace('/admin/complaints');
       }
     }
   }, [mounted, isLoading, user, pathname, router]);
@@ -123,7 +127,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             {!isTechnician && (
               <div className="hidden md:flex items-center gap-2 ml-2">
                 <span className="text-xs font-bold text-[#667085] uppercase tracking-wide">
-                  LEAD CRM &amp; OPERATIONS
+                  {isHubIncharge ? 'HUB INCHARGE PORTAL' : 'LEAD CRM & OPERATIONS'}
                 </span>
                 <span className="text-[#E5E7EB]">/</span>
               </div>

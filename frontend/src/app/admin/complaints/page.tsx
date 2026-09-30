@@ -492,7 +492,7 @@ export default function ComplaintsListPage() {
         </div>
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
           <div
             onClick={() => setStatusTab('ALL')}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
