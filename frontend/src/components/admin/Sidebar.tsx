@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  ShieldAlert,
   LucideIcon
 } from 'lucide-react';
 
@@ -91,6 +92,12 @@ export const Sidebar: React.FC = () => {
               badge: 'Inspection'
             },
             {
+              name: 'Scooty Recoveries',
+              href: '/admin/recoveries',
+              icon: ShieldAlert,
+              badge: '₹1000'
+            },
+            {
               name: 'Inventory',
               href: '/admin/inventory',
               icon: Boxes,
@@ -129,6 +136,12 @@ export const Sidebar: React.FC = () => {
               icon: RotateCcw,
               permission: 'returns.view',
               badge: 'Settlement'
+            },
+            {
+              name: 'Scooty Recoveries',
+              href: '/admin/recoveries',
+              icon: ShieldAlert,
+              badge: 'Recovery'
             },
             {
               name: 'Pre-Bookings',

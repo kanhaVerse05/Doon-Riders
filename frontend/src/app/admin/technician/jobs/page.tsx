@@ -40,7 +40,9 @@ import {
   Crosshair,
   Activity,
   RotateCcw,
-  DollarSign
+  DollarSign,
+  ShieldAlert,
+  Truck
 } from 'lucide-react';
 
 interface RepairJob {
@@ -143,12 +145,13 @@ export default function TechnicianJobsSummaryPage() {
   const router = useRouter();
   const { user } = useAuth();
 
-  // Top Workspace Mode: Workshop Jobs vs Field Complaints vs Return Inspections
-  const [workspaceMode, setWorkspaceMode] = useState<'WORKSHOP' | 'FIELD_COMPLAINTS' | 'RETURN_INSPECTIONS'>('WORKSHOP');
+  // Top Workspace Mode: Workshop Jobs vs Field Complaints vs Return Inspections vs Recovery Inspections
+  const [workspaceMode, setWorkspaceMode] = useState<'WORKSHOP' | 'FIELD_COMPLAINTS' | 'RETURN_INSPECTIONS' | 'RECOVERY_INSPECTIONS'>('WORKSHOP');
 
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [fieldComplaints, setFieldComplaints] = useState<Complaint[]>([]);
   const [returnInspections, setReturnInspections] = useState<any[]>([]);
+  const [recoveryInspections, setRecoveryInspections] = useState<any[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [inventoryList, setInventoryList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -282,8 +285,30 @@ export default function TechnicianJobsSummaryPage() {
 
         setReturnInspections(allReturns);
       }
+
+      // 4. Scooty Recovery Inspections
+      const recoveriesRes = await adminApi.get('/admin/recoveries?limit=100');
+      if (recoveriesRes && recoveriesRes.success) {
+        let allRecoveries: any[] = recoveriesRes.data || [];
+        if (isTechnicianRole && user) {
+          const matchedTech = jobsRes?.technicians?.find(
+            (t: Technician) =>
+              t.name.toLowerCase() === user.name.toLowerCase() ||
+              t.id === user.id ||
+              (user.phone && t.phone && user.phone === t.phone)
+          );
+          const techId = matchedTech ? matchedTech.id : user.id;
+          allRecoveries = allRecoveries.filter(
+            (r: any) => r.technician_id === techId || r.technician_name?.toLowerCase() === user.name?.toLowerCase()
+          );
+        } else if (selectedTechId !== 'all') {
+          allRecoveries = allRecoveries.filter((r: any) => r.technician_id === Number(selectedTechId));
+        }
+
+        setRecoveryInspections(allRecoveries);
+      }
     } catch (err) {
-      console.error('Failed to load technician jobs, complaints and returns', err);
+      console.error('Failed to load technician jobs, complaints, returns and recoveries', err);
     } finally {
       setLoading(false);
     }
@@ -850,9 +875,13 @@ export default function TechnicianJobsSummaryPage() {
     // Filter out rows that have empty part name
     const validDamages = inspectionDamages.filter(d => d.part_name && d.part_name.trim() !== '');
 
+    const endpoint = inspectingReturn.recovery_number
+      ? `/admin/recoveries/${inspectingReturn.id}/inspection`
+      : `/admin/returns/${inspectingReturn.id}/inspection`;
+
     try {
       setSubmittingInspection(true);
-      const res = await adminApi.post(`/admin/returns/${inspectingReturn.id}/inspection`, {
+      const res = await adminApi.post(endpoint, {
         damage_items: validDamages
       });
 
@@ -884,8 +913,11 @@ export default function TechnicianJobsSummaryPage() {
   const activeEnRouteCount = fieldComplaints.filter(c => c.status === 'En Route' || c.status === 'Reached' || c.status === 'Work In Progress').length;
   const pendingReturnsCount = returnInspections.filter(r => r.status === 'Pending Inspection' || r.status === 'Inspection in Progress').length;
   const totalReturnsCount = returnInspections.length;
+  const pendingRecoveriesCount = recoveryInspections.filter(r => r.status === 'Pending Inspection' || r.status === 'Inspection in Progress').length;
+  const totalRecoveriesCount = recoveryInspections.length;
 
   const [returnFilterTab, setReturnFilterTab] = useState<'ALL' | 'PENDING' | 'INSPECTED' | 'COMPLETED'>('ALL');
+  const [recoveryFilterTab, setRecoveryFilterTab] = useState<'ALL' | 'PENDING' | 'INSPECTED' | 'COMPLETED'>('ALL');
 
   // Filtered Returns
   const filteredReturns = returnInspections.filter(ret => {
@@ -904,6 +936,29 @@ export default function TechnicianJobsSummaryPage() {
       if (ret.status !== 'Inspection Completed') return false;
     } else if (returnFilterTab === 'COMPLETED') {
       if (ret.status !== 'Completed') return false;
+    }
+
+    return true;
+  });
+
+  // Filtered Recoveries
+  const filteredRecoveries = recoveryInspections.filter(rec => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchNum = rec.recovery_number?.toLowerCase().includes(q);
+      const matchScoot = rec.scooter_number?.toLowerCase().includes(q);
+      const matchRider = rec.rider_name?.toLowerCase().includes(q);
+      const matchPhone = rec.rider_phone?.toLowerCase().includes(q);
+      const matchRecBy = rec.recovered_by?.toLowerCase().includes(q);
+      if (!matchNum && !matchScoot && !matchRider && !matchPhone && !matchRecBy) return false;
+    }
+
+    if (recoveryFilterTab === 'PENDING') {
+      if (rec.status !== 'Pending Inspection' && rec.status !== 'Inspection in Progress') return false;
+    } else if (recoveryFilterTab === 'INSPECTED') {
+      if (rec.status !== 'Inspection Completed') return false;
+    } else if (recoveryFilterTab === 'COMPLETED') {
+      if (rec.status !== 'Completed') return false;
     }
 
     return true;
@@ -1157,6 +1212,27 @@ export default function TechnicianJobsSummaryPage() {
                 : 'bg-slate-200 text-slate-700'
             }`}>
               {pendingReturnsCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setWorkspaceMode('RECOVERY_INSPECTIONS')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
+              workspaceMode === 'RECOVERY_INSPECTIONS'
+                ? 'bg-red-950 text-white shadow-md'
+                : 'text-[#667085] hover:text-[#111827]'
+            }`}
+          >
+            <ShieldAlert className={`w-3.5 h-3.5 ${pendingRecoveriesCount > 0 ? 'text-amber-400' : ''}`} />
+            <span>Recoveries</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+              pendingRecoveriesCount > 0
+                ? 'bg-amber-400 text-amber-950'
+                : workspaceMode === 'RECOVERY_INSPECTIONS'
+                ? 'bg-[#00D96B] text-[#0A0F1D]'
+                : 'bg-slate-200 text-slate-700'
+            }`}>
+              {pendingRecoveriesCount}
             </span>
           </button>
         </div>
@@ -2037,6 +2113,211 @@ export default function TechnicianJobsSummaryPage() {
         )}
 
         {/* ========================================================================= */}
+        {/* TAB 4: SCOOTY RECOVERY INSPECTIONS (HUB RECOVERY DAMAGE CHECK) */}
+        {/* ========================================================================= */}
+        {workspaceMode === 'RECOVERY_INSPECTIONS' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Filter tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {[
+                { key: 'ALL', label: 'All Recoveries', count: recoveryInspections.length },
+                { key: 'PENDING', label: 'Inspection Pending', count: pendingRecoveriesCount },
+                { key: 'INSPECTED', label: 'Inspected (Review)', count: recoveryInspections.filter(r => r.status === 'Inspection Completed').length },
+                { key: 'COMPLETED', label: 'Settled / Closed', count: recoveryInspections.filter(r => r.status === 'Completed').length }
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setRecoveryFilterTab(tab.key as any)}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
+                    recoveryFilterTab === tab.key
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                    recoveryFilterTab === tab.key ? 'bg-[#00D96B] text-[#0A0F1D]' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {loading ? (
+              <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
+                <div className="w-8 h-8 rounded-full border-2 border-[#00D96B] border-t-transparent animate-spin mx-auto" />
+                <p className="text-xs text-slate-500 font-bold">Checking Assigned Recovery Inspections...</p>
+              </div>
+            ) : filteredRecoveries.length === 0 ? (
+              <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <ShieldAlert className="w-6 h-6 text-red-400" />
+                </div>
+                <h3 className="text-sm font-black text-slate-900">No Recovery Inspection Tasks</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {recoveryFilterTab !== 'ALL'
+                    ? 'No recovery tickets match the selected filter.'
+                    : 'There are no assigned recovery inspections right now.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {filteredRecoveries.map(rec => {
+                  const isPending = rec.status === 'Pending Inspection' || rec.status === 'Inspection in Progress';
+                  const isInspected = rec.status === 'Inspection Completed';
+                  const isCompleted = rec.status === 'Completed';
+                  const damageCount = rec.damage_items?.length || 0;
+
+                  return (
+                    <div
+                      key={rec.id}
+                      className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 space-y-3.5 shadow-xs hover:border-slate-300 transition"
+                    >
+                      {/* Ticket Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl">
+                            {rec.recovery_number}
+                          </span>
+                          <span className="text-xs text-slate-400">&bull;</span>
+                          <span className="text-xs font-mono font-bold text-slate-600">
+                            {new Date(rec.recovery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {rec.recovery_time}
+                          </span>
+                          <span className="text-xs text-slate-400">&bull;</span>
+                          <span className="text-xs text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-bold">
+                            By: {rec.recovered_by}
+                          </span>
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                          isCompleted
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : isInspected
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {rec.status}
+                        </span>
+                      </div>
+
+                      {/* Scooty & Hub Row */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-2.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scooty Reg No</span>
+                          <p className="font-mono font-black text-sm text-slate-900">{rec.scooter_number}</p>
+                        </div>
+
+                        <div className="p-2.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Hub</span>
+                          <p className="font-bold text-slate-800 truncate">{rec.hub_name}</p>
+                        </div>
+
+                        <div className="p-2.5 bg-red-50/60 rounded-2xl border border-red-200 space-y-0.5">
+                          <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider block">Recovery Fee</span>
+                          <p className="font-mono font-black text-red-900">₹{rec.recovery_charge || 1000}</p>
+                        </div>
+
+                        <div className="p-2.5 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-0.5">
+                          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Security Deposit</span>
+                          <p className="font-mono font-black text-emerald-900">₹{rec.security_deposit_amount || 2000}</p>
+                        </div>
+                      </div>
+
+                      {/* Rider Contact Card */}
+                      <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{rec.rider_name}</p>
+                            <p className="text-[11px] font-mono text-slate-500">{rec.rider_phone}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <a
+                            href={`tel:${rec.rider_phone}`}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-[11px] flex items-center gap-1"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>Call</span>
+                          </a>
+                          <button
+                            onClick={() => handleWhatsApp(rec.rider_phone, rec.rider_name, rec.recovery_number)}
+                            className="p-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-bold"
+                            title="WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Damage Summary Box if already Inspected or Logged */}
+                      {damageCount > 0 ? (
+                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                            <span>Logged Damage Items ({damageCount})</span>
+                            <span className="text-red-600 font-extrabold">Damage Total: ₹{rec.gross_damage_total || 0}</span>
+                          </div>
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {rec.damage_items.map((dmg: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60">
+                                <span className="font-medium text-slate-800">{dmg.part_name} &times; {dmg.quantity || 1}</span>
+                                <span className="font-mono font-bold text-slate-900">₹{dmg.total_price || ((dmg.quantity || 1) * (dmg.unit_price || 0))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : isInspected ? (
+                        <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs flex items-center gap-2 text-emerald-800 font-bold">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Physical Inspection Completed: Zero damages found. Fixed ₹1000 fee applies.</span>
+                        </div>
+                      ) : null}
+
+                      {/* Primary Action Button */}
+                      <div className="pt-1">
+                        {isPending ? (
+                          <button
+                            onClick={() => handleOpenInspectionModal(rec)}
+                            className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-98"
+                          >
+                            <Wrench className="w-4 h-4 stroke-[2.5]" />
+                            <span>INSPECT DAMAGED PARTS</span>
+                          </button>
+                        ) : isInspected ? (
+                          <button
+                            onClick={() => handleOpenInspectionModal(rec)}
+                            className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-700/20 transition cursor-pointer active:scale-98"
+                          >
+                            <FileText className="w-4 h-4" />
+                            <span>UPDATE DAMAGE SHEET / RE-INSPECT</span>
+                          </button>
+                        ) : (
+                          <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs flex items-center justify-between text-emerald-900 font-bold">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Settlement Closed by Hub Incharge</span>
+                            </span>
+                            <span className="font-mono">
+                              {rec.settlement_type === 'DUE_FROM_RIDER'
+                                ? `Due: ₹${rec.due_amount_from_rider}`
+                                : `Refund: ₹${rec.refund_amount_to_rider}`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* MODAL: FIELD WORK DONE COMPLETION DRAWER */}
         {/* ========================================================================= */}
         {completingComplaint && (
@@ -2209,9 +2490,11 @@ export default function TechnicianJobsSummaryPage() {
                     <Wrench className="w-5 h-5 stroke-[2.5]" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black text-slate-900 tracking-tight">Damage Parts</h2>
+                    <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                      {inspectingReturn.recovery_number ? 'Recovery Damage Parts' : 'Return Damage Parts'}
+                    </h2>
                     <p className="text-[11px] text-slate-500 font-medium">
-                      Ticket: <span className="font-mono font-bold text-slate-800">{inspectingReturn.return_number}</span> &bull; Scooty: <span className="font-mono font-black text-emerald-700">{inspectingReturn.scooter_number}</span> &bull; Rider: <span className="font-bold text-slate-800">{inspectingReturn.rider_name}</span>
+                      Ticket: <span className="font-mono font-bold text-slate-800">{inspectingReturn.recovery_number || inspectingReturn.return_number}</span> &bull; Scooty: <span className="font-mono font-black text-emerald-700">{inspectingReturn.scooter_number}</span> &bull; Rider: <span className="font-bold text-slate-800">{inspectingReturn.rider_name}</span>
                     </p>
                   </div>
                 </div>

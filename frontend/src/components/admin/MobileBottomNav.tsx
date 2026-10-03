@@ -24,7 +24,8 @@ import {
   ClipboardList,
   User,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  ShieldAlert
 } from 'lucide-react';
 
 export const MobileBottomNav: React.FC = () => {
@@ -74,6 +75,12 @@ export const MobileBottomNav: React.FC = () => {
           name: 'Returns',
           href: '/admin/returns',
           icon: RotateCcw,
+          show: true
+        },
+        {
+          name: 'Recoveries',
+          href: '/admin/recoveries',
+          icon: ShieldAlert,
           show: true
         },
         {
@@ -130,6 +137,7 @@ export const MobileBottomNav: React.FC = () => {
 
   const moreItems = [
     { name: 'Scooty Returns', href: '/admin/returns', icon: RotateCcw, show: true },
+    { name: 'Scooty Recoveries', href: '/admin/recoveries', icon: ShieldAlert, show: true },
     { name: 'Complaints', href: '/admin/complaints', icon: AlertCircle, show: hasPermission('complaints.view') },
     { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') },
     { name: 'Inventory', href: '/admin/inventory', icon: Boxes, show: hasPermission('inventory.view') },
