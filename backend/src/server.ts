@@ -24,6 +24,7 @@ import adminPreBookingRoutes from './routes/admin/adminPreBookingRoutes';
 import adminInventoryRoutes from './routes/admin/adminInventoryRoutes';
 import adminRepairJobsRoutes from './routes/admin/adminRepairJobsRoutes';
 import adminComplaintsRoutes from './routes/admin/adminComplaintsRoutes';
+import adminReturnsRoutes from './routes/admin/adminReturnsRoutes';
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ app.use('/api/gallery', galleryRoutes);
 app.use('/api/pricing-plans', pricingRoutes);
 app.use('/api/repair-jobs', adminRepairJobsRoutes);
 app.use('/api/complaints', adminComplaintsRoutes);
+app.use('/api/returns', adminReturnsRoutes);
 
 // Static uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -57,6 +59,7 @@ app.use('/api/admin/pre-bookings', adminPreBookingRoutes);
 app.use('/api/admin/inventory', adminInventoryRoutes);
 app.use('/api/admin/repair-jobs', adminRepairJobsRoutes);
 app.use('/api/admin/complaints', adminComplaintsRoutes);
+app.use('/api/admin/returns', adminReturnsRoutes);
 app.use('/api/admin/customers', adminCustomersRoutes);
 app.use('/api/admin/reports', adminReportsRoutes);
 app.use('/api/admin/users', adminUsersRoutes);

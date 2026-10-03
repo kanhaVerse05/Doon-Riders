@@ -21,6 +21,7 @@ import {
   Wrench,
   CheckCircle2,
   AlertCircle,
+  RotateCcw,
   LucideIcon
 } from 'lucide-react';
 
@@ -84,6 +85,12 @@ export const Sidebar: React.FC = () => {
               badge: 'Workshop'
             },
             {
+              name: 'Scooty Returns',
+              href: '/admin/returns',
+              icon: RotateCcw,
+              badge: 'Inspection'
+            },
+            {
               name: 'Inventory',
               href: '/admin/inventory',
               icon: Boxes,
@@ -115,6 +122,13 @@ export const Sidebar: React.FC = () => {
               icon: Wrench,
               permission: 'repairs.view',
               badge: 'Hub'
+            },
+            {
+              name: 'Scooty Returns',
+              href: '/admin/returns',
+              icon: RotateCcw,
+              permission: 'returns.view',
+              badge: 'Settlement'
             },
             {
               name: 'Pre-Bookings',

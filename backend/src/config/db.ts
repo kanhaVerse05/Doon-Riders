@@ -457,7 +457,9 @@ export const memoryStore = {
   repairEvents: [] as any[],
   repairNotifications: [] as any[],
   complaints: [] as any[],
-  complaintEvents: [] as any[]
+  complaintEvents: [] as any[],
+  scootyReturns: [] as any[],
+  scootyReturnEvents: [] as any[]
 };
 
 // Unified Query Result Interface
@@ -863,6 +865,62 @@ export const checkDbConnection = async (): Promise<boolean> => {
         longitude NUMERIC(10, 7),
         duration_seconds INT DEFAULT 0,
         duration_formatted VARCHAR(50),
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS scooty_returns (
+        id SERIAL PRIMARY KEY,
+        return_number VARCHAR(50) NOT NULL UNIQUE,
+        rider_name VARCHAR(150) NOT NULL,
+        rider_phone VARCHAR(50) NOT NULL,
+        scooter_number VARCHAR(50) NOT NULL,
+        scooter_id INT,
+        hub_id INT REFERENCES repair_hubs(id) ON DELETE SET NULL,
+        hub_name VARCHAR(150),
+        hub_incharge_id INT,
+        hub_incharge_name VARCHAR(150),
+        return_date DATE NOT NULL,
+        return_time VARCHAR(50) NOT NULL,
+        initial_meter_reading NUMERIC(10, 2),
+        security_deposit_amount NUMERIC(10, 2) DEFAULT 2000.00,
+        technician_id INT REFERENCES technicians(id) ON DELETE SET NULL,
+        technician_name VARCHAR(150),
+        technician_phone VARCHAR(50),
+        technician_code VARCHAR(50),
+        status VARCHAR(50) NOT NULL DEFAULT 'Pending Inspection',
+        damage_items JSONB DEFAULT '[]',
+        gross_damage_total NUMERIC(10, 2) DEFAULT 0.00,
+        payable_damage_total NUMERIC(10, 2) DEFAULT 0.00,
+        waived_damage_total NUMERIC(10, 2) DEFAULT 0.00,
+        settlement_type VARCHAR(50) DEFAULT 'FULL_REFUND',
+        refund_amount_to_rider NUMERIC(10, 2) DEFAULT 2000.00,
+        due_amount_from_rider NUMERIC(10, 2) DEFAULT 0.00,
+        rider_payment_status VARCHAR(50) DEFAULT 'Pending',
+        rider_payment_mode VARCHAR(50),
+        rider_payment_reference VARCHAR(150),
+        settlement_notes TEXT,
+        initial_remarks TEXT,
+        inspection_started_at TIMESTAMPTZ,
+        inspection_completed_at TIMESTAMPTZ,
+        settled_at TIMESTAMPTZ,
+        created_by_id INT,
+        created_by_name VARCHAR(150),
+        created_by_role VARCHAR(100),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS scooty_return_events (
+        id SERIAL PRIMARY KEY,
+        return_id INT REFERENCES scooty_returns(id) ON DELETE CASCADE,
+        event_type VARCHAR(100) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        status VARCHAR(50),
+        performed_by_id INT,
+        performed_by_name VARCHAR(150),
+        performed_by_role VARCHAR(100),
         metadata JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );

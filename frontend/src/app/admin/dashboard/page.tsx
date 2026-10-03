@@ -86,7 +86,7 @@ export default function AdminDashboardPage() {
               SUPER ADMIN ENGINE
             </span>
             <h2 className="text-xl sm:text-2xl font-bold text-[#111827] tracking-tight">
-              Welcome back, {user?.name || 'Vikramaditya Rawat'}! 👋
+              Welcome back, {user?.name || 'Vikramaditya Rawat'}! 
             </h2>
             <p className="text-xs sm:text-sm text-[#667085] font-normal max-w-xl">
               Real-time inbound lead funnel, channel attribution, and sales team velocity.

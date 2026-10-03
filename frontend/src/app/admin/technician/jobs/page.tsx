@@ -38,7 +38,9 @@ import {
   Trash2,
   Building,
   Crosshair,
-  Activity
+  Activity,
+  RotateCcw,
+  DollarSign
 } from 'lucide-react';
 
 interface RepairJob {
@@ -141,11 +143,12 @@ export default function TechnicianJobsSummaryPage() {
   const router = useRouter();
   const { user } = useAuth();
 
-  // Top Workspace Mode: Workshop Jobs vs Field Complaints
-  const [workspaceMode, setWorkspaceMode] = useState<'WORKSHOP' | 'FIELD_COMPLAINTS'>('WORKSHOP');
+  // Top Workspace Mode: Workshop Jobs vs Field Complaints vs Return Inspections
+  const [workspaceMode, setWorkspaceMode] = useState<'WORKSHOP' | 'FIELD_COMPLAINTS' | 'RETURN_INSPECTIONS'>('WORKSHOP');
 
   const [jobs, setJobs] = useState<RepairJob[]>([]);
   const [fieldComplaints, setFieldComplaints] = useState<Complaint[]>([]);
+  const [returnInspections, setReturnInspections] = useState<any[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [inventoryList, setInventoryList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,6 +185,26 @@ export default function TechnicianJobsSummaryPage() {
   // Return to Hub State
   const [returnToHubComplaintId, setReturnToHubComplaintId] = useState<number | null>(null);
 
+  // Return Inspection Modal State (Technician Damage Sheet Builder)
+  const [inspectingReturn, setInspectingReturn] = useState<any | null>(null);
+  const [inspectionDamages, setInspectionDamages] = useState<Array<{
+    id: string;
+    part_name: string;
+    category?: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    technician_remark?: string;
+  }>>([]);
+  const [customDamageItem, setCustomDamageItem] = useState({
+    part_name: '',
+    quantity: 1,
+    unit_price: '',
+    technician_remark: ''
+  });
+  const [inspectionMeterReading, setInspectionMeterReading] = useState<string>('');
+  const [submittingInspection, setSubmittingInspection] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
@@ -196,7 +219,7 @@ export default function TechnicianJobsSummaryPage() {
     }).catch(() => {});
   }, []);
 
-  // Fetch Jobs & Field Complaints
+  // Fetch Jobs, Field Complaints & Return Inspections
   const fetchData = async () => {
     try {
       // 1. Workshop Jobs
@@ -245,8 +268,30 @@ export default function TechnicianJobsSummaryPage() {
 
         setFieldComplaints(allComplaints);
       }
+
+      // 3. Scooty Return Inspections
+      const returnsRes = await adminApi.get('/admin/returns?limit=100');
+      if (returnsRes && returnsRes.success) {
+        let allReturns: any[] = returnsRes.data || [];
+        if (isTechnicianRole && user) {
+          const matchedTech = jobsRes?.technicians?.find(
+            (t: Technician) =>
+              t.name.toLowerCase() === user.name.toLowerCase() ||
+              t.id === user.id ||
+              (user.phone && t.phone && user.phone === t.phone)
+          );
+          const techId = matchedTech ? matchedTech.id : user.id;
+          allReturns = allReturns.filter(
+            (r: any) => r.technician_id === techId || r.technician_name?.toLowerCase() === user.name?.toLowerCase()
+          );
+        } else if (selectedTechId !== 'all') {
+          allReturns = allReturns.filter((r: any) => r.technician_id === Number(selectedTechId));
+        }
+
+        setReturnInspections(allReturns);
+      }
     } catch (err) {
-      console.error('Failed to load technician jobs and complaints', err);
+      console.error('Failed to load technician jobs, complaints and returns', err);
     } finally {
       setLoading(false);
     }
@@ -673,11 +718,152 @@ export default function TechnicianJobsSummaryPage() {
     }
   };
 
+  // Preset Common Damage Items for Quick 1-Tap Entry by Technician
+  const PRESET_DAMAGES = [
+    { name: 'Horn (Defective / No Sound)', price: 250, category: 'Electrical', remark: 'Horn defective / switch faulty' },
+    { name: 'Left Side Rearview Mirror Broken', price: 180, category: 'Body', remark: 'Left mirror broken' },
+    { name: 'Right Side Rearview Mirror Broken', price: 180, category: 'Body', remark: 'Right mirror broken' },
+    { name: 'Front Fender / Mudguard Damaged', price: 450, category: 'Body', remark: 'Front mudguard cracked / broken' },
+    { name: 'Brake Lever (Left / Right) Broken', price: 220, category: 'Controls', remark: 'Brake lever bent / broken' },
+    { name: 'Headlight Assembly / Lens Broken', price: 650, category: 'Lighting', remark: 'Headlight glass cracked' },
+    { name: 'Tail Light / Indicator Damaged', price: 350, category: 'Lighting', remark: 'Tail light lens cracked' },
+    { name: 'Body Panel Scratch (Minor)', price: 300, category: 'Body', remark: 'Side cowl / apron paint scratches' },
+    { name: 'Body Panel Crack / Broken (Major)', price: 850, category: 'Body', remark: 'Body panel deep crack / broken bracket' },
+    { name: 'Seat Cover Torn / Damaged', price: 350, category: 'Accessories', remark: 'Seat skin torn' },
+    { name: 'Battery Compartment Lid / Lock Damaged', price: 400, category: 'Chassis', remark: 'Battery lock damaged' },
+    { name: 'Tyre Puncture / Sidewall Cut', price: 250, category: 'Tyres', remark: 'Tyre puncture / cut repair' },
+    { name: 'Rear Grab Rail / Carrier Bent', price: 400, category: 'Chassis', remark: 'Rear carrier bent / loose' }
+  ];
+
+  // Return Inspection Handlers
+  const handleOpenInspectionModal = (returnItem: any) => {
+    setInspectingReturn(returnItem);
+    const existingDamages = Array.isArray(returnItem.damage_items)
+      ? returnItem.damage_items.map((d: any, idx: number) => ({
+          id: d.id || `dmg-${idx + 1}-${Date.now()}`,
+          part_name: d.part_name || '',
+          category: d.category || 'General',
+          quantity: Number(d.quantity) || 1,
+          unit_price: Number(d.unit_price) || 0,
+          total_price: Number(d.total_price) !== undefined ? Number(d.total_price) : (Number(d.quantity) || 1) * (Number(d.unit_price) || 0),
+          technician_remark: d.technician_remark || ''
+        }))
+      : [];
+    setInspectionDamages(existingDamages);
+    setInspectionMeterReading(returnItem.initial_meter_reading ? String(returnItem.initial_meter_reading) : '');
+    setCustomDamageItem({
+      part_name: '',
+      quantity: 1,
+      unit_price: '',
+      technician_remark: ''
+    });
+  };
+
+  const handleAddPresetDamage = (preset: { name: string; price: number; category: string; remark: string }) => {
+    const existingIndex = inspectionDamages.findIndex(d => d.part_name.toLowerCase() === preset.name.toLowerCase());
+    if (existingIndex >= 0) {
+      const updated = [...inspectionDamages];
+      const newQty = updated[existingIndex].quantity + 1;
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        quantity: newQty,
+        total_price: newQty * updated[existingIndex].unit_price
+      };
+      setInspectionDamages(updated);
+      showToast(`Increased quantity for ${preset.name}`);
+    } else {
+      setInspectionDamages([
+        ...inspectionDamages,
+        {
+          id: `dmg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          part_name: preset.name,
+          category: preset.category,
+          quantity: 1,
+          unit_price: preset.price,
+          total_price: preset.price,
+          technician_remark: preset.remark
+        }
+      ]);
+      showToast(`Added ${preset.name} (₹${preset.price})`);
+    }
+  };
+
+  const handleAddCustomDamage = () => {
+    if (!customDamageItem.part_name.trim()) {
+      alert('Please enter damaged part / issue description');
+      return;
+    }
+    const price = parseFloat(customDamageItem.unit_price) || 0;
+    const qty = Math.max(1, Number(customDamageItem.quantity) || 1);
+    setInspectionDamages([
+      ...inspectionDamages,
+      {
+        id: `dmg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        part_name: customDamageItem.part_name.trim(),
+        category: 'Custom',
+        quantity: qty,
+        unit_price: price,
+        total_price: qty * price,
+        technician_remark: customDamageItem.technician_remark.trim()
+      }
+    ]);
+    setCustomDamageItem({
+      part_name: '',
+      quantity: 1,
+      unit_price: '',
+      technician_remark: ''
+    });
+  };
+
+  const handleRemoveDamage = (id: string) => {
+    setInspectionDamages(inspectionDamages.filter(d => d.id !== id));
+  };
+
+  const handleUpdateDamageItem = (id: string, field: string, value: any) => {
+    setInspectionDamages(inspectionDamages.map(d => {
+      if (d.id !== id) return d;
+      const updated = { ...d, [field]: value };
+      if (field === 'quantity' || field === 'unit_price') {
+        const q = field === 'quantity' ? Math.max(1, Number(value) || 1) : d.quantity;
+        const p = field === 'unit_price' ? (parseFloat(value) || 0) : d.unit_price;
+        updated.quantity = q;
+        updated.unit_price = p;
+        updated.total_price = q * p;
+      }
+      return updated;
+    }));
+  };
+
+  const handleSubmitInspection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inspectingReturn) return;
+
+    try {
+      setSubmittingInspection(true);
+      const res = await adminApi.post(`/admin/returns/${inspectingReturn.id}/inspection`, {
+        damage_items: inspectionDamages,
+        meter_reading: inspectionMeterReading ? Number(inspectionMeterReading) : undefined
+      });
+
+      if (res && res.success) {
+        showToast('Damage inspection report submitted successfully!');
+        setInspectingReturn(null);
+        fetchData();
+      } else {
+        alert(res?.message || 'Failed to submit inspection report');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error submitting inspection');
+    } finally {
+      setSubmittingInspection(false);
+    }
+  };
+
   // Helper: Open WhatsApp
   const handleWhatsApp = (phone: string, name: string, complaintNo: string) => {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const formatted = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const msg = encodeURIComponent(`Hello ${name}, DOON RIDERS Technician here regarding breakdown ticket ${complaintNo}. I am on my way to your location.`);
+    const msg = encodeURIComponent(`Hello ${name}, DOON RIDERS Technician here regarding ticket ${complaintNo}.`);
     window.open(`https://wa.me/${formatted}?text=${msg}`, '_blank');
   };
 
@@ -685,6 +871,32 @@ export default function TechnicianJobsSummaryPage() {
   const totalAssignedWorkshop = jobs.length;
   const activeFieldComplaints = fieldComplaints.filter(c => c.status !== 'Closed');
   const activeEnRouteCount = fieldComplaints.filter(c => c.status === 'En Route' || c.status === 'Reached' || c.status === 'Work In Progress').length;
+  const pendingReturnsCount = returnInspections.filter(r => r.status === 'Pending Inspection' || r.status === 'Inspection in Progress').length;
+  const totalReturnsCount = returnInspections.length;
+
+  const [returnFilterTab, setReturnFilterTab] = useState<'ALL' | 'PENDING' | 'INSPECTED' | 'COMPLETED'>('ALL');
+
+  // Filtered Returns
+  const filteredReturns = returnInspections.filter(ret => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchNum = ret.return_number?.toLowerCase().includes(q);
+      const matchScoot = ret.scooter_number?.toLowerCase().includes(q);
+      const matchRider = ret.rider_name?.toLowerCase().includes(q);
+      const matchPhone = ret.rider_phone?.toLowerCase().includes(q);
+      if (!matchNum && !matchScoot && !matchRider && !matchPhone) return false;
+    }
+
+    if (returnFilterTab === 'PENDING') {
+      if (ret.status !== 'Pending Inspection' && ret.status !== 'Inspection in Progress') return false;
+    } else if (returnFilterTab === 'INSPECTED') {
+      if (ret.status !== 'Inspection Completed') return false;
+    } else if (returnFilterTab === 'COMPLETED') {
+      if (ret.status !== 'Completed') return false;
+    }
+
+    return true;
+  });
 
   // Filtered Workshop Jobs based on search, filterTab, priority, date
   const filteredJobs = jobs.filter(job => {
@@ -880,14 +1092,14 @@ export default function TechnicianJobsSummaryPage() {
         <div className="flex items-center gap-2 bg-[#F2F4F7] p-1.5 rounded-2xl border border-[#E5E7EB]">
           <button
             onClick={() => setWorkspaceMode('WORKSHOP')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'WORKSHOP'
                 ? 'bg-white text-[#111827] shadow-sm border border-[#E5E7EB]'
                 : 'text-[#667085] hover:text-[#111827]'
             }`}
           >
-            <Wrench className="w-4 h-4" />
-            <span>Workshop Jobs</span>
+            <Wrench className="w-3.5 h-3.5" />
+            <span>Workshop</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
               workspaceMode === 'WORKSHOP' ? 'bg-[#00D96B] text-[#0A0F1D]' : 'bg-slate-200 text-slate-700'
             }`}>
@@ -897,14 +1109,14 @@ export default function TechnicianJobsSummaryPage() {
 
           <button
             onClick={() => setWorkspaceMode('FIELD_COMPLAINTS')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'FIELD_COMPLAINTS'
                 ? 'bg-[#0A0F1D] text-white shadow-md'
                 : 'text-[#667085] hover:text-[#111827]'
             }`}
           >
-            <Radio className={`w-4 h-4 ${activeEnRouteCount > 0 ? 'text-[#00D96B] animate-pulse' : ''}`} />
-            <span>Field Complaints</span>
+            <Radio className={`w-3.5 h-3.5 ${activeEnRouteCount > 0 ? 'text-[#00D96B] animate-pulse' : ''}`} />
+            <span>Field</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
               activeEnRouteCount > 0
                 ? 'bg-red-500 text-white animate-pulse'
@@ -913,6 +1125,27 @@ export default function TechnicianJobsSummaryPage() {
                 : 'bg-slate-200 text-slate-700'
             }`}>
               {activeFieldComplaints.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setWorkspaceMode('RETURN_INSPECTIONS')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
+              workspaceMode === 'RETURN_INSPECTIONS'
+                ? 'bg-indigo-950 text-white shadow-md'
+                : 'text-[#667085] hover:text-[#111827]'
+            }`}
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${pendingReturnsCount > 0 ? 'text-amber-400' : ''}`} />
+            <span>Returns</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+              pendingReturnsCount > 0
+                ? 'bg-amber-400 text-amber-950'
+                : workspaceMode === 'RETURN_INSPECTIONS'
+                ? 'bg-[#00D96B] text-[#0A0F1D]'
+                : 'bg-slate-200 text-slate-700'
+            }`}>
+              {pendingReturnsCount}
             </span>
           </button>
         </div>
@@ -1542,6 +1775,257 @@ export default function TechnicianJobsSummaryPage() {
         )}
 
         {/* ========================================================================= */}
+        {/* TAB 3: SCOOTY RETURN INSPECTIONS WORKFLOW */}
+        {/* ========================================================================= */}
+        {workspaceMode === 'RETURN_INSPECTIONS' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Summary Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div
+                onClick={() => setReturnFilterTab('ALL')}
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  returnFilterTab === 'ALL'
+                    ? 'bg-white border-[#00D96B] shadow-sm ring-2 ring-[#00D96B]/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">All Returns</span>
+                <p className="text-xl font-black text-slate-900 mt-1">{returnInspections.length}</p>
+              </div>
+
+              <div
+                onClick={() => setReturnFilterTab('PENDING')}
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  returnFilterTab === 'PENDING'
+                    ? 'bg-amber-50 border-amber-400 shadow-sm ring-2 ring-amber-400/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Inspect Pending</span>
+                <p className="text-xl font-black text-amber-900 mt-1">{pendingReturnsCount}</p>
+              </div>
+
+              <div
+                onClick={() => setReturnFilterTab('INSPECTED')}
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  returnFilterTab === 'INSPECTED'
+                    ? 'bg-purple-50 border-purple-400 shadow-sm ring-2 ring-purple-400/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">Inspected</span>
+                <p className="text-xl font-black text-purple-900 mt-1">
+                  {returnInspections.filter(r => r.status === 'Inspection Completed').length}
+                </p>
+              </div>
+
+              <div
+                onClick={() => setReturnFilterTab('COMPLETED')}
+                className={`p-3 rounded-2xl border transition cursor-pointer select-none ${
+                  returnFilterTab === 'COMPLETED'
+                    ? 'bg-emerald-50 border-[#00D96B] shadow-sm ring-2 ring-[#00D96B]/20'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Settled & Closed</span>
+                <p className="text-xl font-black text-emerald-900 mt-1">
+                  {returnInspections.filter(r => r.status === 'Completed').length}
+                </p>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#98A2B3]" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search return by ticket #, scooty #, rider name or phone..."
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-[#E5E7EB] rounded-2xl text-xs font-semibold text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] transition shadow-xs"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#98A2B3] hover:text-[#111827]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Return Inspection Cards */}
+            {loading ? (
+              <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
+                <div className="w-8 h-8 rounded-full border-2 border-[#00D96B] border-t-transparent animate-spin mx-auto" />
+                <p className="text-xs text-slate-500 font-bold">Checking Return Inspections...</p>
+              </div>
+            ) : filteredReturns.length === 0 ? (
+              <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                </div>
+                <h3 className="text-sm font-black text-slate-900">No Return Inspections Found</h3>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  {search || returnFilterTab !== 'ALL'
+                    ? 'No return inspections match the current filter.'
+                    : 'You have no pending scooty return inspections assigned from Hub Incharge.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredReturns.map(ret => {
+                  const isPending = ret.status === 'Pending Inspection' || ret.status === 'Inspection in Progress';
+                  const isInspected = ret.status === 'Inspection Completed';
+                  const isCompleted = ret.status === 'Completed';
+                  const damageCount = Array.isArray(ret.damage_items) ? ret.damage_items.length : 0;
+
+                  return (
+                    <div
+                      key={ret.id}
+                      className={`bg-white rounded-3xl border transition-all p-4 sm:p-5 space-y-3 shadow-xs hover:shadow-md ${
+                        isPending
+                          ? 'border-amber-300 ring-2 ring-amber-300/20 bg-amber-50/10'
+                          : isInspected
+                          ? 'border-purple-300 bg-purple-50/10'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      {/* Top Header */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                            {ret.return_number}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>{ret.return_date} {ret.return_time || ''}</span>
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
+                          isPending
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : isInspected
+                            ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                            : isCompleted
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {ret.status}
+                        </span>
+                      </div>
+
+                      {/* Scooty & Hub Details */}
+                      <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scooty Number</span>
+                          <div className="flex items-center gap-1.5">
+                            <Bike className="w-4 h-4 text-emerald-600" />
+                            <span className="font-black font-mono text-slate-900 text-sm">{ret.scooter_number}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receiving Hub</span>
+                          <div className="flex items-center gap-1.5">
+                            <Building className="w-4 h-4 text-blue-600" />
+                            <span className="font-bold text-slate-900 truncate">{ret.hub_name}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Rider Contact Card */}
+                      <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{ret.rider_name}</p>
+                            <p className="text-[11px] font-mono text-slate-500">{ret.rider_phone}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <a
+                            href={`tel:${ret.rider_phone}`}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-[11px] flex items-center gap-1"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>Call</span>
+                          </a>
+                          <button
+                            onClick={() => handleWhatsApp(ret.rider_phone, ret.rider_name, ret.return_number)}
+                            className="p-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-bold"
+                            title="WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Damage Summary Box if already Inspected or Logged */}
+                      {damageCount > 0 ? (
+                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                            <span>Logged Damage Items ({damageCount})</span>
+                            <span className="text-red-600 font-extrabold">Est. Total: ₹{ret.gross_damage_total || 0}</span>
+                          </div>
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {ret.damage_items.map((dmg: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60">
+                                <span className="font-medium text-slate-800">{dmg.part_name} &times; {dmg.quantity || 1}</span>
+                                <span className="font-mono font-bold text-slate-900">₹{dmg.total_price || ((dmg.quantity || 1) * (dmg.unit_price || 0))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : isInspected ? (
+                        <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs flex items-center gap-2 text-emerald-800 font-bold">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Physical Inspection Completed: Zero damages found (Full Refund).</span>
+                        </div>
+                      ) : null}
+
+                      {/* Primary Action Button */}
+                      <div className="pt-1">
+                        {isPending ? (
+                          <button
+                            onClick={() => handleOpenInspectionModal(ret)}
+                            className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-98"
+                          >
+                            <Wrench className="w-4 h-4 stroke-[2.5]" />
+                            <span>INSPECT DAMAGED PARTS</span>
+                          </button>
+                        ) : isInspected ? (
+                          <button
+                            onClick={() => handleOpenInspectionModal(ret)}
+                            className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-700/20 transition cursor-pointer active:scale-98"
+                          >
+                            <FileText className="w-4 h-4" />
+                            <span>UPDATE DAMAGE SHEET / RE-INSPECT</span>
+                          </button>
+                        ) : (
+                          <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs flex items-center justify-between text-emerald-900 font-bold">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Settlement Closed by Hub Incharge</span>
+                            </span>
+                            <span className="font-mono">Refund: ₹{ret.refund_amount_to_rider || 0}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* MODAL: FIELD WORK DONE COMPLETION DRAWER */}
         {/* ========================================================================= */}
         {completingComplaint && (
@@ -1697,6 +2181,234 @@ export default function TechnicianJobsSummaryPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: TECHNICIAN DAMAGE SHEET BUILDER */}
+        {/* ========================================================================= */}
+        {inspectingReturn && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[94vh] overflow-y-auto animate-in slide-in-from-bottom duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">
+                    <Wrench className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">Scooty Damage Inspection Sheet</h2>
+                    <p className="text-[11px] text-slate-500">
+                      Ticket {inspectingReturn.return_number} &bull; Scooty: <b className="text-slate-900">{inspectingReturn.scooter_number}</b> &bull; Rider: {inspectingReturn.rider_name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setInspectingReturn(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Quick Select Preset Damages */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                  1-Tap Add Standard Damage Parts
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_DAMAGES.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleAddPresetDamage(preset)}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 border border-slate-200 text-slate-700 text-[11px] font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3 text-emerald-600" />
+                      <span>{preset.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500">(₹{preset.price})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Added Damage Items List */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                    Logged Damaged Parts ({inspectionDamages.length})
+                  </label>
+                  {inspectionDamages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setInspectionDamages([])}
+                      className="text-[10px] font-bold text-red-500 hover:underline"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+
+                {inspectionDamages.length === 0 ? (
+                  <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 text-center space-y-1">
+                    <p className="text-xs font-bold text-emerald-800">No damage items added yet</p>
+                    <p className="text-[11px] text-slate-500">
+                      If the scooty is in perfect condition with 0 damage, submit directly for 100% full security refund.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {inspectionDamages.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-black text-slate-900 text-xs">{item.part_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDamage(item.id)}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Quantity</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleUpdateDamageItem(item.id, 'quantity', e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-bold text-slate-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Unit Price (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.unit_price}
+                              onChange={(e) => handleUpdateDamageItem(item.id, 'unit_price', e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-bold text-slate-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Total (₹)</label>
+                            <div className="w-full px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 font-mono">
+                              ₹{item.total_price}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <input
+                            type="text"
+                            value={item.technician_remark || ''}
+                            onChange={(e) => handleUpdateDamageItem(item.id, 'technician_remark', e.target.value)}
+                            placeholder="Diagnostic observation / remark (e.g. broken casing, crack on side)..."
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-medium placeholder-slate-400"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add Custom Damage Item */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                  Add Other / Custom Damaged Part
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <div className="sm:col-span-2">
+                    <input
+                      type="text"
+                      value={customDamageItem.part_name}
+                      onChange={(e) => setCustomDamageItem({ ...customDamageItem, part_name: e.target.value })}
+                      placeholder="Damaged part / issue name..."
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={customDamageItem.unit_price}
+                      onChange={(e) => setCustomDamageItem({ ...customDamageItem, unit_price: e.target.value })}
+                      placeholder="Price (₹)..."
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomDamage}
+                    className="px-3 py-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-[#00D96B]" />
+                    <span>Add Item</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inspection Meter Reading */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Return Odometer / Meter Reading (km)
+                  </label>
+                  <input
+                    type="number"
+                    value={inspectionMeterReading}
+                    onChange={(e) => setInspectionMeterReading(e.target.value)}
+                    placeholder="e.g. 14500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
+                  />
+                </div>
+
+                {/* Gross Total Card */}
+                <div className="p-3 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Estimated Damage Total</span>
+                    <span className="text-xl font-black text-[#00D96B] font-mono">
+                      ₹{inspectionDamages.reduce((sum, d) => sum + (d.total_price || 0), 0)}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 max-w-[120px] text-right font-medium leading-tight">
+                    Hub Incharge will review & apply customer waivers.
+                  </span>
+                </div>
+              </div>
+
+              {/* Submit / Cancel Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setInspectingReturn(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitInspection}
+                  disabled={submittingInspection}
+                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer"
+                >
+                  {submittingInspection ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Submit Damage Sheet to Hub Incharge</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

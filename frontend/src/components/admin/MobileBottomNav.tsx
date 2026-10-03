@@ -23,7 +23,8 @@ import {
   Home,
   ClipboardList,
   User,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 
 export const MobileBottomNav: React.FC = () => {
@@ -67,6 +68,12 @@ export const MobileBottomNav: React.FC = () => {
           name: 'Repair Jobs',
           href: '/admin/repair-jobs',
           icon: Wrench,
+          show: true
+        },
+        {
+          name: 'Returns',
+          href: '/admin/returns',
+          icon: RotateCcw,
           show: true
         },
         {
@@ -122,6 +129,7 @@ export const MobileBottomNav: React.FC = () => {
       ].filter(item => item.show);
 
   const moreItems = [
+    { name: 'Scooty Returns', href: '/admin/returns', icon: RotateCcw, show: true },
     { name: 'Complaints', href: '/admin/complaints', icon: AlertCircle, show: hasPermission('complaints.view') },
     { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') },
     { name: 'Inventory', href: '/admin/inventory', icon: Boxes, show: hasPermission('inventory.view') },
