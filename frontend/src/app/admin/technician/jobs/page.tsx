@@ -185,7 +185,6 @@ export default function TechnicianJobsSummaryPage() {
   // Return to Hub State
   const [returnToHubComplaintId, setReturnToHubComplaintId] = useState<number | null>(null);
 
-  // Return Inspection Modal State (Technician Damage Sheet Builder)
   const [inspectingReturn, setInspectingReturn] = useState<any | null>(null);
   const [inspectionDamages, setInspectionDamages] = useState<Array<{
     id: string;
@@ -196,13 +195,6 @@ export default function TechnicianJobsSummaryPage() {
     total_price: number;
     technician_remark?: string;
   }>>([]);
-  const [customDamageItem, setCustomDamageItem] = useState({
-    part_name: '',
-    quantity: 1,
-    unit_price: '',
-    technician_remark: ''
-  });
-  const [inspectionMeterReading, setInspectionMeterReading] = useState<string>('');
   const [submittingInspection, setSubmittingInspection] = useState(false);
 
   const showToast = (msg: string) => {
@@ -718,27 +710,10 @@ export default function TechnicianJobsSummaryPage() {
     }
   };
 
-  // Preset Common Damage Items for Quick 1-Tap Entry by Technician
-  const PRESET_DAMAGES = [
-    { name: 'Horn (Defective / No Sound)', price: 250, category: 'Electrical', remark: 'Horn defective / switch faulty' },
-    { name: 'Left Side Rearview Mirror Broken', price: 180, category: 'Body', remark: 'Left mirror broken' },
-    { name: 'Right Side Rearview Mirror Broken', price: 180, category: 'Body', remark: 'Right mirror broken' },
-    { name: 'Front Fender / Mudguard Damaged', price: 450, category: 'Body', remark: 'Front mudguard cracked / broken' },
-    { name: 'Brake Lever (Left / Right) Broken', price: 220, category: 'Controls', remark: 'Brake lever bent / broken' },
-    { name: 'Headlight Assembly / Lens Broken', price: 650, category: 'Lighting', remark: 'Headlight glass cracked' },
-    { name: 'Tail Light / Indicator Damaged', price: 350, category: 'Lighting', remark: 'Tail light lens cracked' },
-    { name: 'Body Panel Scratch (Minor)', price: 300, category: 'Body', remark: 'Side cowl / apron paint scratches' },
-    { name: 'Body Panel Crack / Broken (Major)', price: 850, category: 'Body', remark: 'Body panel deep crack / broken bracket' },
-    { name: 'Seat Cover Torn / Damaged', price: 350, category: 'Accessories', remark: 'Seat skin torn' },
-    { name: 'Battery Compartment Lid / Lock Damaged', price: 400, category: 'Chassis', remark: 'Battery lock damaged' },
-    { name: 'Tyre Puncture / Sidewall Cut', price: 250, category: 'Tyres', remark: 'Tyre puncture / cut repair' },
-    { name: 'Rear Grab Rail / Carrier Bent', price: 400, category: 'Chassis', remark: 'Rear carrier bent / loose' }
-  ];
-
-  // Return Inspection Handlers
+  // Return Inspection Handlers (Matching Image 2: S.No, Item from Inventory, Qty Stepper, Price)
   const handleOpenInspectionModal = (returnItem: any) => {
     setInspectingReturn(returnItem);
-    const existingDamages = Array.isArray(returnItem.damage_items)
+    const existingDamages = Array.isArray(returnItem.damage_items) && returnItem.damage_items.length > 0
       ? returnItem.damage_items.map((d: any, idx: number) => ({
           id: d.id || `dmg-${idx + 1}-${Date.now()}`,
           part_name: d.part_name || '',
@@ -748,101 +723,137 @@ export default function TechnicianJobsSummaryPage() {
           total_price: Number(d.total_price) !== undefined ? Number(d.total_price) : (Number(d.quantity) || 1) * (Number(d.unit_price) || 0),
           technician_remark: d.technician_remark || ''
         }))
-      : [];
+      : [
+          {
+            id: `dmg-1-${Date.now()}`,
+            part_name: '',
+            category: 'General',
+            quantity: 1,
+            unit_price: 0,
+            total_price: 0,
+            technician_remark: ''
+          }
+        ];
     setInspectionDamages(existingDamages);
-    setInspectionMeterReading(returnItem.initial_meter_reading ? String(returnItem.initial_meter_reading) : '');
-    setCustomDamageItem({
-      part_name: '',
-      quantity: 1,
-      unit_price: '',
-      technician_remark: ''
-    });
   };
 
-  const handleAddPresetDamage = (preset: { name: string; price: number; category: string; remark: string }) => {
-    const existingIndex = inspectionDamages.findIndex(d => d.part_name.toLowerCase() === preset.name.toLowerCase());
-    if (existingIndex >= 0) {
-      const updated = [...inspectionDamages];
-      const newQty = updated[existingIndex].quantity + 1;
-      updated[existingIndex] = {
-        ...updated[existingIndex],
-        quantity: newQty,
-        total_price: newQty * updated[existingIndex].unit_price
-      };
-      setInspectionDamages(updated);
-      showToast(`Increased quantity for ${preset.name}`);
-    } else {
-      setInspectionDamages([
-        ...inspectionDamages,
-        {
-          id: `dmg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          part_name: preset.name,
-          category: preset.category,
-          quantity: 1,
-          unit_price: preset.price,
-          total_price: preset.price,
-          technician_remark: preset.remark
-        }
-      ]);
-      showToast(`Added ${preset.name} (₹${preset.price})`);
-    }
-  };
-
-  const handleAddCustomDamage = () => {
-    if (!customDamageItem.part_name.trim()) {
-      alert('Please enter damaged part / issue description');
-      return;
-    }
-    const price = parseFloat(customDamageItem.unit_price) || 0;
-    const qty = Math.max(1, Number(customDamageItem.quantity) || 1);
-    setInspectionDamages([
-      ...inspectionDamages,
+  const handleAddDamageRow = () => {
+    setInspectionDamages(prev => [
+      ...prev,
       {
         id: `dmg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        part_name: customDamageItem.part_name.trim(),
-        category: 'Custom',
-        quantity: qty,
-        unit_price: price,
-        total_price: qty * price,
-        technician_remark: customDamageItem.technician_remark.trim()
+        part_name: '',
+        category: 'General',
+        quantity: 1,
+        unit_price: 0,
+        total_price: 0,
+        technician_remark: ''
       }
     ]);
-    setCustomDamageItem({
-      part_name: '',
-      quantity: 1,
-      unit_price: '',
-      technician_remark: ''
-    });
   };
 
-  const handleRemoveDamage = (id: string) => {
-    setInspectionDamages(inspectionDamages.filter(d => d.id !== id));
-  };
-
-  const handleUpdateDamageItem = (id: string, field: string, value: any) => {
-    setInspectionDamages(inspectionDamages.map(d => {
-      if (d.id !== id) return d;
-      const updated = { ...d, [field]: value };
-      if (field === 'quantity' || field === 'unit_price') {
-        const q = field === 'quantity' ? Math.max(1, Number(value) || 1) : d.quantity;
-        const p = field === 'unit_price' ? (parseFloat(value) || 0) : d.unit_price;
-        updated.quantity = q;
-        updated.unit_price = p;
-        updated.total_price = q * p;
-      }
-      return updated;
+  const handleSelectInventoryItem = (rowId: string, partName: string) => {
+    const selected = inventoryList.find(i => i.part_name === partName);
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      const unitPrice = selected ? Number(selected.unit_price) || 0 : d.unit_price;
+      const qty = d.quantity || 1;
+      return {
+        ...d,
+        part_name: partName,
+        category: selected?.category || 'General',
+        unit_price: unitPrice,
+        total_price: qty * unitPrice
+      };
     }));
+  };
+
+  const handleIncrementQty = (rowId: string) => {
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      const newQty = (Number(d.quantity) || 1) + 1;
+      return {
+        ...d,
+        quantity: newQty,
+        total_price: newQty * (Number(d.unit_price) || 0)
+      };
+    }));
+  };
+
+  const handleDecrementQty = (rowId: string) => {
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      const newQty = Math.max(1, (Number(d.quantity) || 1) - 1);
+      return {
+        ...d,
+        quantity: newQty,
+        total_price: newQty * (Number(d.unit_price) || 0)
+      };
+    }));
+  };
+
+  const handleQuantityInput = (rowId: string, value: string) => {
+    const qty = Math.max(1, parseInt(value, 10) || 1);
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      return {
+        ...d,
+        quantity: qty,
+        total_price: qty * (Number(d.unit_price) || 0)
+      };
+    }));
+  };
+
+  const handlePriceInput = (rowId: string, value: string) => {
+    const price = Math.max(0, parseFloat(value) || 0);
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      return {
+        ...d,
+        unit_price: price,
+        total_price: (Number(d.quantity) || 1) * price
+      };
+    }));
+  };
+
+  const handleCustomNameInput = (rowId: string, value: string) => {
+    setInspectionDamages(prev => prev.map(d => {
+      if (d.id !== rowId) return d;
+      return {
+        ...d,
+        part_name: value
+      };
+    }));
+  };
+
+  const handleRemoveDamageRow = (rowId: string) => {
+    setInspectionDamages(prev => {
+      const remaining = prev.filter(d => d.id !== rowId);
+      return remaining.length > 0 ? remaining : [
+        {
+          id: `dmg-${Date.now()}`,
+          part_name: '',
+          category: 'General',
+          quantity: 1,
+          unit_price: 0,
+          total_price: 0,
+          technician_remark: ''
+        }
+      ];
+    });
   };
 
   const handleSubmitInspection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inspectingReturn) return;
 
+    // Filter out rows that have empty part name
+    const validDamages = inspectionDamages.filter(d => d.part_name && d.part_name.trim() !== '');
+
     try {
       setSubmittingInspection(true);
       const res = await adminApi.post(`/admin/returns/${inspectingReturn.id}/inspection`, {
-        damage_items: inspectionDamages,
-        meter_reading: inspectionMeterReading ? Number(inspectionMeterReading) : undefined
+        damage_items: validDamages
       });
 
       if (res && res.success) {
@@ -2186,7 +2197,7 @@ export default function TechnicianJobsSummaryPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* MODAL: TECHNICIAN DAMAGE SHEET BUILDER */}
+        {/* MODAL: DAMAGE PARTS (AS DRAWN IN IMAGE 2) */}
         {/* ========================================================================= */}
         {inspectingReturn && (
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -2198,191 +2209,170 @@ export default function TechnicianJobsSummaryPage() {
                     <Wrench className="w-5 h-5 stroke-[2.5]" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-slate-900">Scooty Damage Inspection Sheet</h2>
-                    <p className="text-[11px] text-slate-500">
-                      Ticket {inspectingReturn.return_number} &bull; Scooty: <b className="text-slate-900">{inspectingReturn.scooter_number}</b> &bull; Rider: {inspectingReturn.rider_name}
+                    <h2 className="text-lg font-black text-slate-900 tracking-tight">Damage Parts</h2>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Ticket: <span className="font-mono font-bold text-slate-800">{inspectingReturn.return_number}</span> &bull; Scooty: <span className="font-mono font-black text-emerald-700">{inspectingReturn.scooter_number}</span> &bull; Rider: <span className="font-bold text-slate-800">{inspectingReturn.rider_name}</span>
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setInspectingReturn(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Quick Select Preset Damages */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
-                  1-Tap Add Standard Damage Parts
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_DAMAGES.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleAddPresetDamage(preset)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 border border-slate-200 text-slate-700 text-[11px] font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3 text-emerald-600" />
-                      <span>{preset.name}</span>
-                      <span className="font-mono text-[10px] text-slate-500">(₹{preset.price})</span>
-                    </button>
-                  ))}
+              {/* Damage Parts Table (S.No | Item from Inventory | Qty [-] [1] [+] | Price) */}
+              <div className="space-y-3">
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-500 bg-slate-50/80">
+                        <th className="py-2.5 px-3 w-12 text-center">S.No</th>
+                        <th className="py-2.5 px-3">Item (Fetch from Inventory)</th>
+                        <th className="py-2.5 px-3 w-36 text-center">Qty</th>
+                        <th className="py-2.5 px-3 w-32 text-right">Price (₹)</th>
+                        <th className="py-2.5 px-2 w-10 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {inspectionDamages.map((row, index) => {
+                        const isCustom = row.part_name && !inventoryList.some(inv => inv.part_name === row.part_name);
+
+                        return (
+                          <tr key={row.id} className="hover:bg-slate-50/60 transition">
+                            {/* 1. S.No */}
+                            <td className="py-3 px-3 text-center font-mono font-black text-slate-700">
+                              {index + 1}
+                            </td>
+
+                            {/* 2. Item Selector from Inventory */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-1.5">
+                                <select
+                                  value={isCustom ? '__CUSTOM__' : row.part_name}
+                                  onChange={(e) => {
+                                    if (e.target.value === '__CUSTOM__') {
+                                      handleCustomNameInput(row.id, row.part_name || 'Custom Damaged Part');
+                                    } else {
+                                      handleSelectInventoryItem(row.id, e.target.value);
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-[#00D96B] shadow-xs cursor-pointer"
+                                >
+                                  <option value="">-- Select Item from Inventory --</option>
+                                  {inventoryList.map((inv) => (
+                                    <option key={inv.id} value={inv.part_name}>
+                                      {inv.part_name} (₹{inv.unit_price})
+                                    </option>
+                                  ))}
+                                  <option value="__CUSTOM__">+ Other / Custom Item (Type Name)</option>
+                                </select>
+
+                                {/* Custom Text Input if custom is selected */}
+                                {isCustom && (
+                                  <input
+                                    type="text"
+                                    value={row.part_name}
+                                    onChange={(e) => handleCustomNameInput(row.id, e.target.value)}
+                                    placeholder="Type damaged part name..."
+                                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                                  />
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 3. Quantity Stepper: [-] [ 1 ] [+] */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDecrementQty(row.id)}
+                                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-black text-sm flex items-center justify-center transition cursor-pointer border border-slate-200 select-none shadow-xs"
+                                  title="Decrease quantity"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={row.quantity}
+                                  onChange={(e) => handleQuantityInput(row.id, e.target.value)}
+                                  className="w-12 h-8 text-center bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:border-[#00D96B]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleIncrementQty(row.id)}
+                                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-black text-sm flex items-center justify-center transition cursor-pointer border border-slate-200 select-none shadow-xs"
+                                  title="Increase quantity"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* 4. Price (₹) */}
+                            <td className="py-3 px-3 text-right">
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={row.unit_price || ''}
+                                  onChange={(e) => handlePriceInput(row.id, e.target.value)}
+                                  placeholder="0"
+                                  className="w-full pl-6 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl text-right text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-[#00D96B] shadow-xs"
+                                />
+                              </div>
+                              {row.quantity > 1 && (
+                                <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
+                                  Total: ₹{row.total_price}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* 5. Delete Row Button */}
+                            <td className="py-3 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDamageRow(row.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="Remove item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
+
+                {/* + Add Damage Part Button */}
+                <button
+                  type="button"
+                  onClick={handleAddDamageRow}
+                  className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-200 hover:border-[#00D96B] hover:bg-emerald-50/50 text-slate-700 hover:text-emerald-800 text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                >
+                  <Plus className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                  <span>+ Add Damage Part</span>
+                </button>
               </div>
 
-              {/* Added Damage Items List */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-                    Logged Damaged Parts ({inspectionDamages.length})
-                  </label>
-                  {inspectionDamages.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setInspectionDamages([])}
-                      className="text-[10px] font-bold text-red-500 hover:underline"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-
-                {inspectionDamages.length === 0 ? (
-                  <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 text-center space-y-1">
-                    <p className="text-xs font-bold text-emerald-800">No damage items added yet</p>
-                    <p className="text-[11px] text-slate-500">
-                      If the scooty is in perfect condition with 0 damage, submit directly for 100% full security refund.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {inspectionDamages.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-black text-slate-900 text-xs">{item.part_name}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDamage(item.id)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Quantity</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => handleUpdateDamageItem(item.id, 'quantity', e.target.value)}
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-bold text-slate-900"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Unit Price (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.unit_price}
-                              onChange={(e) => handleUpdateDamageItem(item.id, 'unit_price', e.target.value)}
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-bold text-slate-900"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Total (₹)</label>
-                            <div className="w-full px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 font-mono">
-                              ₹{item.total_price}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <input
-                            type="text"
-                            value={item.technician_remark || ''}
-                            onChange={(e) => handleUpdateDamageItem(item.id, 'technician_remark', e.target.value)}
-                            placeholder="Diagnostic observation / remark (e.g. broken casing, crack on side)..."
-                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-medium placeholder-slate-400"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Add Custom Damage Item */}
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
-                  Add Other / Custom Damaged Part
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                  <div className="sm:col-span-2">
-                    <input
-                      type="text"
-                      value={customDamageItem.part_name}
-                      onChange={(e) => setCustomDamageItem({ ...customDamageItem, part_name: e.target.value })}
-                      placeholder="Damaged part / issue name..."
-                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={customDamageItem.unit_price}
-                      onChange={(e) => setCustomDamageItem({ ...customDamageItem, unit_price: e.target.value })}
-                      placeholder="Price (₹)..."
-                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddCustomDamage}
-                    className="px-3 py-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-[#00D96B]" />
-                    <span>Add Item</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Inspection Meter Reading */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {/* Total Damage Summary Card */}
+              <div className="p-3.5 bg-slate-900 text-white rounded-2xl flex items-center justify-between shadow-md">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Return Odometer / Meter Reading (km)
-                  </label>
-                  <input
-                    type="number"
-                    value={inspectionMeterReading}
-                    onChange={(e) => setInspectionMeterReading(e.target.value)}
-                    placeholder="e.g. 14500"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
-                  />
-                </div>
-
-                {/* Gross Total Card */}
-                <div className="p-3 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Estimated Damage Total</span>
-                    <span className="text-xl font-black text-[#00D96B] font-mono">
-                      ₹{inspectionDamages.reduce((sum, d) => sum + (d.total_price || 0), 0)}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 max-w-[120px] text-right font-medium leading-tight">
-                    Hub Incharge will review & apply customer waivers.
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    Total Estimated Damage
                   </span>
+                  <span className="text-xl font-black text-[#00D96B] font-mono">
+                    ₹{inspectionDamages.reduce((sum, d) => sum + (d.total_price || 0), 0)}
+                  </span>
+                </div>
+                <div className="text-right text-[10px] text-slate-400 max-w-[180px] font-medium leading-tight">
+                  Hub Incharge will review items & apply waivers during final settlement.
                 </div>
               </div>
 
@@ -2391,7 +2381,7 @@ export default function TechnicianJobsSummaryPage() {
                 <button
                   type="button"
                   onClick={() => setInspectingReturn(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 text-xs"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 text-xs hover:bg-slate-50 transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -2399,7 +2389,7 @@ export default function TechnicianJobsSummaryPage() {
                   type="button"
                   onClick={handleSubmitInspection}
                   disabled={submittingInspection}
-                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer active:scale-95 transition"
                 >
                   {submittingInspection ? (
                     <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />

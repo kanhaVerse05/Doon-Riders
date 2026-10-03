@@ -893,7 +893,7 @@ export default function ScootyReturnsListPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Return Date */}
                   <div>
                     <label className="block text-xs font-extrabold text-slate-700 mb-1">
@@ -904,7 +904,7 @@ export default function ScootyReturnsListPage() {
                       required
                       value={newReturnForm.return_date}
                       onChange={e => setNewReturnForm(prev => ({ ...prev, return_date: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
                     />
                   </div>
 
@@ -918,21 +918,7 @@ export default function ScootyReturnsListPage() {
                       required
                       value={newReturnForm.return_time}
                       onChange={e => setNewReturnForm(prev => ({ ...prev, return_time: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                    />
-                  </div>
-
-                  {/* Meter Reading */}
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                      Odometer (KM)
-                    </label>
-                    <input
-                      type="number"
-                      value={newReturnForm.initial_meter_reading}
-                      onChange={e => setNewReturnForm(prev => ({ ...prev, initial_meter_reading: e.target.value }))}
-                      placeholder="e.g. 4520"
-                      className="w-full px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
                     />
                   </div>
                 </div>
