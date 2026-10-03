@@ -698,9 +698,9 @@ export default function ScootyRecoveryDetailPage() {
                   <p className="text-base font-black text-red-600">+ ₹{recoveryChargeInput}</p>
                 </div>
 
-                <div className="p-3 bg-slate-900 text-white rounded-2xl border border-slate-900 space-y-0.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Charges</span>
-                  <p className="text-base font-black text-[#00D96B]">₹{liveCalc.totalCharges}</p>
+                <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Total Charges</span>
+                  <p className="text-base font-black text-emerald-700">₹{liveCalc.totalCharges}</p>
                 </div>
               </div>
 

@@ -667,7 +667,7 @@ export default function ScootyRecoveriesListPage() {
         {/* Modal: Create New Scooty Recovery */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-            <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-lg p-5 sm:p-7 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-xl p-5 sm:p-7 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
@@ -754,22 +754,23 @@ export default function ScootyRecoveriesListPage() {
                   </div>
                 </div>
 
-                {/* Recovered By & Date & Time */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-extrabold mb-1">
-                      Recovered By <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Karan Joshi / Recovery Team"
-                      value={newRecoveryForm.recovered_by}
-                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovered_by: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                    />
-                  </div>
+                {/* Recovered By Staff */}
+                <div>
+                  <label className="block text-slate-700 font-extrabold mb-1">
+                    Recovered By (Staff / Incharge Name) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Karan Joshi / Recovery Team"
+                    value={newRecoveryForm.recovered_by}
+                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovered_by: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                  />
+                </div>
 
+                {/* Recovery Date & Time (2 Equal Columns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-extrabold mb-1">
                       Recovery Date
@@ -795,48 +796,60 @@ export default function ScootyRecoveriesListPage() {
                   </div>
                 </div>
 
-                {/* Fixed Recovery Charge & Security Deposit */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 bg-red-50/70 rounded-2xl border border-red-200 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-red-900 font-extrabold text-[11px] uppercase tracking-wider">
+                {/* Fixed Recovery Charge & Security Deposit (Clean Aligned Cards) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Card 1: Fixed Recovery Charge */}
+                  <div className="p-3.5 bg-red-50/50 rounded-2xl border border-red-200/80 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-extrabold text-red-900 tracking-tight">
                         Fixed Recovery Charge
-                      </label>
-                      <span className="text-[10px] font-extrabold bg-red-200 text-red-900 px-2 py-0.2 rounded-full">
+                      </span>
+                      <span className="text-[10px] font-extrabold bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
                         Standard Fee
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 font-mono font-black text-red-800 text-sm">
-                      <span>₹</span>
+
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-slate-400 font-mono font-black text-sm">₹</span>
                       <input
                         type="number"
+                        min="0"
                         value={newRecoveryForm.recovery_charge}
                         onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_charge: Number(e.target.value) }))}
-                        className="w-full bg-transparent font-mono font-black text-red-900 text-sm focus:outline-none"
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-red-200 rounded-xl font-mono font-black text-slate-900 text-sm focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 shadow-xs"
                       />
                     </div>
-                    <p className="text-[10px] text-red-700">Added to total damages during final settlement.</p>
+
+                    <p className="text-[10px] text-red-700/90 font-medium leading-tight">
+                      Added to payable damages during final settlement.
+                    </p>
                   </div>
 
-                  <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-emerald-900 font-extrabold text-[11px] uppercase tracking-wider">
+                  {/* Card 2: Security Deposit Paid */}
+                  <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-extrabold text-emerald-900 tracking-tight">
                         Security Deposit Paid
-                      </label>
-                      <span className="text-[10px] font-extrabold bg-emerald-200 text-emerald-900 px-2 py-0.2 rounded-full">
+                      </span>
+                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">
                         Collected
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 font-mono font-black text-emerald-800 text-sm">
-                      <span>₹</span>
+
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-slate-400 font-mono font-black text-sm">₹</span>
                       <input
                         type="number"
+                        min="0"
                         value={newRecoveryForm.security_deposit_amount}
                         onChange={e => setNewRecoveryForm(prev => ({ ...prev, security_deposit_amount: Number(e.target.value) }))}
-                        className="w-full bg-transparent font-mono font-black text-emerald-900 text-sm focus:outline-none"
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-emerald-200 rounded-xl font-mono font-black text-slate-900 text-sm focus:outline-none focus:border-[#00D96B] focus:ring-1 focus:ring-[#00D96B] shadow-xs"
                       />
                     </div>
-                    <p className="text-[10px] text-emerald-700">Subtracted from (Damages + Recovery Fee).</p>
+
+                    <p className="text-[10px] text-emerald-700/90 font-medium leading-tight">
+                      Subtracted from (Damages + Recovery Fee).
+                    </p>
                   </div>
                 </div>
 
