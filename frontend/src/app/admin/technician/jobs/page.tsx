@@ -2361,17 +2361,17 @@ export default function TechnicianJobsSummaryPage() {
                 </button>
               </div>
 
-              {/* Total Damage Summary Card */}
-              <div className="p-3.5 bg-slate-900 text-white rounded-2xl flex items-center justify-between shadow-md">
+              {/* Total Damage Summary Card (White & Green Theme) */}
+              <div className="p-4 bg-emerald-50/70 border border-emerald-200 text-slate-900 rounded-2xl flex items-center justify-between shadow-xs">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                  <span className="text-[10px] text-emerald-800 font-extrabold uppercase tracking-wider block">
                     Total Estimated Damage
                   </span>
-                  <span className="text-xl font-black text-[#00D96B] font-mono">
+                  <span className="text-xl font-black text-emerald-700 font-mono">
                     ₹{inspectionDamages.reduce((sum, d) => sum + (d.total_price || 0), 0)}
                   </span>
                 </div>
-                <div className="text-right text-[10px] text-slate-400 max-w-[180px] font-medium leading-tight">
+                <div className="text-right text-[11px] text-slate-600 max-w-[200px] font-medium leading-tight">
                   Hub Incharge will review items & apply waivers during final settlement.
                 </div>
               </div>

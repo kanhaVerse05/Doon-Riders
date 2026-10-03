@@ -735,24 +735,24 @@ export default function ScootyReturnsListPage() {
                       )}
                     </div>
 
-                    {/* 4. Financial Settlement Breakdown */}
-                    <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-1 font-mono">
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    {/* 4. Financial Settlement Breakdown (Clean White & Green Theme) */}
+                    <div className="p-3.5 bg-emerald-50/70 text-slate-900 rounded-2xl border border-emerald-200/80 space-y-1 font-mono">
+                      <div className="flex items-center justify-between text-[10px] text-slate-600">
                         <span>Security Deposit:</span>
-                        <span className="text-white font-bold">₹{item.security_deposit_amount}</span>
+                        <span className="text-slate-900 font-bold">₹{item.security_deposit_amount}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <div className="flex items-center justify-between text-[10px] text-slate-600">
                         <span>Payable Damages:</span>
-                        <span className="text-amber-400 font-bold">₹{item.payable_damage_total || 0}</span>
+                        <span className="text-amber-800 font-bold">₹{item.payable_damage_total || 0}</span>
                       </div>
-                      <div className="pt-1 border-t border-slate-800 flex items-center justify-between text-xs">
-                        <span className="text-slate-300 font-bold text-[11px]">
+                      <div className="pt-1 border-t border-emerald-200/60 flex items-center justify-between text-xs">
+                        <span className="text-slate-700 font-bold text-[11px]">
                           {item.settlement_type === 'DUE_FROM_RIDER' ? 'Rider Due:' : 'Rider Refund:'}
                         </span>
                         <span className={`font-black text-sm ${
                           item.settlement_type === 'DUE_FROM_RIDER'
-                            ? 'text-red-400'
-                            : 'text-[#00D96B]'
+                            ? 'text-red-600'
+                            : 'text-[#00A854]'
                         }`}>
                           ₹{item.settlement_type === 'DUE_FROM_RIDER' ? item.due_amount_from_rider : item.refund_amount_to_rider}
                         </span>

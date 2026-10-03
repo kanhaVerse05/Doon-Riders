@@ -492,12 +492,12 @@ export default function ScootyReturnDetailPage() {
                   )}
                 </div>
 
-                <div className="p-3 bg-[#0A0F1D] text-white rounded-2xl">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Security Deposit</span>
-                  <p className="text-base font-black text-[#00D96B] mt-0.5 font-mono">
+                <div className="p-3 bg-emerald-50 text-emerald-950 border border-emerald-200 rounded-2xl">
+                  <span className="text-[10px] font-extrabold text-emerald-800 uppercase">Security Deposit</span>
+                  <p className="text-base font-black text-emerald-900 mt-0.5 font-mono">
                     ₹{returnRecord.security_deposit_amount}
                   </p>
-                  <span className="text-[9px] text-slate-400 block font-mono">Paid at time of rental</span>
+                  <span className="text-[9px] text-emerald-700 block font-mono">Paid at time of rental</span>
                 </div>
               </div>
 
@@ -617,7 +617,7 @@ export default function ScootyReturnDetailPage() {
                                   onClick={() => handleItemRemarkTypeChange(item.id, 'Charge Customer')}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                                     item.hub_remark_type === 'Charge Customer'
-                                      ? 'bg-[#0A0F1D] text-white shadow-xs'
+                                      ? 'bg-slate-900 text-white shadow-xs'
                                       : 'text-slate-600 hover:bg-slate-100'
                                   }`}
                                 >
@@ -686,64 +686,64 @@ export default function ScootyReturnDetailPage() {
               )}
             </div>
 
-            {/* 3. Interactive Smart Financial Calculation & Settlement Box */}
-            <div className="bg-[#0A0F1D] text-white p-5 sm:p-6 rounded-3xl border border-slate-800 shadow-xl space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            {/* 3. Interactive Smart Financial Calculation & Settlement Box (Clean White & Green Theme) */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#00D96B]/20 border border-[#00D96B]/40 text-[#00D96B] flex items-center justify-center font-bold">
-                    <DollarSign className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00A854] flex items-center justify-center font-bold">
+                    <DollarSign className="w-4 h-4 stroke-[2.5]" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-white">Smart Security & Damage Settlement</h3>
-                    <p className="text-[11px] text-slate-400">Automated net refund & penalty computation</p>
+                    <h3 className="text-sm font-black text-slate-900">Smart Security & Damage Settlement</h3>
+                    <p className="text-[11px] text-slate-500">Automated net refund & penalty computation</p>
                   </div>
                 </div>
 
-                <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-900 text-[#00D96B] border border-slate-700 font-bold">
+                <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-50 text-[#00A854] border border-emerald-200 font-bold">
                   Auto-Balanced
                 </span>
               </div>
 
               {/* Math Summary Line */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-                <div className="p-3 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-0.5">
-                  <span className="text-[10px] text-slate-400">Security Collected</span>
-                  <p className="text-base font-black text-white">₹{securityDepositInput}</p>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Security Collected</span>
+                  <p className="text-base font-black text-slate-900">₹{securityDepositInput}</p>
                 </div>
 
-                <div className="p-3 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-0.5">
-                  <span className="text-[10px] text-slate-400">Total Inspected</span>
-                  <p className="text-base font-black text-slate-300">₹{liveCalc.grossTotal}</p>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Inspected</span>
+                  <p className="text-base font-black text-slate-800">₹{liveCalc.grossTotal}</p>
                 </div>
 
-                <div className="p-3 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-0.5">
-                  <span className="text-[10px] text-amber-400 font-bold">Waived Off (₹0)</span>
-                  <p className="text-base font-black text-amber-400">- ₹{liveCalc.waivedTotal}</p>
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Waived Off (₹0)</span>
+                  <p className="text-base font-black text-amber-700">- ₹{liveCalc.waivedTotal}</p>
                 </div>
 
-                <div className="p-3 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-0.5">
-                  <span className="text-[10px] text-red-400 font-bold">Payable Damage</span>
-                  <p className="text-base font-black text-red-400">₹{liveCalc.payableTotal}</p>
+                <div className="p-3 bg-red-50 rounded-2xl border border-red-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Payable Damage</span>
+                  <p className="text-base font-black text-red-600">₹{liveCalc.payableTotal}</p>
                 </div>
               </div>
 
               {/* Final Settlement Result Banner */}
               <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                 liveCalc.settlementType === 'DUE_FROM_RIDER'
-                  ? 'bg-red-950/50 border-red-500/40 text-red-200'
-                  : 'bg-emerald-950/50 border-[#00D96B]/40 text-emerald-200'
+                  ? 'bg-red-50 border-red-200 text-red-950'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
               }`}>
                 <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest font-black block text-slate-400">
+                  <span className="text-[10px] uppercase font-mono tracking-widest font-black block text-slate-500">
                     Final Net Settlement Outcome:
                   </span>
-                  <h4 className="text-lg sm:text-xl font-black mt-0.5 text-white font-mono">
+                  <h4 className="text-lg sm:text-xl font-black mt-0.5 text-slate-900 font-mono">
                     {liveCalc.settlementType === 'FULL_REFUND' && `Full Security Refund: ₹${liveCalc.refundAmount}`}
                     {liveCalc.settlementType === 'PARTIAL_REFUND' && `Balance Refund to Rider: ₹${liveCalc.refundAmount}`}
                     {liveCalc.settlementType === 'ZERO_BALANCE' && `Zero Balance (Security Exactly Covered Damage)`}
                     {liveCalc.settlementType === 'DUE_FROM_RIDER' && `Extra Amount Due from Rider: ₹${liveCalc.dueAmount}`}
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-slate-600 mt-0.5 font-medium">
                     {liveCalc.settlementType === 'DUE_FROM_RIDER'
                       ? `Security of ₹${securityDepositInput} was exhausted. Rider must pay remaining ₹${liveCalc.dueAmount}.`
                       : `₹${liveCalc.payableTotal} deducted from security deposit. Rider receives ₹${liveCalc.refundAmount} refund.`}
@@ -752,11 +752,11 @@ export default function ScootyReturnDetailPage() {
 
                 <div className="text-right font-mono self-end sm:self-auto">
                   <span className={`text-2xl sm:text-3xl font-black ${
-                    liveCalc.settlementType === 'DUE_FROM_RIDER' ? 'text-red-400' : 'text-[#00D96B]'
+                    liveCalc.settlementType === 'DUE_FROM_RIDER' ? 'text-red-600' : 'text-[#00A854]'
                   }`}>
                     ₹{liveCalc.settlementType === 'DUE_FROM_RIDER' ? liveCalc.dueAmount : liveCalc.refundAmount}
                   </span>
-                  <span className="block text-[10px] uppercase font-bold text-slate-400">
+                  <span className="block text-[10px] uppercase font-bold text-slate-500">
                     {liveCalc.settlementType === 'DUE_FROM_RIDER' ? 'Payable by Rider' : 'Refund to Rider'}
                   </span>
                 </div>
@@ -764,16 +764,16 @@ export default function ScootyReturnDetailPage() {
 
               {/* Payment Settlement Method Form (If not closed yet) */}
               {!isCompleted && (
-                <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="space-y-3.5 pt-2 border-t border-slate-100">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">
+                      <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
                         Refund / Payment Method
                       </label>
                       <select
                         value={paymentModeInput}
                         onChange={e => setPaymentModeInput(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-[#00D96B]"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-[#00D96B]"
                       >
                         <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
                         <option value="Cash">Cash at Hub Counter</option>
@@ -783,7 +783,7 @@ export default function ScootyReturnDetailPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">
+                      <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
                         UTR / Transaction Reference No
                       </label>
                       <input
@@ -791,13 +791,13 @@ export default function ScootyReturnDetailPage() {
                         value={paymentRefInput}
                         onChange={e => setPaymentRefInput(e.target.value)}
                         placeholder="e.g. UPI Ref # / Cash Receipt"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-[#00D96B]"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-[#00D96B]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">
+                    <label className="block text-[11px] font-extrabold text-slate-700 uppercase mb-1">
                       Hub Incharge Settlement Notes / Remarks
                     </label>
                     <textarea
@@ -805,7 +805,7 @@ export default function ScootyReturnDetailPage() {
                       value={settlementNotesInput}
                       onChange={e => setSettlementNotesInput(e.target.value)}
                       placeholder="e.g. Scooter inspected in presence of rider Rahul. Refund issued via UPI. Keys and helmet received in good shape."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-[#00D96B]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-[#00D96B]"
                     />
                   </div>
 
@@ -826,16 +826,16 @@ export default function ScootyReturnDetailPage() {
 
               {/* If already completed, show settled summary */}
               {isCompleted && (
-                <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 text-xs space-y-1">
-                  <div className="flex items-center justify-between text-[#00D96B] font-bold">
+                <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[#00A854] font-bold">
                     <span>Return Closed & Settled</span>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <p className="text-slate-300">
+                  <p className="text-slate-800">
                     Payment Mode: <b>{returnRecord.rider_payment_mode}</b> {returnRecord.rider_payment_reference ? `(Ref: ${returnRecord.rider_payment_reference})` : ''}
                   </p>
                   {returnRecord.settlement_notes && (
-                    <p className="text-slate-400 italic">Notes: "{returnRecord.settlement_notes}"</p>
+                    <p className="text-slate-600 italic">Notes: "{returnRecord.settlement_notes}"</p>
                   )}
                   {returnRecord.settled_at && (
                     <p className="text-[10px] text-slate-500 font-mono pt-1">
