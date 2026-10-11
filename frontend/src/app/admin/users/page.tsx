@@ -188,28 +188,25 @@ export default function UsersPage() {
       // Try Backend API
       try {
         const res = await adminApi.get('/admin/users');
-        if (res && res.success && res.data && res.data.length > 0) {
+        if (res && res.success && Array.isArray(res.data)) {
           const backendNonDemo = res.data.filter((u: any) => 
             u.email !== 'doonridersmain@gmail.com' && 
             u.id !== 1 && 
             !DEMO_EMAILS.includes(u.email?.toLowerCase())
           );
-          backendNonDemo.forEach((bu: any) => {
-            if (!customList.some(cu => cu.email === bu.email)) {
-              customList.push({
-                id: bu.id,
-                name: bu.name,
-                email: bu.email,
-                phone: bu.phone,
-                role_id: bu.role_id,
-                role_name: bu.role_name,
-                role_display_name: bu.role_display_name,
-                status: bu.status || 'active',
-                avatar_url: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : '',
-                is_super_admin: false
-              });
-            }
-          });
+          customList = backendNonDemo.map((bu: any) => ({
+            id: bu.id,
+            name: bu.name,
+            email: bu.email,
+            phone: bu.phone,
+            role_id: bu.role_id,
+            role_name: bu.role_name,
+            role_display_name: bu.role_display_name,
+            status: bu.status || 'active',
+            avatar_url: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : '',
+            is_super_admin: false
+          }));
+          localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
         }
       } catch (apiErr) {}
 
@@ -315,9 +312,9 @@ export default function UsersPage() {
       is_super_admin: false
     };
 
-    // 1. Try Backend API
+    // 1. Send to Backend API
     try {
-      await adminApi.post('/admin/users', {
+      const res = await adminApi.post('/admin/users', {
         name: newUser.name,
         email: newUser.email,
         phone: newUser.phone,
@@ -326,21 +323,38 @@ export default function UsersPage() {
         password,
         avatarUrl: newUser.avatar_url
       });
-    } catch (err) {
-      console.warn('API notice for user creation:', err);
+
+      if (!res?.success) {
+        setErrorToast(res?.message || 'Failed to create user in database.');
+        setCreating(false);
+        return;
+      }
+
+      if (res.data) {
+        newUser.id = res.data.id;
+        newUser.role_id = res.data.role_id;
+        newUser.role_name = res.data.role_name;
+        newUser.role_display_name = res.data.role_display_name;
+      }
+    } catch (err: any) {
+      setErrorToast(err?.message || 'Network error while creating user.');
+      setCreating(false);
+      return;
     }
 
-    // 2. Save locally
+    // 2. Save locally and update state
     const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
     const customList: TeamMember[] = storedCustomUsers ? JSON.parse(storedCustomUsers) : [];
     customList.push(newUser);
     localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
 
-    // Update state
-    setUsers(prev => [...prev, newUser]);
+    setUsers(prev => [...prev.filter(u => u.email !== newUser.email), newUser]);
     setSuccessToast(`Team member "${newUser.name}" with role "${targetRoleDisplayName}" created successfully!`);
     setCreating(false);
     setCreateModalOpen(false);
+
+    // Refresh from backend to ensure 100% sync
+    fetchUsers();
 
     // Reset Form
     setName('');

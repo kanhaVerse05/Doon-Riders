@@ -70,10 +70,10 @@ export const createUser = async (req: AuthRequest, res: Response) => {
           finalRoleName = existingRoleRes.rows[0].name;
         } else {
           const createRoleRes = await pool.query(
-            'INSERT INTO roles (name, display_name, description, is_system) VALUES ($1, $2, $3, FALSE)',
+            'INSERT INTO roles (name, display_name, description, is_system) VALUES ($1, $2, $3, FALSE) RETURNING id',
             [cleanCode, cleanCustomName, `Custom role: ${cleanCustomName}`]
           );
-          finalRoleId = createRoleRes.insertId || 1;
+          finalRoleId = createRoleRes.rows[0]?.id || 4;
           finalRoleDisplayName = cleanCustomName;
           finalRoleName = cleanCode;
         }
@@ -128,12 +128,14 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       const query = `
         INSERT INTO users (name, email, password_hash, phone, role_id, status, avatar_url)
         VALUES ($1, $2, $3, $4, $5, 'active', $6)
+        RETURNING id
       `;
 
       const result = await pool.query(query, [name, cleanEmail, hashedPassword, phone || null, finalRoleId, avatar_url || null]);
+      const newUserId = result.rows[0]?.id;
 
       const createdUser = {
-        id: result.insertId,
+        id: newUserId,
         name,
         email: cleanEmail,
         phone: phone || null,
@@ -151,7 +153,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         userRole: req.user?.roleName,
         action: 'CREATE',
         module: 'USERS',
-        recordId: result.insertId,
+        recordId: newUserId,
         notes: `Created new user ${name} with role ${finalRoleDisplayName}`
       });
 
