@@ -14,7 +14,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.deleted_at IS NULL
-          AND u.email NOT IN ('admin@doonriders.com', 'manager@doonriders.com', 'rahul.sales@doonriders.com', 'priya.sales@doonriders.com', 'amit.sales@doonriders.com')
+          AND u.email NOT IN ('admin@doonriders.com', 'manager@doonriders.com', 'rahul.sales@doonriders.com', 'priya.sales@doonriders.com', 'amit.sales@doonriders.com', 'amit.tech@doonriders.com', 'hub.isbt@doonriders.com')
         ORDER BY u.id ASC
       `;
       const result = await pool.query(query);

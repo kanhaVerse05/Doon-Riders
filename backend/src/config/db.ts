@@ -34,66 +34,6 @@ export const memoryStore = {
       role_id: 1,
       status: 'active',
       avatar_url: '/images/doon-riders-logo.png'
-    },
-    {
-      id: 2,
-      name: 'Ananya Negi',
-      email: 'admin@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98970 22222',
-      role_id: 2,
-      status: 'active',
-      avatar_url: '/images/avt-6-70x70.jpg'
-    },
-    {
-      id: 3,
-      name: 'Karan Joshi',
-      email: 'manager@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98970 33333',
-      role_id: 3,
-      status: 'active',
-      avatar_url: '/images/avt-2-70x70.jpg'
-    },
-    {
-      id: 4,
-      name: 'Rahul Verma',
-      email: 'rahul.sales@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98970 44444',
-      role_id: 4,
-      status: 'active',
-      avatar_url: '/images/avt-4-70x70.jpg'
-    },
-    {
-      id: 5,
-      name: 'Amit Sharma',
-      email: 'amit.tech@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98765 11001',
-      role_id: 6,
-      status: 'active',
-      avatar_url: '/images/avt-1-70x70.jpg'
-    },
-    {
-      id: 6,
-      name: 'Karan Joshi',
-      email: 'hub.isbt@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98970 33333',
-      role_id: 5,
-      status: 'active',
-      avatar_url: '/images/avt-3-70x70.jpg'
-    },
-    {
-      id: 7,
-      name: 'Priya Sharma',
-      email: 'support@doonriders.com',
-      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
-      phone: '+91 98970 77777',
-      role_id: 7,
-      status: 'active',
-      avatar_url: '/images/avt-5-70x70.jpg'
     }
   ],
   fleet: [
@@ -638,11 +578,7 @@ export const memoryStore = {
     { id: 4, hub_code: 'DR-HUB-04', hub_name: 'Clement Town Station', location: 'Subhash Nagar Chowk, Clement Town, Dehradun', incharge_name: 'Sunil Panwar', incharge_phone: '+91 98970 55555', is_active: true },
     { id: 5, hub_code: 'DR-HUB-05', hub_name: 'Prem Nagar Workshop', location: 'Chakrata Road, Prem Nagar, Dehradun', incharge_name: 'Mohit Chauhan', incharge_phone: '+91 98970 66666', is_active: true }
   ],
-  technicians: [
-    { id: 1, technician_code: 'TECH-101', name: 'Amit Sharma', phone: '+91 98765 11001', email: 'amit.tech@doonriders.com', hub_id: 1, hub_name: 'ISBT Main Service Hub', specialization: 'EV Powertrain & Battery', status: 'Available', active_jobs_count: 0, rating: 4.9 },
-    { id: 2, technician_code: 'TECH-102', name: 'Rajesh Rawat', phone: '+91 98765 11002', email: 'rajesh.tech@doonriders.com', hub_id: 2, hub_name: 'Rajpur Road EV Hub', specialization: 'Brakes, Suspension & Wiring', status: 'Available', active_jobs_count: 0, rating: 4.8 },
-    { id: 3, technician_code: 'TECH-103', name: 'Sandeep Negi', phone: '+91 98765 11003', email: 'sandeep.tech@doonriders.com', hub_id: 3, hub_name: 'Clock Tower City Hub', specialization: 'Motors & Electronic Controllers', status: 'Available', active_jobs_count: 0, rating: 4.7 }
-  ],
+  technicians: [] as any[],
   repairJobs: [] as any[],
   repairInspections: [] as any[],
   repairParts: [] as any[],
@@ -1245,17 +1181,6 @@ export const checkDbConnection = async (): Promise<boolean> => {
       }
     }
 
-    // 6. Seed Technicians if empty
-    const techCount = await pgPool.query('SELECT COUNT(*) FROM technicians');
-    if (parseInt(techCount.rows[0].count, 10) === 0) {
-      for (const t of memoryStore.technicians) {
-        await pgPool.query(`
-          INSERT INTO technicians (id, technician_code, name, phone, email, hub_id, hub_name, specialization, status, active_jobs_count, rating)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-          ON CONFLICT (technician_code) DO NOTHING
-        `, [t.id, t.technician_code, t.name, t.phone, t.email, t.hub_id, t.hub_name, t.specialization, t.status, t.active_jobs_count, t.rating]);
-      }
-    }
 
     // 7. Wipe out all transactional demo data from PostgreSQL so database starts 100% fresh
     await pgPool.query(`

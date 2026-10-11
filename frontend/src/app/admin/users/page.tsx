@@ -66,6 +66,11 @@ const DEMO_EMAILS = [
   'rahul.sales@doonriders.com',
   'priya.sales@doonriders.com',
   'amit.sales@doonriders.com',
+  'amit.tech@doonriders.com',
+  'hub.isbt@doonriders.com',
+  'rajesh.tech@doonriders.com',
+  'sandeep.tech@doonriders.com',
+  'support@doonriders.com',
   'demo@doonriders.com'
 ];
 
@@ -349,7 +354,7 @@ export default function UsersPage() {
     setTimeout(() => setSuccessToast(null), 4000);
   };
 
-  const handleDeleteUser = (userId: number, userName: string, isSuperAdmin?: boolean) => {
+  const handleDeleteUser = async (userId: number, userName: string, isSuperAdmin?: boolean) => {
     if (isSuperAdmin || userId === 1) {
       alert('Super Admin cannot be deleted.');
       return;
@@ -358,6 +363,10 @@ export default function UsersPage() {
     if (!confirm(`Are you sure you want to remove ${userName} from the team directory?`)) {
       return;
     }
+
+    try {
+      await adminApi.delete(`/admin/users/${userId}`);
+    } catch (e) {}
 
     const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
     if (storedCustomUsers) {
