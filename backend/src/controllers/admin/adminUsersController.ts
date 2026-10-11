@@ -188,17 +188,39 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = Number(id);
 
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID.' });
+    }
+
     if (getDbStatus()) {
-      const userRes = await pool.query('SELECT u.id, u.name, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [userId]);
+      const userRes = await pool.query(`
+        SELECT u.id, u.name, u.email, r.name as role_name 
+        FROM users u 
+        LEFT JOIN roles r ON u.role_id = r.id 
+        WHERE u.id = $1
+      `, [userId]);
+
       if (userRes.rows.length === 0) {
-        return res.status(404).json({ success: false, message: 'User not found.' });
+        return res.status(404).json({ success: false, message: 'User not found in database.' });
       }
 
-      if (userRes.rows[0].role_name === 'SUPER_ADMIN') {
+      const target = userRes.rows[0];
+
+      if (target.id === 1 || target.email === 'doonridersmain@gmail.com' || target.role_name === 'SUPER_ADMIN') {
         return res.status(403).json({ success: false, message: 'Super Admin cannot be deleted.' });
       }
 
-      await pool.query('UPDATE users SET deleted_at = NOW() WHERE id = $1', [userId]);
+      // 1. Unassign any leads assigned to this user to avoid FK constraint errors
+      await pool.query('UPDATE leads SET assigned_to = NULL WHERE assigned_to = $1', [userId]).catch(() => {});
+
+      // 2. Unassign repair jobs if any
+      await pool.query('UPDATE repair_jobs SET technician_id = NULL WHERE technician_id = $1', [userId]).catch(() => {});
+
+      // 3. Delete permanently from users table
+      await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+
+      // 4. Also clean up any technician entry matching email or name
+      await pool.query('DELETE FROM technicians WHERE email = $1 OR name = $2', [target.email, target.name]).catch(() => {});
 
       await logAuditEvent({
         userId: req.user?.id,
@@ -207,16 +229,16 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
         action: 'DELETE',
         module: 'USERS',
         recordId: userId,
-        notes: `Deleted user ${userRes.rows[0].name}`
+        notes: `Permanently deleted user ${target.name} (${target.email})`
       });
 
-      return res.json({ success: true, message: 'User deleted successfully.' });
+      return res.json({ success: true, message: `User ${target.name} permanently deleted from database.` });
     }
 
-    // Memory Store
+    // Memory Store Fallback
     const uIdx = memoryStore.users.findIndex(u => u.id === userId);
     if (uIdx !== -1) {
-      if (memoryStore.users[uIdx].role_id === 1) {
+      if (memoryStore.users[uIdx].role_id === 1 || memoryStore.users[uIdx].email === 'doonridersmain@gmail.com') {
         return res.status(403).json({ success: false, message: 'Super Admin cannot be deleted.' });
       }
       const deletedUser = memoryStore.users.splice(uIdx, 1)[0];
@@ -225,6 +247,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 
     return res.status(404).json({ success: false, message: 'User not found.' });
   } catch (err: any) {
+    console.error('[deleteUser error]:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

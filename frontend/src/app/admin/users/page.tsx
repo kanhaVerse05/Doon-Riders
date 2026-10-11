@@ -387,13 +387,20 @@ export default function UsersPage() {
       return;
     }
 
-    if (!confirm(`Are you sure you want to remove ${userName} from the team directory?`)) {
+    if (!confirm(`Are you sure you want to permanently remove "${userName}" from the team directory and database?`)) {
       return;
     }
 
     try {
-      await adminApi.delete(`/admin/users/${userId}`);
-    } catch (e) {}
+      const res = await adminApi.delete(`/admin/users/${userId}`);
+      if (!res?.success) {
+        setErrorToast(res?.message || 'Failed to delete user from database.');
+        return;
+      }
+    } catch (e: any) {
+      setErrorToast(e?.message || 'Network error while deleting user.');
+      return;
+    }
 
     const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
     if (storedCustomUsers) {
@@ -405,8 +412,11 @@ export default function UsersPage() {
     }
 
     setUsers(prev => prev.filter(u => u.id !== userId));
-    setSuccessToast(`Team member "${userName}" removed.`);
-    setTimeout(() => setSuccessToast(null), 3000);
+    setSuccessToast(`Team member "${userName}" permanently deleted from database.`);
+    setTimeout(() => setSuccessToast(null), 3500);
+
+    // Refresh from database to ensure 100% sync
+    fetchUsers();
   };
 
   const dynamicFilterRoles = ['ALL', ...Array.from(new Set([
