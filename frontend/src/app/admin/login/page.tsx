@@ -57,91 +57,22 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#EBF7F0] flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans select-none selection:bg-[#00D96B] selection:text-black">
-      {/* =========================================================================
-          BACKGROUND 3D SCENE & AMBIENT MINT GLOWS
-          ========================================================================= */}
-      {/* Background Soft Gradients */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#F5FAF7] via-[#E8F6EE] to-[#DCF2E6] pointer-events-none" />
-      <div className="absolute -top-32 -left-32 w-[520px] h-[520px] bg-[#00D96B]/15 rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-[580px] h-[580px] bg-[#00D96B]/15 rounded-full blur-[140px] pointer-events-none" />
-
-      {/* Top Left: 3D Torus / Ring & Diffuse Sphere */}
-      <div className="absolute top-10 left-8 sm:top-16 sm:left-20 w-36 h-36 rounded-full bg-[#00D96B]/25 blur-3xl pointer-events-none" />
-      <div className="absolute top-8 left-6 sm:top-14 sm:left-16 pointer-events-none opacity-75 rotate-[-22deg]">
-        <svg width="140" height="140" viewBox="0 0 160 160" fill="none">
-          <circle
-            cx="80"
-            cy="80"
-            r="52"
-            stroke="url(#topRingGrad)"
-            strokeWidth="16"
-            strokeDasharray="210 110"
-            strokeLinecap="round"
-          />
-          <defs>
-            <linearGradient id="topRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#00D96B" stopOpacity="0.85" />
-              <stop offset="60%" stopColor="#34D399" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#A7F3D0" stopOpacity="0.1" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-
-      {/* Top Right: Floating 3D Isometric Cube */}
-      <div className="absolute top-10 right-8 sm:top-14 sm:right-28 pointer-events-none opacity-85 rotate-[16deg] drop-shadow-[0_20px_25px_rgba(0,180,90,0.18)]">
-        <svg width="96" height="106" viewBox="0 0 100 110" fill="none">
-          {/* Top Face */}
-          <path d="M 50 8 L 88 30 L 50 52 L 12 30 Z" fill="url(#cubeTopFace)" />
-          {/* Left Face */}
-          <path d="M 12 30 L 50 52 L 50 96 L 12 74 Z" fill="url(#cubeLeftFace)" />
-          {/* Right Face */}
-          <path d="M 50 52 L 88 30 L 88 74 L 50 96 Z" fill="url(#cubeRightFace)" />
-          <defs>
-            <linearGradient id="cubeTopFace" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#C6F6D5" />
-              <stop offset="100%" stopColor="#68D391" />
-            </linearGradient>
-            <linearGradient id="cubeLeftFace" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#38A169" />
-              <stop offset="100%" stopColor="#22543D" />
-            </linearGradient>
-            <linearGradient id="cubeRightFace" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#2F855A" />
-              <stop offset="100%" stopColor="#1C4532" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-
-      {/* Bottom Left: Large Soft-Focus Gradient Sphere */}
-      <div className="absolute -bottom-8 -left-8 sm:bottom-6 sm:left-12 w-64 h-64 rounded-full bg-gradient-to-tr from-[#00D96B]/35 via-[#48BB78]/25 to-[#81E6D9]/20 blur-[54px] pointer-events-none" />
-
-      {/* Bottom Right: Floating 3D Tetrahedron / Prism */}
-      <div className="absolute bottom-12 right-6 sm:bottom-16 sm:right-24 pointer-events-none opacity-85 rotate-[-28deg] drop-shadow-[0_25px_30px_rgba(0,180,90,0.2)]">
-        <svg width="105" height="105" viewBox="0 0 110 110" fill="none">
-          {/* Front Slanted Face */}
-          <path d="M 55 10 L 98 86 L 20 74 Z" fill="url(#tetraFrontFace)" />
-          {/* Shaded Base Edge Face */}
-          <path d="M 20 74 L 98 86 L 66 102 Z" fill="url(#tetraBottomFace)" />
-          <defs>
-            <linearGradient id="tetraFrontFace" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#68D391" />
-              <stop offset="60%" stopColor="#00D96B" />
-              <stop offset="100%" stopColor="#00A854" />
-            </linearGradient>
-            <linearGradient id="tetraBottomFace" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#008F46" />
-              <stop offset="100%" stopColor="#004D24" />
-            </linearGradient>
-          </defs>
-        </svg>
+      {/* High-Resolution Reference Background Image */}
+      <div className="absolute inset-0 pointer-events-none">
+        <Image
+          src="/images/admin-login-bg.png"
+          alt="Doon Riders Admin Login Background"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center"
+        />
       </div>
 
       {/* =========================================================================
           STACKED GLASSMORPHIC CARDS CONTAINER
           ========================================================================= */}
-      <div className="relative w-full max-w-[430px] sm:max-w-[440px] z-10">
+      <div className="relative w-full max-w-[300px] sm:max-w-[320px] z-10">
         {/* Layer 3: Deepest Translucent Glass Sheet (Offset Left & Tilted) */}
         <div
           aria-hidden="true"
@@ -161,29 +92,35 @@ export default function AdminLoginPage() {
               DECORATIVE GREEN CURVED WAVES (CLIPPED INSIDE CARD)
               ===================================================================== */}
           {/* Top-Right Curved Green Swoop */}
-          <div className="absolute top-0 right-0 w-[165px] h-[105px] pointer-events-none overflow-hidden">
-            <svg
+          <div className="absolute top-0 right-0 w-[145px] h-[50px] pointer-events-none overflow-hidden">
+           <svg
               viewBox="0 0 165 105"
               fill="none"
               className="w-full h-full"
               preserveAspectRatio="none"
-            >
-              <path
-                d="M 0 0 C 42 40, 92 78, 165 65 L 165 0 Z"
-                fill="url(#topCardSwoop)"
-              />
-              <defs>
-                <linearGradient id="topCardSwoop" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#00E676" />
-                  <stop offset="45%" stopColor="#00D96B" />
-                  <stop offset="100%" stopColor="#00A854" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+             >
+           <path
+             d="M 0 0 C 30 25, 55 65, 105 82 C 130 90, 150 88, 165 82 L 165 0 Z"
+            fill="url(#topCardSwoop)"
+            />
+           <defs>
+          <linearGradient
+             id="topCardSwoop"
+             x1="0%"
+            y1="0%"
+        x2="100%"
+        y2="100%"
+      >
+        <stop offset="0%" stopColor="#00E676" />
+        <stop offset="45%" stopColor="#00D96B" />
+        <stop offset="100%" stopColor="#00A854" />
+            </linearGradient>
+            </defs>
+        </svg>
+</div>
 
           {/* Bottom-Left Curved Green Swoop */}
-          <div className="absolute bottom-0 left-0 w-[165px] h-[105px] pointer-events-none overflow-hidden">
+          <div className="absolute bottom-0 left-0 w-[145px] h-[50px] pointer-events-none overflow-hidden">
             <svg
               viewBox="0 0 165 105"
               fill="none"
