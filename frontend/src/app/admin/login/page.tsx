@@ -72,55 +72,27 @@ export default function AdminLoginPage() {
       {/* =========================================================================
           STACKED GLASSMORPHIC CARDS CONTAINER
           ========================================================================= */}
-      <div className="relative w-full max-w-[300px] sm:max-w-[320px] z-10">
+      <div className="relative w-full max-w-[390px] sm:max-w-[440px] z-10">
         {/* Layer 3: Deepest Translucent Glass Sheet (Offset Left & Tilted) */}
         <div
           aria-hidden="true"
-          className="absolute -left-6 sm:-left-8 -top-3.5 -bottom-3.5 w-full rounded-[44px] bg-white/30 backdrop-blur-md border border-white/60 shadow-[0_20px_50px_rgba(0,180,90,0.06)] -rotate-[3.6deg] pointer-events-none transition-transform"
+          className="absolute -left-3 sm:-left-6 -top-2 sm:-top-3.5 -bottom-2 sm:-bottom-3.5 w-full rounded-[36px] sm:rounded-[44px] bg-white/30 backdrop-blur-md border border-white/60 shadow-[0_20px_50px_rgba(0,180,90,0.06)] -rotate-[2.4deg] sm:-rotate-[3.6deg] pointer-events-none transition-transform"
         />
 
         {/* Layer 2: Middle Translucent Glass Sheet (Slight Offset & Tilted) */}
         <div
           aria-hidden="true"
-          className="absolute -left-3 sm:-left-4 -top-1.5 -bottom-1.5 w-full rounded-[42px] bg-white/50 backdrop-blur-md border border-white/75 shadow-[0_22px_60px_rgba(0,180,90,0.09)] -rotate-[1.8deg] pointer-events-none transition-transform"
+          className="absolute -left-1.5 sm:-left-3 -top-1 sm:-top-1.5 -bottom-1 sm:-bottom-1.5 w-full rounded-[34px] sm:rounded-[42px] bg-white/50 backdrop-blur-md border border-white/75 shadow-[0_22px_60px_rgba(0,180,90,0.09)] -rotate-[1.2deg] sm:-rotate-[1.8deg] pointer-events-none transition-transform"
         />
 
         {/* Layer 1: Foreground Main Card */}
-        <div className="relative bg-white rounded-[38px] sm:rounded-[40px] px-8 sm:px-9 pt-9 pb-10 shadow-[0_30px_90px_rgba(0,180,90,0.16),0_15px_35px_rgba(15,23,42,0.04)] border border-white/95 overflow-hidden">
+        <div className="relative bg-white rounded-[32px] sm:rounded-[40px] px-6 sm:px-9 pt-8 sm:pt-9 pb-8 sm:pb-10 shadow-[0_30px_90px_rgba(0,180,90,0.16),0_15px_35px_rgba(15,23,42,0.04)] border border-white/95 overflow-hidden">
           
           {/* =====================================================================
               DECORATIVE GREEN CURVED WAVES (CLIPPED INSIDE CARD)
               ===================================================================== */}
           {/* Top-Right Curved Green Swoop */}
-          <div className="absolute top-0 right-0 w-[145px] h-[50px] pointer-events-none overflow-hidden">
-           <svg
-              viewBox="0 0 165 105"
-              fill="none"
-              className="w-full h-full"
-              preserveAspectRatio="none"
-             >
-           <path
-             d="M 0 0 C 30 25, 55 65, 105 82 C 130 90, 150 88, 165 82 L 165 0 Z"
-            fill="url(#topCardSwoop)"
-            />
-           <defs>
-          <linearGradient
-             id="topCardSwoop"
-             x1="0%"
-            y1="0%"
-        x2="100%"
-        y2="100%"
-      >
-        <stop offset="0%" stopColor="#00E676" />
-        <stop offset="45%" stopColor="#00D96B" />
-        <stop offset="100%" stopColor="#00A854" />
-            </linearGradient>
-            </defs>
-        </svg>
-</div>
-
-          {/* Bottom-Left Curved Green Swoop */}
-          <div className="absolute bottom-0 left-0 w-[145px] h-[50px] pointer-events-none overflow-hidden">
+          <div className="absolute top-0 right-0 w-[140px] sm:w-[165px] h-[85px] sm:h-[105px] pointer-events-none overflow-hidden">
             <svg
               viewBox="0 0 165 105"
               fill="none"
@@ -128,7 +100,29 @@ export default function AdminLoginPage() {
               preserveAspectRatio="none"
             >
               <path
-                d="M 0 40 C 73 28, 123 65, 165 105 L 0 105 Z"
+                d="M 0 0 C 40 40, 90 75, 165 65 L 165 0 Z"
+                fill="url(#topCardSwoop)"
+              />
+              <defs>
+                <linearGradient id="topCardSwoop" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00E676" />
+                  <stop offset="45%" stopColor="#00D96B" />
+                  <stop offset="100%" stopColor="#00A854" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          {/* Bottom-Left Curved Green Swoop */}
+          <div className="absolute bottom-0 left-0 w-[140px] sm:w-[165px] h-[85px] sm:h-[105px] pointer-events-none overflow-hidden">
+            <svg
+              viewBox="0 0 165 105"
+              fill="none"
+              className="w-full h-full"
+              preserveAspectRatio="none"
+            >
+              <path
+                d="M 0 40 C 75 25, 125 65, 165 105 L 0 105 Z"
                 fill="url(#bottomCardSwoop)"
               />
               <defs>
