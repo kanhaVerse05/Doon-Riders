@@ -325,6 +325,19 @@ export default function UsersPage() {
       });
 
       if (!res?.success) {
+        const msg = res?.message || '';
+        if (msg.toLowerCase().includes('jwt expired') || msg.toLowerCase().includes('authentication failed')) {
+          setErrorToast('Session expired! Please log in again. Redirecting...');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('dr_admin_token');
+            localStorage.removeItem('dr_admin_user');
+            setTimeout(() => {
+              window.location.href = '/admin/login?session_expired=1';
+            }, 1200);
+          }
+          setCreating(false);
+          return;
+        }
         setErrorToast(res?.message || 'Failed to create user in database.');
         setCreating(false);
         return;

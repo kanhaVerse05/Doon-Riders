@@ -22,7 +22,20 @@ export const adminApi = {
       const data = await res.json().catch(() => ({ success: false, message: 'Invalid response from server' }));
       
       if (!res.ok) {
-        // Do NOT aggressively wipe session; allow graceful degradation
+        if (res.status === 401 && typeof window !== 'undefined') {
+          const errMsg = (data?.message || '').toLowerCase();
+          const isTokenProblem = errMsg.includes('jwt') || errMsg.includes('token') || errMsg.includes('expired') || errMsg.includes('auth');
+
+          if (isTokenProblem) {
+            console.warn('[adminApi] 401 Unauthorized / Token Expired:', data?.message);
+            localStorage.removeItem('dr_admin_token');
+            localStorage.removeItem('dr_admin_user');
+
+            if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
+              window.location.href = '/admin/login?session_expired=1';
+            }
+          }
+        }
         return data || { success: false, message: `Error HTTP ${res.status}` };
       }
 

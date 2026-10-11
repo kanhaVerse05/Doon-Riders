@@ -13,7 +13,17 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const router = useRouter();
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('session_expired') === '1' || searchParams.get('session_expired') === 'true') {
+        setSessionNotice('Your session has expired. Please enter your credentials to log in again.');
+      }
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,6 +180,14 @@ export default function AdminLoginPage() {
               Login to your Doon Riders Admin Portal
             </p>
           </div>
+
+          {/* Session Expired Notice */}
+          {sessionNotice && !error && (
+            <div className="relative z-10 mt-4 bg-amber-50/95 border border-amber-300 text-amber-800 px-3.5 py-2.5 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm flex items-center gap-2">
+              <span className="text-base leading-none">⚠️</span>
+              <span>{sessionNotice}</span>
+            </div>
+          )}
 
           {/* Error Message Toast/Alert */}
           {error && (
