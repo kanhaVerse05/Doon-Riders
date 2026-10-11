@@ -49,7 +49,7 @@ async function runEndToEndTests() {
     res.json({
       status: 'online',
       app: 'DOON Riders Backend & RBAC CRM API',
-      mysqlConnected: getDbStatus()
+      postgresConnected: getDbStatus()
     });
   });
 
