@@ -73,6 +73,55 @@ const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" 
   </svg>
 );
 
+// Helpers to format Date & Time in Indian Standard Time (IST)
+const formatIndianDateTime = (createdOrDate?: string, fallbackDate?: string): string => {
+  try {
+    const raw = createdOrDate || fallbackDate;
+    if (!raw) {
+      return new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
+    }
+
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return String(raw);
+
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
+  } catch (e) {
+    return createdOrDate || '';
+  }
+};
+
+const formatIndianDateOnly = (dateVal?: string): string => {
+  try {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch (e) {
+    return dateVal || '';
+  }
+};
+
 export default function PreBookingsAdminPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.roleName === 'SUPER_ADMIN';
@@ -411,24 +460,25 @@ export default function PreBookingsAdminPage() {
 
   // Generate WhatsApp Message
   const generateWhatsAppMessage = (b: PreBooking) => {
+    const formattedDateTime = formatIndianDateTime(b.created_at, b.booking_date);
+    const formattedAmount = Number(b.total_amount).toFixed(2);
+
     return (
 `🛵 *DOON RIDERS - OFFICIAL PRE-BOOKING CONFIRMATION* ⚡
 
 Hello *${b.customer_name}*, thank you for pre-booking your EV Scooty with DOON Riders!
 
 📄 *Booking Reference:* ${b.booking_code}
-📅 *Booking Date:* ${b.booking_date}
+📅 *Booking Date:* ${formattedDateTime}
 🛵 *EV Scooty Units:* ${b.quantity} Unit(s)
-💰 *Amount Paid:* ₹${b.total_amount} (PAID via ${b.payment_mode})
+💰 *Amount Paid:* ₹${formattedAmount} (PAID via ${b.payment_mode})
 ✅ *Payment Status:* PAID & CONFIRMED
 
 📍 *Pickup Hubs across Dehradun:*
-• Clock Tower Hub
-• Rajpur Road Station
-• Canal Road Hub (Premnagar / ISBT / Sewla Kalan)
+• Sahastradhara Rd, opposite Shiv Mandir, Kulhan, Kirsali, Dehradun, Uttarakhand 248013
 
-📞 *Customer Helpline:* +91 98970 11111 / +91 84394 31999
-🌐 *Website:* https://doonriders.com
+📞 *Customer Helpline:* +91 84394 31999
+🌐 *Website:* https://doonriders.in
 
 _Please present this receipt confirmation at the hub during vehicle handover._
 *DOON Riders — 100% Smart Electric Mobility in Dehradun*`
@@ -864,7 +914,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                       <td className="p-3.5 px-4 text-[#667085]">
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-[#98A2B3]" />
-                          <span>{booking.booking_date}</span>
+                          <span>{formatIndianDateOnly(booking.booking_date || booking.created_at)}</span>
                         </div>
                       </td>
 
@@ -1512,8 +1562,10 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                   <span className="font-mono font-bold text-[#0F172A] text-right">{selectedReceipt.mobile_number}</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">Booking Date:</span>
-                  <span className="font-medium text-[#0F172A] text-right">{selectedReceipt.booking_date}</span>
+                  <span className="text-[#64748B] font-medium">Booking Date &amp; Time:</span>
+                  <span className="font-medium text-[#0F172A] text-right">
+                    {formatIndianDateTime(selectedReceipt.created_at, selectedReceipt.booking_date)}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
                   <span className="text-[#64748B] font-medium">EV Scooty Quantity:</span>
@@ -1554,8 +1606,8 @@ _Please present this receipt confirmation at the hub during vehicle handover._
 
               {/* Receipt Footer */}
               <div className="text-center pt-2 border-t border-[#E5E7EB] space-y-1 text-[#64748B] text-[10px] leading-tight">
-                <p className="font-bold text-[#334155]">📍 Pickup Hubs: Clock Tower • Rajpur Road • Canal Road</p>
-                <p>Helpline: +91 98970 11111 | Website: https://doonriders.com</p>
+                <p className="font-bold text-[#334155]">📍 Pickup Hub: Sahastradhara Rd, opposite Shiv Mandir, Kulhan, Kirsali, Dehradun, Uttarakhand 248013</p>
+                <p>Helpline: +91 84394 31999 | Website: https://doonriders.in</p>
                 <p className="text-[9px] text-[#94A3B8] italic pt-0.5">Please present this receipt voucher at the hub during vehicle handover.</p>
               </div>
             </div>
