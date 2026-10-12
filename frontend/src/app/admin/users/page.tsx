@@ -317,12 +317,13 @@ export default function UsersPage() {
 
     // 1. Send to Backend API
     try {
+      const isTimestampRole = isCustom || (typeof targetRoleId === 'number' && targetRoleId > 1000000);
       const res = await adminApi.post('/admin/users', {
         name: newUser.name,
         email: newUser.email,
         phone: newUser.phone,
-        roleId: isCustom ? undefined : targetRoleId,
-        custom_role_name: isCustom ? targetRoleDisplayName : undefined,
+        roleId: isTimestampRole ? undefined : targetRoleId,
+        custom_role_name: isTimestampRole ? targetRoleDisplayName : undefined,
         password,
         avatar_url: newUser.avatar_url,
         avatarUrl: newUser.avatar_url

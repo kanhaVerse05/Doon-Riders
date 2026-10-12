@@ -103,10 +103,26 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       }
     } else if (finalRoleId) {
       if (getDbStatus()) {
-        const roleRes = await pool.query('SELECT name, display_name FROM roles WHERE id = $1', [finalRoleId]);
+        const roleRes = await pool.query('SELECT id, name, display_name FROM roles WHERE id = $1', [finalRoleId]);
         if (roleRes.rows.length > 0) {
+          finalRoleId = roleRes.rows[0].id;
           finalRoleName = roleRes.rows[0].name;
           finalRoleDisplayName = roleRes.rows[0].display_name;
+        } else {
+          // If the passed role ID does not exist in roles table, check for standard SALES_EXECUTIVE role
+          const fallbackRes = await pool.query("SELECT id, name, display_name FROM roles WHERE name = 'SALES_EXECUTIVE' LIMIT 1");
+          if (fallbackRes.rows.length > 0) {
+            finalRoleId = fallbackRes.rows[0].id;
+            finalRoleName = fallbackRes.rows[0].name;
+            finalRoleDisplayName = fallbackRes.rows[0].display_name;
+          } else {
+            const anyRoleRes = await pool.query("SELECT id, name, display_name FROM roles ORDER BY id ASC LIMIT 1");
+            if (anyRoleRes.rows.length > 0) {
+              finalRoleId = anyRoleRes.rows[0].id;
+              finalRoleName = anyRoleRes.rows[0].name;
+              finalRoleDisplayName = anyRoleRes.rows[0].display_name;
+            }
+          }
         }
       } else {
         const memoryRole = memoryStore.roles.find(r => r.id === finalRoleId);

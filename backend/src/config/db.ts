@@ -1293,19 +1293,17 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ALTER TABLE IF EXISTS scooty_recovery_events ENABLE ROW LEVEL SECURITY;
     `).catch(() => {});
 
-    // 1. Seed Roles if empty
-    const roleCount = await pgPool.query('SELECT COUNT(*) FROM roles');
-    if (parseInt(roleCount.rows[0].count, 10) === 0) {
-      await pgPool.query(`
-        INSERT INTO roles (id, name, display_name, description, is_system) VALUES
+    // 1. Seed Roles idempotently
+    await pgPool.query(`
+      INSERT INTO roles (id, name, display_name, description, is_system) VALUES
         (1, 'SUPER_ADMIN', 'Super Admin', 'Full Root System Access', TRUE),
         (3, 'MANAGER', 'Sales & Operations Manager', 'Sales overview & fleet dispatch', TRUE),
         (4, 'SALES_EXECUTIVE', 'Sales Executive', 'Direct rider onboarding & lead CRM', TRUE),
         (5, 'HUB_INCHARGE', 'Hub Incharge', 'Hub fleet, repair dispatch & billing control', FALSE),
         (6, 'TECHNICIAN', 'Technician', 'Scooter diagnostics, job card execution & parts replacement', FALSE),
-        (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE);
-      `);
-    }
+        (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE)
+      ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
+    `).catch(() => {});
 
     // Ensure Pre-Bookings permissions exist in permissions table
     await pgPool.query(`
