@@ -4,6 +4,22 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async rewrites() {
+    // Determine internal/backend destination for API proxying
+    const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    const targetBase = rawBackend.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${targetBase}/api/:path*`,
+      },
+      {
+        source: '/uploads/:path*',
+        destination: `${targetBase}/uploads/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

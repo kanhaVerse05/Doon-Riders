@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useAuth, AdminUser } from '../../context/AuthContext';
-import { LogOut, ExternalLink, Camera, User, X, Check, Upload, Bell, Server } from 'lucide-react';
+import { LogOut, ExternalLink, Camera, User, X, Check, Upload, Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -19,9 +19,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const { user, logout, isLoading, hasPermission } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [apiModalOpen, setApiModalOpen] = useState(false);
-  const [customApiUrl, setCustomApiUrl] = useState('');
-  const [apiSaveSuccess, setApiSaveSuccess] = useState(false);
   const [name, setName] = useState(user?.name || 'Staff User');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -166,19 +163,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   <ExternalLink className="w-3.5 h-3.5 text-[#00A854]" />
                 </Link>
 
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => {
-                      setCustomApiUrl(typeof window !== 'undefined' ? localStorage.getItem('dr_backend_api_url') || '' : '');
-                      setApiModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#EAFBF2] hover:text-[#00A854] hover:border-[#00D96B]/50 transition shadow-xs cursor-pointer"
-                    title="Configure Backend API URL"
-                  >
-                    <Server className="w-3.5 h-3.5 text-[#00A854]" />
-                    <span className="hidden sm:inline">API URL</span>
-                  </button>
-                )}
 
                 {/* Clickable User Profile Widget (Avatar with green status dot) */}
                 <button
@@ -364,93 +348,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* SUPER ADMIN BACKEND API CONFIG MODAL */}
-      {/* ========================================================= */}
-      {apiModalOpen && isSuperAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-md p-6 sm:p-8 shadow-2xl space-y-5 relative">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#EAFBF2] text-[#00A854] flex items-center justify-center font-bold">
-                  <Server className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111827]">Backend API Endpoint</h3>
-                  <p className="text-xs text-[#667085]">Point frontend to your Coolify / Live API</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setApiModalOpen(false)}
-                className="p-1.5 text-[#98A2B3] hover:text-[#111827] rounded-full"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                  API Base URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. http://187.126.124.18:5000/api or https://...sslip.io/api"
-                  value={customApiUrl}
-                  onChange={(e) => setCustomApiUrl(e.target.value)}
-                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] font-mono"
-                />
-                <p className="text-[11px] text-[#667085] mt-1.5">
-                  Currently configured:{' '}
-                  <strong className="text-[#00A854] font-mono break-all">
-                    {customApiUrl.trim() || (typeof window !== 'undefined' ? localStorage.getItem('dr_backend_api_url') : '') || 'Auto / Default'}
-                  </strong>
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  if (customApiUrl.trim()) {
-                    localStorage.setItem('dr_backend_api_url', customApiUrl.trim());
-                  } else {
-                    localStorage.removeItem('dr_backend_api_url');
-                  }
-                  setApiSaveSuccess(true);
-                  setTimeout(() => {
-                    setApiSaveSuccess(false);
-                    setApiModalOpen(false);
-                    window.location.reload();
-                  }, 600);
-                }}
-                className="w-full bg-[#00D96B] hover:bg-[#00A854] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {apiSaveSuccess ? (
-                  <>
-                    <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Saved &amp; Reloading...</span>
-                  </>
-                ) : (
-                  <span>SAVE &amp; APPLY API URL</span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  localStorage.removeItem('dr_backend_api_url');
-                  setCustomApiUrl('');
-                  window.location.reload();
-                }}
-                className="w-full py-2.5 text-xs font-bold text-[#667085] hover:bg-[#F3F4F6] rounded-xl transition border border-[#E5E7EB] flex items-center justify-center cursor-pointer"
-              >
-                Reset to Default
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

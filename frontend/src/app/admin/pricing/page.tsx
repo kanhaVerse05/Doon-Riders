@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import { getApiBase } from '../../../lib/adminApi';
 import {
   Tag,
   Plus,
@@ -71,7 +72,7 @@ export default function AdminPricingPage() {
   ]);
   const [newFeatureText, setNewFeatureText] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
+  const apiUrl = getApiBase();
 
   const fetchPlans = async () => {
     try {

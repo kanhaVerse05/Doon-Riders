@@ -1,28 +1,23 @@
 // API Client for DOON Riders Backend
 
 export function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    const custom = localStorage.getItem('dr_backend_api_url');
-    if (custom && custom.trim()) {
-      return custom.trim().replace(/\/+$/, '');
-    }
-  }
-
-  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim()) {
+  // 1. If explicit NEXT_PUBLIC_API_URL is configured (excluding defunct render url)
+  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim() && !process.env.NEXT_PUBLIC_API_URL.includes('onrender')) {
     return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
   }
 
+  // 2. In browser environment, use same-origin relative '/api'
+  // Next.js automatically rewrites/proxies this to the backend server
   if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:5000/api';
-    }
-    return `${window.location.origin}/api`;
+    return '/api';
   }
 
-  return 'https://doon-riders-backend.onrender.com/api';
+  // 3. Server-side default
+  const serverBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || 'http://localhost:5000';
+  return `${serverBackend.replace(/\/+$/, '')}/api`;
 }
 
-const API_BASE_URL = typeof window !== 'undefined' ? getApiBaseUrl() : (process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api');
+const API_BASE_URL = getApiBaseUrl();
 
 export interface Vehicle {
   id: number;

@@ -359,7 +359,7 @@ export const getQrSettings = async (req: Request, res: Response) => {
         qr_image_url: '',
         booking_id_prefix: 'DR-PB-',
         starting_booking_number: 1001,
-        next_booking_number: 1003
+        next_booking_number: 1001
       }
     });
   } catch (err: any) {

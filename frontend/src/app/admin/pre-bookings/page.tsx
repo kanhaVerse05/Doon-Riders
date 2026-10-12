@@ -188,13 +188,9 @@ export default function PreBookingsAdminPage() {
       const res = await adminApi.get('/admin/pre-bookings/settings/qr');
       if (res && res.success && res.data) {
         setQrSettings(res.data);
-      } else {
-        const saved = localStorage.getItem('dr_custom_qr_settings');
-        if (saved) setQrSettings(JSON.parse(saved));
       }
     } catch (e) {
-      const saved = localStorage.getItem('dr_custom_qr_settings');
-      if (saved) setQrSettings(JSON.parse(saved));
+      console.warn('QR settings fetch error:', e);
     }
   };
 
@@ -210,63 +206,33 @@ export default function PreBookingsAdminPage() {
       if (dateFilter) query += `&date=${encodeURIComponent(dateFilter)}`;
 
       const res = await adminApi.get(query);
-      if (res && res.success && res.data) {
+      if (res && res.success && Array.isArray(res.data)) {
         setBookings(res.data);
         if (res.stats) setStats(res.stats);
       } else {
-        // Fallback local dataset
-        let list: PreBooking[] = [
-          {
-            id: 1,
-            booking_code: 'DR-PB-1001',
-            customer_name: 'Aarav Sharma',
-            mobile_number: '+91 98970 12345',
-            booking_date: new Date().toISOString().split('T')[0],
-            unit_price: 499,
-            quantity: 1,
-            total_amount: 499,
-            payment_mode: 'UPI',
-            payment_status: 'PAID',
-            notes: 'Pickup from Rajpur Road Hub',
-            created_by_id: 1,
-            created_by_name: 'Ankit Kumar (Super Admin)',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 2,
-            booking_code: 'DR-PB-1002',
-            customer_name: 'Sneha Rawat',
-            mobile_number: '+91 98123 45678',
-            booking_date: new Date().toISOString().split('T')[0],
-            unit_price: 499,
-            quantity: 2,
-            total_amount: 998,
-            payment_mode: 'Cash',
-            payment_status: 'PAID',
-            notes: '2 EV Scooty units booked for college commute',
-            created_by_id: 4,
-            created_by_name: 'Rahul Verma',
-            created_at: new Date().toISOString()
-          }
-        ];
-
-        if (!isSuperAdmin && user?.id) {
-          list = list.filter(b => b.created_by_id === user.id);
-        }
-
-        setBookings(list);
+        setBookings([]);
         setStats({
-          totalCount: list.length,
-          totalRevenue: list.reduce((s, b) => s + b.total_amount, 0),
-          totalQty: list.reduce((s, b) => s + b.quantity, 0),
-          upiCount: list.filter(b => b.payment_mode === 'UPI').length,
-          upiAmount: list.filter(b => b.payment_mode === 'UPI').reduce((s, b) => s + b.total_amount, 0),
-          cashCount: list.filter(b => b.payment_mode === 'Cash').length,
-          cashAmount: list.filter(b => b.payment_mode === 'Cash').reduce((s, b) => s + b.total_amount, 0)
+          totalCount: 0,
+          totalRevenue: 0,
+          totalQty: 0,
+          upiCount: 0,
+          upiAmount: 0,
+          cashCount: 0,
+          cashAmount: 0
         });
       }
     } catch (err) {
       console.warn('Pre-bookings fetch notice:', err);
+      setBookings([]);
+      setStats({
+        totalCount: 0,
+        totalRevenue: 0,
+        totalQty: 0,
+        upiCount: 0,
+        upiAmount: 0,
+        cashCount: 0,
+        cashAmount: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -330,13 +296,11 @@ export default function PreBookingsAdminPage() {
       const res = await adminApi.post('/admin/pre-bookings/settings/qr', payload);
       if (res && res.success && res.data) {
         setQrSettings(res.data);
-        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(res.data));
+        setShowQrSettingsModal(false);
+        setToastMessage('Payment QR & Receipt Series settings updated successfully!');
       } else {
-        setQrSettings(payload);
-        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(payload));
+        alert(res?.message || 'Failed to update QR & ID settings in database.');
       }
-      setShowQrSettingsModal(false);
-      setToastMessage('Payment QR & Receipt Series settings updated successfully!');
     } catch (err: any) {
       alert('Error updating settings: ' + err.message);
     } finally {
@@ -383,37 +347,7 @@ export default function PreBookingsAdminPage() {
         fetchPreBookings();
         fetchQrSettings();
       } else {
-        // Local add fallback
-        const prefix = qrSettings.booking_id_prefix || 'DR-PB-';
-        const start = qrSettings.next_booking_number || qrSettings.starting_booking_number || 1001;
-        const codeNum = start;
-        const localNew: PreBooking = {
-          id: Date.now(),
-          booking_code: `${prefix}${codeNum}`,
-          customer_name: payload.customer_name,
-          mobile_number: payload.mobile_number,
-          booking_date: payload.booking_date,
-          unit_price: FIXED_UNIT_PRICE,
-          quantity: payload.quantity,
-          total_amount: payload.total_amount,
-          payment_mode: payload.payment_mode,
-          payment_status: 'PAID',
-          notes: payload.notes,
-          created_by_id: user?.id || 1,
-          created_by_name: user?.name || 'Staff',
-          created_at: new Date().toISOString()
-        };
-        const nextUpdated = {
-          ...qrSettings,
-          next_booking_number: start + 1
-        };
-        setQrSettings(nextUpdated);
-        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(nextUpdated));
-        setBookings(prev => [localNew, ...prev]);
-        setShowCreateModal(false);
-        setSelectedReceipt(localNew);
-        resetForm();
-        setToastMessage(`Pre-Booking ${localNew.booking_code} confirmed!`);
+        alert(res?.message || 'Failed to save pre-booking in database. Please check backend connection.');
       }
     } catch (err: any) {
       alert('Error creating pre-booking: ' + err.message);

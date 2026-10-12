@@ -129,7 +129,7 @@ export default function InventoryAdminPage() {
       if (search) query += `&search=${encodeURIComponent(search)}`;
 
       const res = await adminApi.get(query);
-      if (res && res.success && res.data) {
+      if (res && res.success && Array.isArray(res.data)) {
         setItems(res.data);
         if (res.stats) setStats(res.stats);
         if (res.categories && res.categories.length > 0) {
@@ -137,123 +137,19 @@ export default function InventoryAdminPage() {
           setCategories(merged);
         }
       } else {
-        // Local Fallback list
-        let list: InventoryItem[] = [
-          {
-            id: 1,
-            part_code: 'DR-INV-1001',
-            part_name: 'Lithium Battery Pack 60V 30Ah (LFP)',
-            category: 'Battery & Electricals',
-            image_url: '/images/battery-pack.png',
-            quantity: 28,
-            min_threshold: 5,
-            unit_price: 18500,
-            status: 'In Stock',
-            location: 'Main Hub Workshop - Rack A1',
-            supplier: 'Exicom Energy Systems',
-            description: 'High-density 60V 30Ah smart swappable lithium battery pack with built-in thermal BMS.',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 2,
-            part_code: 'DR-INV-1002',
-            part_name: 'Brushless BLDC Hub Motor 1500W',
-            category: 'Motor & Drive',
-            image_url: '',
-            quantity: 14,
-            min_threshold: 4,
-            unit_price: 6800,
-            status: 'In Stock',
-            location: 'Main Hub Workshop - Rack A2',
-            supplier: 'Bosch EV Drive',
-            description: 'Waterproof IP67 rated 1500W peak brushless rear hub motor for DOON Electro Pro.',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 3,
-            part_code: 'DR-INV-1003',
-            part_name: 'Smart Sine-Wave Controller 60V 35A',
-            category: 'Battery & Electricals',
-            image_url: '',
-            quantity: 3,
-            min_threshold: 5,
-            unit_price: 3200,
-            status: 'Low Stock',
-            location: 'Main Hub Workshop - Rack B1',
-            supplier: 'Kelly Controls',
-            description: 'Regenerative braking supported 60V intelligent brushless sine-wave controller.',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 4,
-            part_code: 'DR-INV-1004',
-            part_name: 'Dual-Piston Hydraulic Disc Brake Kit',
-            category: 'Brakes & Suspension',
-            image_url: '',
-            quantity: 22,
-            min_threshold: 6,
-            unit_price: 1450,
-            status: 'In Stock',
-            location: 'Main Hub Workshop - Rack B2',
-            supplier: 'ByBre Brembo India',
-            description: 'Front & Rear 220mm stainless steel ventilated disc with dual-piston ceramic caliper.',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 5,
-            part_code: 'DR-INV-1005',
-            part_name: 'All-Weather Tubeless Tyre 90/90-12',
-            category: 'Tires & Wheels',
-            image_url: '',
-            quantity: 40,
-            min_threshold: 10,
-            unit_price: 1250,
-            status: 'In Stock',
-            location: 'Tyre Bay - Section C',
-            supplier: 'MRF Nylogrip Zapper',
-            description: 'Puncture-resistant high traction compound tyre built for wet mountain roads.',
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 6,
-            part_code: 'DR-INV-1006',
-            part_name: 'Fast Charger 60V 10A Aluminum Shell',
-            category: 'Chargers & Power',
-            image_url: '',
-            quantity: 0,
-            min_threshold: 5,
-            unit_price: 2900,
-            status: 'Out of Stock',
-            location: 'Charging Hub Store',
-            supplier: 'Delta Electronics',
-            description: 'Quick DC wall charger with intelligent auto-cutoff and overcharge protection.',
-            created_at: new Date().toISOString()
-          }
-        ];
-
-        if (statusFilter !== 'All') {
-          list = list.filter(it => it.status === statusFilter);
-        }
-        if (categoryFilter !== 'All') {
-          list = list.filter(it => it.category === categoryFilter);
-        }
-        if (search) {
-          const s = search.toLowerCase();
-          list = list.filter(it => it.part_name.toLowerCase().includes(s) || it.part_code.toLowerCase().includes(s));
-        }
-
-        setItems(list);
+        setItems([]);
         setStats({
-          totalItems: list.length,
-          totalQty: list.reduce((s, it) => s + it.quantity, 0),
-          totalValuation: list.reduce((s, it) => s + (it.quantity * it.unit_price), 0),
-          inStockCount: list.filter(it => it.status === 'In Stock').length,
-          lowStockCount: list.filter(it => it.status === 'Low Stock').length,
-          outOfStockCount: list.filter(it => it.status === 'Out of Stock').length
+          totalItems: 0,
+          totalQty: 0,
+          totalValuation: 0,
+          inStockCount: 0,
+          lowStockCount: 0,
+          outOfStockCount: 0
         });
       }
     } catch (err) {
       console.warn('Inventory fetch notice:', err);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -353,10 +249,7 @@ export default function InventoryAdminPage() {
           setShowItemModal(false);
           fetchInventory();
         } else {
-          // Local update
-          setItems(prev => prev.map(it => it.id === editingItem.id ? { ...it, ...payload, id: editingItem.id } : it));
-          setToastMessage(`Part "${payload.part_name}" updated!`);
-          setShowItemModal(false);
+          alert(res?.message || 'Failed to update part in database.');
         }
       } else {
         // CREATE
@@ -366,15 +259,7 @@ export default function InventoryAdminPage() {
           setShowItemModal(false);
           fetchInventory();
         } else {
-          // Local add
-          const newItem: InventoryItem = {
-            id: Date.now(),
-            ...payload,
-            created_at: new Date().toISOString()
-          };
-          setItems(prev => [newItem, ...prev]);
-          setToastMessage(`New Part "${payload.part_name}" added!`);
-          setShowItemModal(false);
+          alert(res?.message || 'Failed to add new part to database.');
         }
       }
     } catch (err: any) {

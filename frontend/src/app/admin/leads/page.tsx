@@ -63,26 +63,6 @@ export default function LeadsPage() {
   const [importResult, setImportResult] = useState<{ count: number; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultSampleLead = [
-    {
-      id: 1,
-      lead_code: 'LD-1042',
-      name: 'Rohan Mehra',
-      phone: '+91 98111 22334',
-      email: 'rohan.mehra@gmail.com',
-      location: 'Dehradun (Rajpur Road)',
-      vehicle_interested_in: 'DOON Electro Pro',
-      rental_plan: 'Weekly',
-      rental_duration_days: 7,
-      lead_source: 'Meta Ads',
-      status: 'Interested',
-      assigned_to: null,
-      assigned_to_name: null,
-      notes: 'Customer wants electric scooter for weekly food delivery commute.',
-      created_at: new Date().toISOString()
-    }
-  ];
-
   const fetchUsersAndLeads = async () => {
     setLoading(true);
     try {
@@ -119,14 +99,14 @@ export default function LeadsPage() {
       let query = `/admin/leads?status=${statusFilter}`;
       if (search) query += `&search=${encodeURIComponent(search)}`;
       const res = await adminApi.get(query);
-      if (res && res.success && res.data) {
+      if (res && res.success && Array.isArray(res.data)) {
         setLeads(res.data);
       } else {
-        setLeads(defaultSampleLead);
+        setLeads([]);
       }
     } catch (err) {
       console.warn('Leads fetch notice:', err);
-      setLeads(defaultSampleLead);
+      setLeads([]);
     } finally {
       setLoading(false);
     }
@@ -207,8 +187,8 @@ export default function LeadsPage() {
   const handleDownloadSampleCsv = () => {
     const headers = 'Lead Number,Name,Location,Lead Source,Rental Plan,Notes';
     const sampleRows = [
-      '+91 98111 22334,Aarav Sharma,Rajpur Road,Meta Ads,Weekly,Urgent pickup required',
-      '+91 98222 33445,Sneha Rawat,Clock Tower,Google Ads,Monthly,Daily college commute'
+      '+91 98000 00001,Customer Name One,Rajpur Road,Meta Ads,Weekly,Urgent pickup required',
+      '+91 98000 00002,Customer Name Two,Clock Tower,Google Ads,Monthly,Daily commute'
     ];
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...sampleRows].join('\n');
     const encodedUri = encodeURI(csvContent);

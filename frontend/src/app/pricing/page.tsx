@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../../components/Navbar';
 import { Footer } from '../../components/Footer';
+import { getApiBaseUrl } from '../../lib/api';
 import { BookTestDriveModal } from '../../components/BookTestDriveModal';
 import { Check, Zap, Sparkles, ShieldCheck, ArrowRight, HelpCircle, Star, BatteryCharging, Shield, Clock } from 'lucide-react';
 
@@ -56,7 +57,7 @@ export default function PricingPage() {
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
+        const apiUrl = getApiBaseUrl();
         const res = await fetch(`${apiUrl}/pricing-plans`);
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
