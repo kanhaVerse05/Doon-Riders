@@ -8,73 +8,77 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
     const currentUserId = user_id ? Number(user_id) : null;
 
     if (getDbStatus()) {
-      let sql = 'SELECT * FROM pre_bookings WHERE 1=1';
-      const params: any[] = [];
-      let pIdx = 1;
+      try {
+        let sql = 'SELECT * FROM pre_bookings WHERE 1=1';
+        const params: any[] = [];
+        let pIdx = 1;
 
-      // RBAC: If not super admin, only show pre-bookings created by this user
-      if (!isSuperAdmin && currentUserId) {
-        sql += ` AND (created_by_id = $${pIdx++} OR created_by_id IS NULL)`;
-        params.push(currentUserId);
-      }
-
-      if (status && status !== 'All') {
-        sql += ` AND payment_status = $${pIdx++}`;
-        params.push(status);
-      }
-
-      if (paymentMode && paymentMode !== 'All') {
-        sql += ` AND payment_mode = $${pIdx++}`;
-        params.push(paymentMode);
-      }
-
-      if (date) {
-        sql += ` AND booking_date = $${pIdx++}`;
-        params.push(date);
-      }
-
-      if (search) {
-        sql += ` AND (customer_name ILIKE $${pIdx} OR mobile_number ILIKE $${pIdx} OR booking_code ILIKE $${pIdx})`;
-        params.push(`%${search}%`);
-        pIdx++;
-      }
-
-      sql += ' ORDER BY created_at DESC';
-
-      const result = await pool.query(sql, params);
-      const bookings = result.rows || [];
-
-      // Calculate stats (scoped to current view)
-      const totalCount = bookings.length;
-      const totalRevenue = bookings
-        .filter((b: any) => b.payment_status === 'PAID')
-        .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
-      const totalQty = bookings
-        .filter((b: any) => b.payment_status === 'PAID')
-        .reduce((sum: number, b: any) => sum + Number(b.quantity || 0), 0);
-      const upiCount = bookings.filter((b: any) => b.payment_mode === 'UPI' && b.payment_status === 'PAID').length;
-      const upiAmount = bookings
-        .filter((b: any) => b.payment_mode === 'UPI' && b.payment_status === 'PAID')
-        .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
-      const cashCount = bookings.filter((b: any) => b.payment_mode === 'Cash' && b.payment_status === 'PAID').length;
-      const cashAmount = bookings
-        .filter((b: any) => b.payment_mode === 'Cash' && b.payment_status === 'PAID')
-        .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
-
-      return res.json({
-        success: true,
-        isSuperAdmin,
-        data: bookings,
-        stats: {
-          totalCount,
-          totalRevenue,
-          totalQty,
-          upiCount,
-          upiAmount,
-          cashCount,
-          cashAmount
+        // RBAC: If not super admin, only show pre-bookings created by this user
+        if (!isSuperAdmin && currentUserId) {
+          sql += ` AND (created_by_id = $${pIdx++} OR created_by_id IS NULL)`;
+          params.push(currentUserId);
         }
-      });
+
+        if (status && status !== 'All') {
+          sql += ` AND payment_status = $${pIdx++}`;
+          params.push(status);
+        }
+
+        if (paymentMode && paymentMode !== 'All') {
+          sql += ` AND payment_mode = $${pIdx++}`;
+          params.push(paymentMode);
+        }
+
+        if (date) {
+          sql += ` AND booking_date = $${pIdx++}`;
+          params.push(date);
+        }
+
+        if (search) {
+          sql += ` AND (customer_name ILIKE $${pIdx} OR mobile_number ILIKE $${pIdx} OR booking_code ILIKE $${pIdx})`;
+          params.push(`%${search}%`);
+          pIdx++;
+        }
+
+        sql += ' ORDER BY created_at DESC';
+
+        const result = await pool.query(sql, params);
+        const bookings = result.rows || [];
+
+        // Calculate stats (scoped to current view)
+        const totalCount = bookings.length;
+        const totalRevenue = bookings
+          .filter((b: any) => b.payment_status === 'PAID')
+          .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+        const totalQty = bookings
+          .filter((b: any) => b.payment_status === 'PAID')
+          .reduce((sum: number, b: any) => sum + Number(b.quantity || 0), 0);
+        const upiCount = bookings.filter((b: any) => b.payment_mode === 'UPI' && b.payment_status === 'PAID').length;
+        const upiAmount = bookings
+          .filter((b: any) => b.payment_mode === 'UPI' && b.payment_status === 'PAID')
+          .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+        const cashCount = bookings.filter((b: any) => b.payment_mode === 'Cash' && b.payment_status === 'PAID').length;
+        const cashAmount = bookings
+          .filter((b: any) => b.payment_mode === 'Cash' && b.payment_status === 'PAID')
+          .reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+
+        return res.json({
+          success: true,
+          isSuperAdmin,
+          data: bookings,
+          stats: {
+            totalCount,
+            totalRevenue,
+            totalQty,
+            upiCount,
+            upiAmount,
+            cashCount,
+            cashAmount
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('PostgreSQL pre-bookings query error, using fallback:', dbErr.message);
+      }
     }
 
     // In-memory fallback
@@ -138,7 +142,7 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error fetching pre-bookings:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch pre-bookings' });
+    return res.status(500).json({ success: false, message: 'Failed to fetch pre-bookings: ' + (error?.message || error) });
   }
 };
 

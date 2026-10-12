@@ -1,19 +1,14 @@
 // API Client for DOON Riders Backend
 
 export function getApiBaseUrl(): string {
-  // 1. If explicit NEXT_PUBLIC_API_URL is configured (excluding defunct render url)
-  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim() && !process.env.NEXT_PUBLIC_API_URL.includes('onrender')) {
-    return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
-  }
-
-  // 2. In browser environment, use same-origin relative '/api'
+  // 1. In browser environment, always use same-origin relative '/api'
   // Next.js automatically rewrites/proxies this to the backend server
   if (typeof window !== 'undefined') {
     return '/api';
   }
 
-  // 3. Server-side default
-  const serverBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || 'http://localhost:5000';
+  // 2. Server-side default for SSR / SSG
+  const serverBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || 'https://doon-riders-backend.onrender.com';
   return `${serverBackend.replace(/\/+$/, '')}/api`;
 }
 

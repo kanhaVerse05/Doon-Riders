@@ -6,7 +6,7 @@ const nextConfig = {
   },
   async rewrites() {
     // Determine internal/backend destination for API proxying
-    const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+    const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.BACKEND_URL || 'https://doon-riders-backend.onrender.com';
     const targetBase = rawBackend.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
     return [
