@@ -16,8 +16,7 @@ let isPostgresConnected = false;
 // Mock in-memory storage fallback for resilient development
 export const memoryStore = {
   roles: [
-    { id: 1, name: 'SUPER_ADMIN', display_name: 'Super Admin', description: 'Full system control', is_system: true },
-    { id: 2, name: 'ADMIN', display_name: 'Admin', description: 'Operational control', is_system: true },
+    { id: 1, name: 'SUPER_ADMIN', display_name: 'Super Admin', description: 'Full root system control and configuration', is_system: true },
     { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', description: 'Lead & fleet management', is_system: true },
     { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Lead follow-up and sales', is_system: true },
     { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet, repair dispatch & billing control', is_system: false },
@@ -1124,7 +1123,6 @@ export const checkDbConnection = async (): Promise<boolean> => {
       await pgPool.query(`
         INSERT INTO roles (id, name, display_name, description, is_system) VALUES
         (1, 'SUPER_ADMIN', 'Super Admin', 'Full Root System Access', TRUE),
-        (2, 'ADMIN', 'Admin', 'Operations and CRM Lead Control', TRUE),
         (3, 'MANAGER', 'Sales & Operations Manager', 'Sales overview & fleet dispatch', TRUE),
         (4, 'SALES_EXECUTIVE', 'Sales Executive', 'Direct rider onboarding & lead CRM', TRUE),
         (5, 'HUB_INCHARGE', 'Hub Incharge', 'Hub fleet, repair dispatch & billing control', FALSE),
@@ -1132,6 +1130,19 @@ export const checkDbConnection = async (): Promise<boolean> => {
         (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE);
       `);
     }
+
+    // Ensure Pre-Bookings permissions exist in permissions table
+    await pgPool.query(`
+      INSERT INTO permissions (code, module, description) VALUES
+        ('pre_bookings.view', 'Pre-Bookings', 'View pre-booking list and reservation vouchers'),
+        ('pre_bookings.view_all', 'Pre-Bookings', 'View company-wide pre-bookings and financial collections'),
+        ('pre_bookings.create', 'Pre-Bookings', 'Create customer EV pre-bookings and issue vouchers'),
+        ('pre_bookings.status_update', 'Pre-Bookings', 'Update booking status (Paid, Cancelled, Pending)'),
+        ('pre_bookings.delete', 'Pre-Bookings', 'Delete pre-booking entries from system'),
+        ('pre_bookings.export', 'Pre-Bookings', 'Export pre-bookings list to CSV/Excel'),
+        ('pre_bookings.settings', 'Pre-Bookings', 'Configure QR UPI payments and dynamic receipt series')
+      ON CONFLICT (code) DO NOTHING;
+    `).catch(() => {});
 
     // 2. Seed Users if empty
     const userCount = await pgPool.query('SELECT COUNT(*) FROM users');

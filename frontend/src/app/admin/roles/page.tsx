@@ -64,7 +64,6 @@ interface RoleItem {
 
 const DEFAULT_SYSTEM_ROLES: RoleItem[] = [
   { id: 1, name: 'SUPER_ADMIN', display_name: 'Super Admin', description: 'Full root access to all system features and database', is_system: true },
-  { id: 2, name: 'ADMIN', display_name: 'Admin', description: 'Complete management rights across leads, fleet, and operations', is_system: true },
   { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', description: 'Operational overview, booking handling, and branch reports', is_system: true },
   { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Direct lead conversion and customer onboarding', is_system: true },
   { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet inventory and scooter repairs coordinator', is_system: false },
@@ -107,6 +106,15 @@ function RolesAndPermissionsContent() {
     { id: 1, code: 'dashboard.view', module: 'Dashboard', description: 'View main KPI overview cards and statistics' },
     { id: 2, code: 'dashboard.view_all', module: 'Dashboard', description: 'View enterprise analytics and full company metrics' },
     { id: 3, code: 'dashboard.view_sales', module: 'Dashboard', description: 'View personal sales KPI and conversion metrics' },
+
+    // Pre-Bookings
+    { id: 43, code: 'pre_bookings.view', module: 'Pre-Bookings', description: 'View pre-booking registry and customer queues' },
+    { id: 44, code: 'pre_bookings.view_all', module: 'Pre-Bookings', description: 'View full company-wide EV pre-bookings' },
+    { id: 45, code: 'pre_bookings.create', module: 'Pre-Bookings', description: 'Create and generate new EV pre-booking vouchers' },
+    { id: 46, code: 'pre_bookings.status_update', module: 'Pre-Bookings', description: 'Update booking status (Confirmed, Allocated, Cancelled)' },
+    { id: 47, code: 'pre_bookings.delete', module: 'Pre-Bookings', description: 'Delete or archive pre-booking customer records' },
+    { id: 48, code: 'pre_bookings.export', module: 'Pre-Bookings', description: 'Export pre-booking slips and receipts to CSV/Excel' },
+    { id: 49, code: 'pre_bookings.settings', module: 'Pre-Bookings', description: 'Configure booking token amount and delivery timeline' },
 
     // Leads & CRM
     { id: 4, code: 'leads.view', module: 'Leads', description: 'View leads list and pipeline status' },
@@ -160,19 +168,56 @@ function RolesAndPermissionsContent() {
     { id: 42, code: 'roles.view', module: 'Team Directory', description: 'Access Role and Granular Permission Matrix' }
   ];
 
+  const getSavedRolePermissions = (roleName: string) => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem('dr_role_custom_permissions');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const norm = (roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+        if (parsed[norm]) return parsed[norm];
+        if (parsed[roleName]) return parsed[roleName];
+      }
+    } catch (e) {}
+    return null;
+  };
+
   const getInitialUserPermissions = (roleName: string): { [code: string]: { enabled: boolean; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' } } => {
+    // 1. Check if permissions were previously configured and saved for this custom or team role
+    const saved = getSavedRolePermissions(roleName);
+    if (saved) {
+      const map: any = {};
+      allPermissions.forEach(p => {
+        if (saved[p.code]) {
+          map[p.code] = { ...saved[p.code] };
+        } else {
+          map[p.code] = { enabled: false, scope: 'ALL' };
+        }
+      });
+      return map;
+    }
+
+    const norm = (roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
     const map: any = {};
+
     allPermissions.forEach(p => {
       let enabled = false;
       let scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' = 'ALL';
 
-      const norm = (roleName || '').toUpperCase();
-      if (norm === 'ADMIN' || norm === 'SUPER_ADMIN') {
+      if (norm === 'SUPER_ADMIN') {
         enabled = true;
         scope = 'ALL';
       } else if (norm === 'MANAGER') {
-        enabled = ['Dashboard', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports'].includes(p.module) && !p.code.includes('.delete');
+        enabled = ['Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports'].includes(p.module) && !p.code.includes('.delete');
         scope = 'ALL';
+      } else if (norm === 'SALES_EXECUTIVE') {
+        enabled = [
+          'dashboard.view', 'dashboard.view_sales',
+          'pre_bookings.view', 'pre_bookings.create', 'pre_bookings.status_update',
+          'leads.view', 'leads.view_assigned', 'leads.status_update', 'leads.notes', 'leads.followup',
+          'customers.view', 'fleet.view'
+        ].includes(p.code);
+        scope = 'ASSIGNED';
       } else if (norm === 'TECHNICIAN' || norm.includes('TECH')) {
         enabled = ['repairs.view', 'repairs.update', 'inventory.view', 'fleet.view'].includes(p.code);
         scope = 'ASSIGNED';
@@ -180,9 +225,9 @@ function RolesAndPermissionsContent() {
         enabled = ['repairs.view', 'repairs.create', 'repairs.update', 'inventory.view', 'fleet.view', 'fleet.assign', 'fleet.maintenance'].includes(p.code);
         scope = 'TEAM';
       } else {
-        // Sales Executive / Standard
-        enabled = ['dashboard.view', 'dashboard.view_sales', 'leads.view', 'leads.view_assigned', 'leads.status_update', 'leads.notes', 'leads.followup', 'customers.view', 'fleet.view'].includes(p.code);
-        scope = 'ASSIGNED';
+        // Any custom role: starts with 0 rights (all disabled) until explicitly configured & saved by admin
+        enabled = false;
+        scope = 'ALL';
       }
       map[p.code] = { enabled, scope };
     });
@@ -223,6 +268,8 @@ function RolesAndPermissionsContent() {
         }
       } catch (e) {}
 
+      // Filter out any ADMIN role
+      combinedRoles = combinedRoles.filter(r => r.name !== 'ADMIN');
       localStorage.setItem('dr_custom_roles_list', JSON.stringify(combinedRoles));
       setRoles(combinedRoles);
 
@@ -399,7 +446,7 @@ function RolesAndPermissionsContent() {
   const handleApplyPreset = (preset: 'FULL' | 'SALES' | 'OPS' | 'TECH' | 'VIEW_ONLY') => {
     if (!selectedUser) return;
     let presetRole = 'SALES_EXECUTIVE';
-    if (preset === 'FULL') presetRole = 'ADMIN';
+    if (preset === 'FULL') presetRole = 'SUPER_ADMIN';
     if (preset === 'OPS') presetRole = 'MANAGER';
     if (preset === 'TECH') presetRole = 'TECHNICIAN';
     if (preset === 'VIEW_ONLY') {
@@ -426,11 +473,28 @@ function RolesAndPermissionsContent() {
 
   const handleSavePermissions = async () => {
     if (!selectedUser) return;
+    
+    // 1. Save user-specific permissions map
     localStorage.setItem('dr_user_custom_permissions', JSON.stringify(userPermissions));
+
+    // 2. Persist template in dr_role_custom_permissions so that any subsequent user with this role automatically gets these exact permissions
+    const roleKey = (selectedUser.role_name || selectedUser.role || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+    if (roleKey && roleKey !== 'SUPER_ADMIN') {
+      try {
+        const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
+        const rolePermMap = storedRolePerms ? JSON.parse(storedRolePerms) : {};
+        rolePermMap[roleKey] = userPermissions[selectedUser.id];
+        if (selectedUser.role_display_name || selectedUser.roleDisplayName) {
+          rolePermMap[selectedUser.role_display_name || selectedUser.roleDisplayName] = userPermissions[selectedUser.id];
+        }
+        localStorage.setItem('dr_role_custom_permissions', JSON.stringify(rolePermMap));
+      } catch (e) {}
+    }
 
     try {
       await adminApi.post('/admin/roles/permission', {
         userId: selectedUser.id,
+        roleName: selectedUser.role_name || selectedUser.role,
         permissions: userPermissions[selectedUser.id]
       });
     } catch (e) {
@@ -441,7 +505,7 @@ function RolesAndPermissionsContent() {
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const modules = ['ALL', 'Dashboard', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports', 'Team Directory'];
+  const modules = ['ALL', 'Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports', 'Team Directory'];
 
   const filteredPermissions = allPermissions.filter(p => {
     const matchesTab = activeModuleTab === 'ALL' || p.module === activeModuleTab;
@@ -692,7 +756,7 @@ function RolesAndPermissionsContent() {
                   onClick={() => handleApplyPreset('FULL')}
                   className="px-2.5 py-1 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] border border-[#E5E7EB] rounded-lg text-xs font-bold transition"
                 >
-                  Full Admin
+                  Super Admin
                 </button>
                 <button
                   onClick={() => handleApplyPreset('VIEW_ONLY')}

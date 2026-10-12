@@ -641,8 +641,8 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 </span>
               )}
 
-              <span className="bg-[#070D18] text-[#00D96B] text-[11px] font-black px-2.5 py-1 rounded-full border border-white/10 font-mono">
-                ₹499 FIX
+              <span className="bg-[#EAFBF2] text-[#00A854] text-[11px] font-black px-2.5 py-1 rounded-full border border-[#00D96B]/40 font-mono shadow-xs">
+                ₹499 FIXED
               </span>
             </div>
 
@@ -732,21 +732,21 @@ _Please present this receipt confirmation at the hub during vehicle handover._
             </p>
           </div>
 
-          {/* TOTAL REVENUE */}
-          <div className="bg-gradient-to-br from-[#0B1528] to-[#070D18] text-white border border-white/10 rounded-2xl p-5 shadow-lg space-y-2">
+          {/* TOTAL REVENUE (GREEN & WHITE CARD) */}
+          <div className="bg-white border-2 border-[#00D96B]/40 hover:border-[#00D96B] rounded-2xl p-5 shadow-sm space-y-2 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+              <span className="text-xs font-bold text-[#00A854] uppercase tracking-wider">
                 {isSuperAdmin ? 'Total Collected' : 'My Revenue'}
               </span>
-              <div className="w-8 h-8 rounded-xl bg-[#00D96B]/20 border border-[#00D96B]/40 flex items-center justify-center text-[#00D96B]">
+              <div className="w-8 h-8 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/40 flex items-center justify-center text-[#00A854]">
                 <Zap className="w-4 h-4 fill-current" />
               </div>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-[#00D96B]">₹{stats.totalRevenue.toLocaleString()}</span>
-              <span className="text-[11px] text-gray-400">INR</span>
+              <span className="text-2xl font-black text-[#00A854]">₹{stats.totalRevenue.toLocaleString()}</span>
+              <span className="text-[11px] text-[#667085] font-bold">INR</span>
             </div>
-            <p className="text-[11px] text-gray-400 font-mono">₹499 × {stats.totalQty} Units</p>
+            <p className="text-[11px] text-[#667085] font-mono">₹499 × {stats.totalQty} Units</p>
           </div>
 
           {/* UPI PAYMENTS */}
@@ -1135,29 +1135,29 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 </div>
               </div>
 
-              {/* SECTION 2: QUANTITY & DYNAMIC 499 MULTIPLIER */}
-              <div className="bg-[#0A0F1D] text-white p-5 rounded-2xl border border-white/10 shadow-lg space-y-4">
+              {/* SECTION 2: QUANTITY & DYNAMIC 499 MULTIPLIER (GREEN & WHITE THEME) */}
+              <div className="bg-[#F0FDF4] text-[#0F172A] p-5 rounded-2xl border-2 border-[#86EFAC] shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#00D96B]">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#00A854]">
                     2. Pre-Booking Amount &amp; Qty
                   </span>
-                  <span className="bg-[#00D96B]/20 text-[#00D96B] text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-[#00D96B]/40">
+                  <span className="bg-white text-[#00A854] text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-[#00D96B]/50 shadow-xs">
                     FIXED ₹499 / BOOKING
                   </span>
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs text-gray-300 font-bold">Select Pre-Booking Quantity:</p>
-                    <p className="text-[11px] text-gray-400">Number of EV Scooties to pre-book</p>
+                    <p className="text-xs text-[#0F172A] font-bold">Select Pre-Booking Quantity:</p>
+                    <p className="text-[11px] text-[#64748B]">Number of EV Scooties to pre-book</p>
                   </div>
 
                   {/* Quantity Selector [-] [Number] [+] */}
-                  <div className="inline-flex items-center bg-white/10 border border-white/20 rounded-xl p-1">
+                  <div className="inline-flex items-center bg-white border border-[#86EFAC] rounded-xl p-1 shadow-xs">
                     <button
                       type="button"
                       onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                      className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#00D96B] hover:text-[#070D18] text-white font-black text-lg flex items-center justify-center transition cursor-pointer"
+                      className="w-9 h-9 rounded-lg bg-[#EAFBF2] hover:bg-[#00D96B] hover:text-[#070D18] text-[#00A854] font-black text-lg flex items-center justify-center transition cursor-pointer"
                     >
                       -
                     </button>
@@ -1167,12 +1167,12 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                       max={99}
                       value={quantity}
                       onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 text-center font-black text-lg bg-transparent text-white focus:outline-none font-mono"
+                      className="w-14 text-center font-black text-lg bg-transparent text-[#0F172A] focus:outline-none font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setQuantity(prev => prev + 1)}
-                      className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#00D96B] hover:text-[#070D18] text-white font-black text-lg flex items-center justify-center transition cursor-pointer"
+                      className="w-9 h-9 rounded-lg bg-[#EAFBF2] hover:bg-[#00D96B] hover:text-[#070D18] text-[#00A854] font-black text-lg flex items-center justify-center transition cursor-pointer"
                     >
                       +
                     </button>
@@ -1180,16 +1180,16 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 </div>
 
                 {/* Live Dynamic Total Calculation Box */}
-                <div className="pt-3 border-t border-white/10 flex items-center justify-between bg-white/5 p-3.5 rounded-xl">
+                <div className="pt-3 border-t border-[#86EFAC] flex items-center justify-between bg-white p-3.5 rounded-xl border border-[#DCFCE7] shadow-xs">
                   <div>
-                    <span className="text-[11px] text-gray-400 block">Calculation Breakdown:</span>
-                    <span className="text-xs font-mono text-gray-200">
+                    <span className="text-[11px] text-[#64748B] block">Calculation Breakdown:</span>
+                    <span className="text-xs font-mono text-[#0F172A] font-bold">
                       {quantity} {quantity > 1 ? 'Units' : 'Unit'} × ₹499
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-gray-400 uppercase font-bold block">Amount</span>
-                    <span className="text-2xl sm:text-3xl font-black text-[#00D96B] tracking-tight">
+                    <span className="text-[10px] text-[#64748B] uppercase font-bold block">Amount</span>
+                    <span className="text-2xl sm:text-3xl font-black text-[#00A854] tracking-tight">
                       ₹{totalPayable.toLocaleString()}
                     </span>
                   </div>

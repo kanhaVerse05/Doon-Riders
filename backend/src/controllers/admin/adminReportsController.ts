@@ -67,10 +67,32 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
         teamPerformance = teamRes.rows;
       }
 
-      const [leadsRes, sourceRes, followupsRes] = await Promise.all([
+      // 5. Pre-Bookings Overview & Recent Activity
+      const preBookingsQuery = `
+        SELECT 
+          COUNT(*) as total_bookings,
+          COALESCE(SUM(quantity), 0) as total_qty,
+          COALESCE(SUM(CASE WHEN payment_status = 'PAID' THEN total_amount ELSE 0 END), 0) as total_revenue,
+          COUNT(CASE WHEN payment_status = 'PAID' THEN 1 END) as paid_bookings,
+          COUNT(CASE WHEN payment_status = 'PENDING' THEN 1 END) as pending_bookings,
+          COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END) as today_bookings,
+          COALESCE(SUM(CASE WHEN DATE(created_at) = CURRENT_DATE AND payment_status = 'PAID' THEN total_amount ELSE 0 END), 0) as today_revenue
+        FROM pre_bookings
+      `;
+
+      const recentBookingsQuery = `
+        SELECT id, booking_code, customer_name, mobile_number, quantity, total_amount, payment_mode, payment_status, created_at
+        FROM pre_bookings
+        ORDER BY created_at DESC
+        LIMIT 6
+      `;
+
+      const [leadsRes, sourceRes, followupsRes, preBookingsRes, recentBookingsRes] = await Promise.all([
         pool.query(leadsQuery),
         pool.query(sourceQuery),
-        pool.query(followupsQuery)
+        pool.query(followupsQuery),
+        pool.query(preBookingsQuery).catch(() => ({ rows: [{ total_bookings: 0, total_qty: 0, total_revenue: 0, paid_bookings: 0, today_bookings: 0, today_revenue: 0 }] })),
+        pool.query(recentBookingsQuery).catch(() => ({ rows: [] }))
       ]);
 
       const leadData = leadsRes.rows[0];
@@ -88,7 +110,16 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
           },
           leadsBySource: sourceRes.rows,
           todayFollowups: followupsRes.rows,
-          teamPerformance
+          teamPerformance,
+          preBookings: preBookingsRes.rows[0] || {
+            total_bookings: 0,
+            total_qty: 0,
+            total_revenue: 0,
+            paid_bookings: 0,
+            today_bookings: 0,
+            today_revenue: 0
+          },
+          recentPreBookings: recentBookingsRes.rows || []
         }
       });
     }

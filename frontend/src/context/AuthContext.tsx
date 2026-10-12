@@ -26,7 +26,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<boolean>;
   logout: () => void;
-  switchRoleDemo: (role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => Promise<void>;
+  switchRoleDemo: (role: 'SUPER_ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => Promise<void>;
   hasPermission: (permissionCode: string, requiredScope?: string) => boolean;
   canAccess: (module: string) => boolean;
 }
@@ -68,30 +68,6 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     ];
   }
 
-  if (norm === 'ADMIN' || norm.includes('ADMIN')) {
-    return [
-      { code: 'dashboard.view', scope: 'ALL' },
-      { code: 'dashboard.view_all', scope: 'ALL' },
-      { code: 'leads.view', scope: 'ALL' },
-      { code: 'leads.view_all', scope: 'ALL' },
-      { code: 'leads.create', scope: 'ALL' },
-      { code: 'leads.edit', scope: 'ALL' },
-      { code: 'leads.assign', scope: 'ALL' },
-      { code: 'customers.view', scope: 'ALL' },
-      { code: 'fleet.view', scope: 'ALL' },
-      { code: 'repairs.view', scope: 'ALL' },
-      { code: 'repairs.create', scope: 'ALL' },
-      { code: 'repairs.update', scope: 'ALL' },
-      { code: 'complaints.view', scope: 'ALL' },
-      { code: 'complaints.create', scope: 'ALL' },
-      { code: 'complaints.update', scope: 'ALL' },
-      { code: 'complaints.assign', scope: 'ALL' },
-      { code: 'inventory.view', scope: 'ALL' },
-      { code: 'pre_bookings.view', scope: 'ALL' },
-      { code: 'reports.view', scope: 'ALL' },
-      { code: 'users.view', scope: 'ALL' }
-    ];
-  }
 
   if (norm === 'MANAGER') {
     return [
@@ -309,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const switchRoleDemo = async (role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => {
+  const switchRoleDemo = async (role: 'SUPER_ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => {
     try {
       const res = await adminApi.post('/admin/auth/switch-role-demo', { role });
       if (res && res.success && res.token && res.user) {
@@ -327,7 +303,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasPermission = (permissionCode: string, requiredScope?: string): boolean => {
     if (!user) return false;
     const normRole = (user.roleName || '').toUpperCase();
-    if (normRole === 'SUPER_ADMIN' || normRole === 'ADMIN' || normRole.includes('SUPER') || normRole.includes('ADMIN')) {
+    if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
       return true;
     }
 
@@ -356,7 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canAccess = (module: string): boolean => {
     if (!user) return false;
     const normRole = (user.roleName || '').toUpperCase();
-    if (normRole === 'SUPER_ADMIN' || normRole === 'ADMIN' || normRole.includes('SUPER') || normRole.includes('ADMIN')) {
+    if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
       return true;
     }
 

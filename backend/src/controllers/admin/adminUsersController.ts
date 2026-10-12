@@ -44,7 +44,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 
 export const createUser = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, phone, roleId, custom_role_name, password, avatar_url } = req.body;
+    const { name, email, phone, roleId, custom_role_name, password } = req.body;
+    const finalAvatar = req.body.avatar_url || req.body.avatarUrl || req.body.avatar || null;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
     }
@@ -131,7 +132,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         RETURNING id
       `;
 
-      const result = await pool.query(query, [name, cleanEmail, hashedPassword, phone || null, finalRoleId, avatar_url || null]);
+      const result = await pool.query(query, [name, cleanEmail, hashedPassword, phone || null, finalRoleId, finalAvatar]);
       const newUserId = result.rows[0]?.id;
 
       const createdUser = {
@@ -142,7 +143,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         role_id: finalRoleId,
         role_name: finalRoleName,
         role_display_name: finalRoleDisplayName,
-        avatar_url: avatar_url || null,
+        avatar_url: finalAvatar,
         status: 'active',
         created_at: new Date().toISOString()
       };
@@ -171,7 +172,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       role_id: finalRoleId,
       role_name: finalRoleName,
       role_display_name: finalRoleDisplayName,
-      avatar_url: avatar_url || null,
+      avatar_url: finalAvatar,
       status: 'active',
       created_at: new Date().toISOString()
     };

@@ -46,7 +46,6 @@ interface RoleItem {
 const DEFAULT_ROLES: RoleItem[] = [
   { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', is_system: true },
   { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', is_system: true },
-  { id: 2, name: 'ADMIN', display_name: 'Admin', is_system: true },
   { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', is_system: false },
   { id: 6, name: 'TECHNICIAN', display_name: 'Technician', is_system: false }
 ];
@@ -153,7 +152,7 @@ export default function UsersPage() {
         const res = await adminApi.get('/admin/roles');
         if (res && res.success && res.data && res.data.roles) {
           res.data.roles.forEach((br: any) => {
-            if (br.name !== 'SUPER_ADMIN' && !combined.some(c => c.name === br.name || c.id === br.id)) {
+            if (br.name !== 'SUPER_ADMIN' && br.name !== 'ADMIN' && !combined.some(c => c.name === br.name || c.id === br.id)) {
               combined.push({
                 id: br.id,
                 name: br.name,
@@ -165,6 +164,7 @@ export default function UsersPage() {
         }
       } catch (e) {}
 
+      combined = combined.filter(r => r.name !== 'ADMIN' && r.name !== 'SUPER_ADMIN');
       localStorage.setItem('dr_custom_roles_list', JSON.stringify(combined));
       setRoles(combined);
     } catch (e) {
@@ -194,18 +194,21 @@ export default function UsersPage() {
             u.id !== 1 && 
             !DEMO_EMAILS.includes(u.email?.toLowerCase())
           );
-          customList = backendNonDemo.map((bu: any) => ({
-            id: bu.id,
-            name: bu.name,
-            email: bu.email,
-            phone: bu.phone,
-            role_id: bu.role_id,
-            role_name: bu.role_name,
-            role_display_name: bu.role_display_name,
-            status: bu.status || 'active',
-            avatar_url: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : '',
-            is_super_admin: false
-          }));
+          customList = backendNonDemo.map((bu: any) => {
+            const existingCustom = customList.find((cu: any) => cu.email?.toLowerCase() === bu.email?.toLowerCase());
+            return {
+              id: bu.id,
+              name: bu.name,
+              email: bu.email,
+              phone: bu.phone,
+              role_id: bu.role_id,
+              role_name: bu.role_name,
+              role_display_name: bu.role_display_name,
+              status: bu.status || 'active',
+              avatar_url: bu.avatar_url || existingCustom?.avatar_url || '',
+              is_super_admin: false
+            };
+          });
           localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
         }
       } catch (apiErr) {}
@@ -321,6 +324,7 @@ export default function UsersPage() {
         roleId: isCustom ? undefined : targetRoleId,
         custom_role_name: isCustom ? targetRoleDisplayName : undefined,
         password,
+        avatar_url: newUser.avatar_url,
         avatarUrl: newUser.avatar_url
       });
 
@@ -348,6 +352,9 @@ export default function UsersPage() {
         newUser.role_id = res.data.role_id;
         newUser.role_name = res.data.role_name;
         newUser.role_display_name = res.data.role_display_name;
+        if (res.data.avatar_url) {
+          newUser.avatar_url = res.data.avatar_url;
+        }
       }
     } catch (err: any) {
       setErrorToast(err?.message || 'Network error while creating user.');
@@ -421,7 +428,6 @@ export default function UsersPage() {
 
   const dynamicFilterRoles = ['ALL', ...Array.from(new Set([
     'SUPER_ADMIN',
-    'ADMIN',
     'MANAGER',
     'SALES_EXECUTIVE',
     'HUB_INCHARGE',

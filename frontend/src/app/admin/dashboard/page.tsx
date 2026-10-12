@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Activity,
   Phone,
-  UserCheck
+  UserCheck,
+  Ticket
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,6 +46,13 @@ export default function AdminDashboardPage() {
   const interestedDeals = Number(stats?.leads?.interested_leads) || 0;
   const convertedWins = Number(stats?.leads?.converted_leads) || 0;
   const conversionRate = stats?.leads?.conversion_rate || '0%';
+
+  // Pre-Bookings metrics
+  const totalBookings = Number(stats?.preBookings?.total_bookings) || 0;
+  const totalRevenue = Number(stats?.preBookings?.total_revenue) || 0;
+  const todayBookings = Number(stats?.preBookings?.today_bookings) || 0;
+  const totalQty = Number(stats?.preBookings?.total_qty) || 0;
+  const recentBookings: any[] = stats?.recentPreBookings || [];
 
   // Lead Sources breakdown
   const sources = [
@@ -93,14 +101,72 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <div className="relative z-10 flex-shrink-0">
+          <div className="relative z-10 flex-shrink-0 flex items-center gap-2.5 flex-wrap">
+            <Link
+              href="/admin/pre-bookings"
+              className="inline-flex items-center justify-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-[#071B12] hover:text-white font-bold px-5 py-3 rounded-xl text-xs uppercase tracking-wider shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition-all duration-200 transform active:scale-95 whitespace-nowrap cursor-pointer"
+            >
+              <Ticket className="w-4 h-4 stroke-[2.2]" />
+              <span>PRE-BOOKINGS (₹499)</span>
+            </Link>
             <Link
               href="/admin/leads"
-              className="inline-flex items-center justify-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-[#071B12] hover:text-white font-bold px-6 py-3 rounded-xl text-xs uppercase tracking-wider shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition-all duration-200 transform active:scale-95 whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 bg-white hover:bg-[#F8FAFC] text-[#111827] border border-[#E5E7EB] font-bold px-5 py-3 rounded-xl text-xs uppercase tracking-wider shadow-xs transition-all duration-200 whitespace-nowrap cursor-pointer"
             >
-              <Users className="w-4 h-4 stroke-[2.2]" />
-              <span>VIEW INBOUND LEADS</span>
+              <Users className="w-4 h-4 text-[#00A854]" />
+              <span>VIEW LEADS</span>
             </Link>
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* PRE-BOOKING REVENUE & VOUCHER SHOWCASE */}
+        {/* ========================================================= */}
+        <div className="bg-gradient-to-r from-[#F0FDF4] via-white to-[#F0FDF4] rounded-[22px] border-2 border-[#86EFAC] p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white border border-[#00D96B]/50 flex items-center justify-center text-[#00A854] shadow-sm flex-shrink-0">
+              <Ticket className="w-6 h-6 stroke-[2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] px-2.5 py-0.5 rounded-full border border-[#86EFAC]">
+                  LIVE EV PRE-BOOKINGS
+                </span>
+                <span className="text-xs text-[#64748B] font-medium">₹499 Fixed Token</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-[#111827] mt-0.5">
+                Customer Pre-Booking Operations
+              </h3>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-[#E2E8F0] shadow-2xs">
+              <span className="text-[10px] font-bold text-[#64748B] uppercase block">Total Bookings</span>
+              <span className="text-xl sm:text-2xl font-black text-[#111827] font-mono leading-tight block mt-0.5">
+                {totalBookings}
+              </span>
+              <span className="text-[10px] font-bold text-[#00A854]">{totalQty} EV Scooties</span>
+            </div>
+
+            <div className="bg-white p-3 sm:p-3.5 rounded-xl border-2 border-[#00D96B]/40 shadow-2xs">
+              <span className="text-[10px] font-bold text-[#00A854] uppercase block">Total Collected</span>
+              <span className="text-xl sm:text-2xl font-black text-[#00A854] font-mono leading-tight block mt-0.5">
+                ₹{totalRevenue.toLocaleString()}
+              </span>
+              <span className="text-[10px] font-bold text-[#64748B]">Paid &amp; Confirmed</span>
+            </div>
+
+            <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-[#E2E8F0] shadow-2xs col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold text-[#64748B] uppercase block">Today's Bookings</span>
+              <span className="text-xl sm:text-2xl font-black text-[#111827] font-mono leading-tight block mt-0.5">
+                {todayBookings}
+              </span>
+              <Link href="/admin/pre-bookings" className="text-[10px] font-bold text-[#00A854] hover:underline flex items-center gap-0.5 mt-0.5">
+                <span>Manage All</span>
+                <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
           </div>
         </div>
 

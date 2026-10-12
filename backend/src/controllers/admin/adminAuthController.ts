@@ -40,40 +40,17 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'inventory.manage', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'pre_bookings.view_all', scope: 'ALL' },
+      { code: 'pre_bookings.create', scope: 'ALL' },
+      { code: 'pre_bookings.status_update', scope: 'ALL' },
+      { code: 'pre_bookings.delete', scope: 'ALL' },
+      { code: 'pre_bookings.export', scope: 'ALL' },
+      { code: 'pre_bookings.settings', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' },
       { code: 'users.view', scope: 'ALL' },
       { code: 'roles.view', scope: 'ALL' },
       { code: 'audit.view', scope: 'ALL' },
       { code: 'settings.view', scope: 'ALL' }
-    ];
-  }
-
-  if (norm === 'ADMIN') {
-    return [
-      { code: 'dashboard.view', scope: 'ALL' },
-      { code: 'dashboard.view_all', scope: 'ALL' },
-      { code: 'complaints.view', scope: 'ALL' },
-      { code: 'complaints.create', scope: 'ALL' },
-      { code: 'complaints.assign', scope: 'ALL' },
-      { code: 'complaints.update', scope: 'ALL' },
-      { code: 'complaints.track', scope: 'ALL' },
-      { code: 'leads.view', scope: 'ALL' },
-      { code: 'leads.view_all', scope: 'ALL' },
-      { code: 'leads.create', scope: 'ALL' },
-      { code: 'leads.edit', scope: 'ALL' },
-      { code: 'leads.assign', scope: 'ALL' },
-      { code: 'customers.view', scope: 'ALL' },
-      { code: 'customers.view_all', scope: 'ALL' },
-      { code: 'customers.create', scope: 'ALL' },
-      { code: 'customers.edit', scope: 'ALL' },
-      { code: 'fleet.view', scope: 'ALL' },
-      { code: 'repairs.view', scope: 'ALL' },
-      { code: 'repairs.create', scope: 'ALL' },
-      { code: 'repairs.update', scope: 'ALL' },
-      { code: 'inventory.view', scope: 'ALL' },
-      { code: 'pre_bookings.view', scope: 'ALL' },
-      { code: 'reports.view', scope: 'ALL' },
-      { code: 'users.view', scope: 'ALL' }
     ];
   }
 
@@ -96,6 +73,9 @@ const getPermissionsForRole = (roleName: string): Array<{ code: string; scope: '
       { code: 'repairs.update', scope: 'ALL' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'pre_bookings.create', scope: 'ALL' },
+      { code: 'pre_bookings.status_update', scope: 'ALL' },
+      { code: 'pre_bookings.export', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' }
     ];
   }
@@ -286,7 +266,6 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
 
     const emailMap: Record<string, string> = {
       SUPER_ADMIN: 'doonridersmain@gmail.com',
-      ADMIN: 'admin@doonriders.com',
       MANAGER: 'manager@doonriders.com',
       SALES_EXECUTIVE: 'rahul.sales@doonriders.com',
       HUB_INCHARGE: 'hub.isbt@doonriders.com',
