@@ -725,6 +725,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
       'supabase-db-3o7vdsl1qr8jcenwzb5vdoal',
       'host.docker.internal',
       '172.17.0.1',
+      '187.126.124.18',
       '172.18.0.1',
       '172.19.0.1',
       '172.20.0.1',
