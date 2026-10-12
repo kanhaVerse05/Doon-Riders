@@ -1,9 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kalam:wght@400;700&family=Manrope:wght@300;400;500;600;700;800&family=Play:wght@400;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    --font-play: 'Play', sans-serif;
+    --font-manrope: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-inter: 'Inter', sans-serif;
+    --font-kalam: 'Kalam', cursive;
     --primary: #00D96B;
     --primary-accent: #00A854;
   }

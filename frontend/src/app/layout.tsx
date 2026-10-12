@@ -1,31 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Play, Manrope, Inter, Kalam } from "next/font/google";
 import "./globals.css";
 import GlobalOfflineBanner from "@/components/GlobalOfflineBanner";
-
-const play = Play({
-  weight: ["400", "700"],
-  subsets: ["latin"],
-  variable: "--font-play",
-});
-
-const manrope = Manrope({
-  weight: ["300", "400", "500", "600", "700", "800"],
-  subsets: ["latin"],
-  variable: "--font-manrope",
-});
-
-const inter = Inter({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const kalam = Kalam({
-  weight: ["400", "700"],
-  subsets: ["latin"],
-  variable: "--font-kalam",
-});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -48,10 +23,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${play.variable} ${manrope.variable} ${inter.variable} ${kalam.variable} overflow-x-hidden`}
-    >
+    <html lang="en" className="overflow-x-hidden">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kalam:wght@400;700&family=Manrope:wght@300;400;500;600;700;800&family=Play:wght@400;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="bg-white text-[#101828] font-sans antialiased selection:bg-[#00D96B] selection:text-white overflow-x-hidden min-w-[320px]">
         <GlobalOfflineBanner />
         {children}
