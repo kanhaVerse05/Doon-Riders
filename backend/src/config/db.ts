@@ -1124,6 +1124,36 @@ export const checkDbConnection = async (): Promise<boolean> => {
     await pgPool.query('ALTER TABLE inventory ALTER COLUMN image_url TYPE TEXT;').catch(() => {});
     await pgPool.query('ALTER TABLE pre_bookings DROP CONSTRAINT IF EXISTS pre_bookings_booking_code_key;').catch(() => {});
 
+    // Ensure Row Level Security (RLS) is enabled across all tables
+    await pgPool.query(`
+      ALTER TABLE IF EXISTS roles ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS permissions ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS role_permissions ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS gallery_images ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS pricing_plans ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS pre_bookings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS upi_qr_settings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS inventory ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_hubs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS technicians ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS fleet ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS leads ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS customers ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_jobs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_inspections ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_parts ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_timing ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_audit_logs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS complaints ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS complaint_events ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS scooty_returns ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS scooty_return_events ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS scooty_recoveries ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS scooty_recovery_events ENABLE ROW LEVEL SECURITY;
+    `).catch(() => {});
+
     // 1. Seed Roles if empty
     const roleCount = await pgPool.query('SELECT COUNT(*) FROM roles');
     if (parseInt(roleCount.rows[0].count, 10) === 0) {
@@ -1200,12 +1230,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
     }
 
 
-    // 7. Wipe out all transactional demo data from PostgreSQL so database starts 100% fresh
-    await pgPool.query(`
-      TRUNCATE TABLE complaints, complaint_events, repair_jobs, repair_inspections, repair_parts, repair_timing, repair_audit_logs, leads, pre_bookings RESTART IDENTITY CASCADE;
-    `).catch(err => {
-      console.log('DB Clean wipe notice:', err.message);
-    });
+
 
     return true;
   } catch (err: any) {

@@ -8,6 +8,7 @@
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/migrate_postgres.ts",
+    "migrate:rls": "node scripts/enable_rls.js",
     "test:api": "tsx src/test_api.ts"
   },
   "dependencies": {
