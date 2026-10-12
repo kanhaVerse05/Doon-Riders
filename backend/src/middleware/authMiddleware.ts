@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool, getDbStatus } from '../config/db';
 import { AuthRequest, AuthenticatedUser } from '../types/auth';
+import { getPermissionsForRole } from '../helpers/rbacHelper';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'doon_riders_rbac_super_secret_jwt_key_2026';
 
@@ -43,10 +44,15 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
         WHERE rp.role_id = $1
       `, [u.role_id]);
 
-      const permissions = permRes.rows.map(row => ({
+      let permissions = permRes.rows.map(row => ({
         code: row.code,
         scope: row.scope
       }));
+
+      // Fallback: If no explicit permissions exist in DB, fallback to role defaults
+      if (permissions.length === 0) {
+        permissions = getPermissionsForRole(u.role_name);
+      }
 
       req.user = {
         id: u.id,
