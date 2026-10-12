@@ -64,17 +64,47 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         router.replace('/admin/technician/jobs');
       } else if (isHub && (pathname === '/admin' || pathname === '/admin/dashboard' || pathname?.startsWith('/admin/leads') || pathname?.startsWith('/admin/customers') || pathname?.startsWith('/admin/gallery') || pathname?.startsWith('/admin/pricing') || pathname?.startsWith('/admin/reports') || pathname?.startsWith('/admin/users') || pathname?.startsWith('/admin/roles') || pathname?.startsWith('/admin/pre-bookings'))) {
         router.replace('/admin/complaints');
-      } else if (!isSuper && (pathname === '/admin' || pathname === '/admin/dashboard') && !hasPermission('dashboard.view')) {
-        if (hasPermission('pre_bookings.view')) {
+      } else if (!isSuper) {
+        const isPreBooking = user.roleName === 'PRE_BOOKING' || user.roleName?.includes('PRE_BOOK') || user.roleDisplayName?.toLowerCase().includes('pre-booking');
+        
+        // 1. Redirect away from root admin or dashboard if no dashboard permission
+        if ((pathname === '/admin' || pathname === '/admin/dashboard') && !hasPermission('dashboard.view')) {
+          if (isPreBooking || hasPermission('pre_bookings.view')) {
+            router.replace('/admin/pre-bookings');
+          } else if (hasPermission('leads.view')) {
+            router.replace('/admin/leads');
+          } else if (hasPermission('complaints.view')) {
+            router.replace('/admin/complaints');
+          } else if (hasPermission('repairs.view')) {
+            router.replace('/admin/repair-jobs');
+          } else if (hasPermission('inventory.view')) {
+            router.replace('/admin/inventory');
+          } else {
+            router.replace('/admin/pre-bookings');
+          }
+          return;
+        }
+
+        // 2. Protect unauthorized specific routes
+        if (pathname?.startsWith('/admin/reports') && !hasPermission('reports.view')) {
           router.replace('/admin/pre-bookings');
-        } else if (hasPermission('leads.view')) {
-          router.replace('/admin/leads');
-        } else if (hasPermission('complaints.view')) {
-          router.replace('/admin/complaints');
-        } else if (hasPermission('repairs.view')) {
-          router.replace('/admin/repair-jobs');
-        } else if (hasPermission('inventory.view')) {
-          router.replace('/admin/inventory');
+          return;
+        }
+        if (pathname?.startsWith('/admin/roles') && !hasPermission('roles.view')) {
+          router.replace('/admin/pre-bookings');
+          return;
+        }
+        if (pathname?.startsWith('/admin/users') && !hasPermission('users.view')) {
+          router.replace('/admin/pre-bookings');
+          return;
+        }
+        if (pathname?.startsWith('/admin/leads') && !hasPermission('leads.view')) {
+          router.replace('/admin/pre-bookings');
+          return;
+        }
+        if (pathname?.startsWith('/admin/customers') && !hasPermission('customers.view')) {
+          router.replace('/admin/pre-bookings');
+          return;
         }
       }
     }

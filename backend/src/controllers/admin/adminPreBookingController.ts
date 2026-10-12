@@ -3,8 +3,8 @@ import { pool, memoryStore, getDbStatus } from '../../config/db';
 
 export const getAllPreBookings = async (req: Request, res: Response) => {
   try {
-    const { search, status, paymentMode, date, user_id, role } = req.query;
-    const isSuperAdmin = role === 'SUPER_ADMIN';
+    const { search, status, paymentMode, date, user_id, role, view_all } = req.query;
+    const canViewAll = role === 'SUPER_ADMIN' || view_all === 'true' || view_all === '1';
     const currentUserId = user_id ? Number(user_id) : null;
 
     if (getDbStatus()) {
@@ -13,8 +13,8 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
         const params: any[] = [];
         let pIdx = 1;
 
-        // RBAC: If not super admin, only show pre-bookings created by this user
-        if (!isSuperAdmin && currentUserId) {
+        // RBAC: If not permitted to view all, only show pre-bookings created by this user
+        if (!canViewAll && currentUserId) {
           sql += ` AND (created_by_id = $${pIdx++} OR created_by_id IS NULL)`;
           params.push(currentUserId);
         }
@@ -84,8 +84,8 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
     // In-memory fallback
     let list = [...(memoryStore.preBookings || [])];
 
-    // RBAC: If not super admin, only show pre-bookings created by this user
-    if (!isSuperAdmin && currentUserId) {
+    // RBAC: If not permitted to view all, only show pre-bookings created by this user
+    if (!canViewAll && currentUserId) {
       list = list.filter(b => b.created_by_id === currentUserId || !b.created_by_id);
     }
 

@@ -36,6 +36,7 @@ export const MobileBottomNav: React.FC = () => {
   const isSalesExec = user?.roleName === 'SALES_EXECUTIVE';
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
   const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
+  const isPreBookingUser = user?.roleName === 'PRE_BOOKING' || user?.roleName?.includes('PRE_BOOK') || user?.roleDisplayName?.toLowerCase().includes('pre-booking');
 
   const navItems = isTechnician
     ? [
@@ -139,7 +140,7 @@ export const MobileBottomNav: React.FC = () => {
     { name: 'Scooty Returns', href: '/admin/returns', icon: RotateCcw, show: true },
     { name: 'Scooty Recoveries', href: '/admin/recoveries', icon: ShieldAlert, show: true },
     { name: 'Complaints', href: '/admin/complaints', icon: AlertCircle, show: hasPermission('complaints.view') },
-    { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') },
+    { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') || isPreBookingUser },
     { name: 'Inventory', href: '/admin/inventory', icon: Boxes, show: hasPermission('inventory.view') },
     { name: 'Pricing Plans', href: '/admin/pricing', icon: Tag, show: hasPermission('settings.view') },
     { name: 'Vehicle Gallery', href: '/admin/gallery', icon: Camera, show: hasPermission('fleet.view') },

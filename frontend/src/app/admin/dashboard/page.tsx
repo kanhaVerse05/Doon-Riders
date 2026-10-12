@@ -21,13 +21,22 @@ import {
   Ticket
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
+    const isSuper = user.roleName === 'SUPER_ADMIN' || user.roleName?.includes('SUPER');
+    if (!isSuper && !hasPermission('dashboard.view')) {
+      router.replace('/admin/pre-bookings');
+      return;
+    }
+
     const fetchStats = async () => {
       try {
         const res = await adminApi.get('/admin/reports/dashboard');
@@ -39,7 +48,7 @@ export default function AdminDashboardPage() {
       }
     };
     fetchStats();
-  }, []);
+  }, [user, hasPermission, router]);
 
   const totalLeads = Number(stats?.leads?.total_leads) || 0;
   const pendingFollowups = Number(stats?.leads?.followup_leads) || 0;

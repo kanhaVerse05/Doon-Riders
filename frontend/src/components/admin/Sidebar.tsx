@@ -53,6 +53,10 @@ export const Sidebar: React.FC = () => {
   const isSalesExec = user?.roleName === 'SALES_EXECUTIVE';
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
   const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
+  const isPreBookingUser = 
+    user?.roleName === 'PRE_BOOKING' || 
+    user?.roleName?.includes('PRE_BOOK') || 
+    user?.roleDisplayName?.toLowerCase().includes('pre-booking');
 
   const navGroups: NavGroup[] = isTechnician
     ? [
@@ -148,8 +152,7 @@ export const Sidebar: React.FC = () => {
               name: 'Pre-Bookings',
               href: '/admin/pre-bookings',
               icon: Ticket,
-              permission: 'pre_bookings.view',
-              badge: '₹499'
+              permission: 'pre_bookings.view'
             },
             {
               name: 'Inventory',
@@ -253,13 +256,21 @@ export const Sidebar: React.FC = () => {
         {/* Navigation Groups */}
         <div className="p-3 space-y-6 flex-1">
           {navGroups.map((grp, gIdx) => {
-            const visibleItems = grp.items.filter(item => isSuperAdmin || (Boolean(item.permission) && hasPermission(item.permission!)));
+            const visibleItems = grp.items.filter(item => {
+              if (isSuperAdmin) return true;
+              if (isPreBookingUser && item.href === '/admin/pre-bookings') return true;
+              return Boolean(item.permission) && hasPermission(item.permission!);
+            });
             if (visibleItems.length === 0) return null;
+
+            const groupTitle = (grp.title === 'OVERVIEW' && visibleItems.length === 1 && visibleItems[0].href === '/admin/pre-bookings')
+              ? 'PRE-BOOKINGS'
+              : grp.title;
 
             return (
               <div key={gIdx} className="space-y-1">
                 <p className="px-3 text-[10px] font-extrabold text-[#98A2B3] tracking-widest uppercase mb-2">
-                  {grp.title}
+                  {groupTitle}
                 </p>
                 {visibleItems.map(item => {
                   const Icon = item.icon;

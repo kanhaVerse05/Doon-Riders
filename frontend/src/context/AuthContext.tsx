@@ -144,6 +144,13 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     ];
   }
 
+  if (norm === 'PRE_BOOKING' || norm === 'PRE-BOOKING' || norm.includes('PRE_BOOK') || norm.includes('PRE-BOOK')) {
+    return [
+      { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'pre_bookings.create', scope: 'ALL' }
+    ];
+  }
+
   // Custom roles have NO default permissions (admin must explicitly assign)
   return [];
 };
@@ -158,8 +165,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const savedToken = localStorage.getItem('dr_admin_token');
       const savedUser = localStorage.getItem('dr_admin_user');
       if (savedToken && savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        const normRole = (parsedUser.roleName || parsedUser.role_name || '').toUpperCase();
+        if ((normRole === 'PRE_BOOKING' || normRole.includes('PRE_BOOK') || normRole.includes('PRE-BOOK')) &&
+            (!parsedUser.permissions || parsedUser.permissions.length === 0)) {
+          parsedUser.permissions = getDefaultRolePermissions('PRE_BOOKING');
+          localStorage.setItem('dr_admin_user', JSON.stringify(parsedUser));
+        }
         setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+        setUser(parsedUser);
+
+        // Background re-sync profile & permissions with backend if token exists
+        adminApi.get('/admin/auth/me').then((meRes) => {
+          if (meRes && meRes.success && meRes.user) {
+            setUser(meRes.user);
+            localStorage.setItem('dr_admin_user', JSON.stringify(meRes.user));
+          }
+        }).catch(() => {});
       }
     } catch (e) {
       console.error('Error loading session:', e);
@@ -306,8 +328,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = (permissionCode: string, requiredScope?: string): boolean => {
     if (!user) return false;
-    const normRole = (user.roleName || '').toUpperCase();
+    const normRole = (user.roleName || user.roleDisplayName || '').toUpperCase();
     if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
+      return true;
+    }
+
+    // Role-specific baseline: PRE_BOOKING always has pre_bookings.view & pre_bookings.create
+    const isPreBookingRole = normRole === 'PRE_BOOKING' || normRole.includes('PRE_BOOK') || normRole.includes('PRE-BOOK');
+    if (isPreBookingRole && (permissionCode === 'pre_bookings.view' || permissionCode === 'pre_bookings.create')) {
       return true;
     }
 
@@ -317,7 +345,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
         if (storedUserPerms) {
           const uMap = JSON.parse(storedUserPerms);
-          const userEntry = uMap[user.id];
+          const userEntry = uMap[user.id] || uMap[String(user.id)] || uMap[Number(user.id)];
           if (userEntry && typeof userEntry === 'object') {
             const p = userEntry[permissionCode];
             if (p) {
@@ -327,14 +355,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               return true;
             }
-            return false;
           }
         }
 
         const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
         if (storedRolePerms) {
           const rMap = JSON.parse(storedRolePerms);
-          const roleKey = (user.roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+          const roleKey = normRole.replace(/[^A-Z0-9]+/g, '_');
           const roleEntry = rMap[roleKey] || (user.roleDisplayName ? rMap[user.roleDisplayName] : null);
           if (roleEntry && typeof roleEntry === 'object') {
             const p = roleEntry[permissionCode];
@@ -345,27 +372,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               return true;
             }
-            return false;
           }
         }
       } catch (e) {}
     }
 
     // 2. Check user.permissions from database
-    if (user.permissions && Array.isArray(user.permissions)) {
-      const perm = user.permissions.find(p => p.code === permissionCode);
+    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+      const perm = user.permissions.find(p => p.code === permissionCode || p.code?.toLowerCase() === permissionCode.toLowerCase());
       if (perm) {
         if (requiredScope && perm.scope !== requiredScope && perm.scope !== 'ALL') {
           return false;
         }
         return true;
       }
-      return false;
     }
 
-    // 3. Fallback only if no permissions array provided
-    const defaults = getDefaultRolePermissions(user.roleName);
-    const defPerm = defaults.find(p => p.code === permissionCode);
+    // 3. Fallback to default role permissions
+    const defaults = getDefaultRolePermissions(user.roleName || user.roleDisplayName);
+    const defPerm = defaults.find(p => p.code === permissionCode || p.code?.toLowerCase() === permissionCode.toLowerCase());
     if (defPerm) {
       if (requiredScope && defPerm.scope !== requiredScope && defPerm.scope !== 'ALL') {
         return false;
@@ -378,8 +403,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const canAccess = (module: string): boolean => {
     if (!user) return false;
-    const normRole = (user.roleName || '').toUpperCase();
+    const normRole = (user.roleName || user.roleDisplayName || '').toUpperCase();
     if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
+      return true;
+    }
+
+    const modClean = module.toLowerCase().replace(/[-_\s]+/g, '');
+    if ((normRole === 'PRE_BOOKING' || normRole.includes('PRE_BOOK') || normRole.includes('PRE-BOOK')) &&
+        (modClean === 'prebookings' || modClean === 'prebooking')) {
       return true;
     }
 
@@ -391,7 +422,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
         if (storedUserPerms) {
           const uMap = JSON.parse(storedUserPerms);
-          const userEntry = uMap[user.id];
+          const userEntry = uMap[user.id] || uMap[String(user.id)] || uMap[Number(user.id)];
           if (userEntry && typeof userEntry === 'object') {
             return Object.entries(userEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
           }
@@ -400,7 +431,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
         if (storedRolePerms) {
           const rMap = JSON.parse(storedRolePerms);
-          const roleKey = (user.roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+          const roleKey = normRole.replace(/[^A-Z0-9]+/g, '_');
           const roleEntry = rMap[roleKey] || (user.roleDisplayName ? rMap[user.roleDisplayName] : null);
           if (roleEntry && typeof roleEntry === 'object') {
             return Object.entries(roleEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
@@ -410,12 +441,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 2. Check user.permissions from DB
-    if (user.permissions && Array.isArray(user.permissions)) {
+    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
       return user.permissions.some(p => p.code.startsWith(modPrefix));
     }
 
     // 3. Fallback
-    const defaults = getDefaultRolePermissions(user.roleName);
+    const defaults = getDefaultRolePermissions(user.roleName || user.roleDisplayName);
     return defaults.some(p => p.code.startsWith(modPrefix));
   };
 

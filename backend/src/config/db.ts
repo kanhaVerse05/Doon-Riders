@@ -1291,6 +1291,18 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ALTER TABLE IF EXISTS scooty_return_events ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS scooty_recoveries ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS scooty_recovery_events ENABLE ROW LEVEL SECURITY;
+
+      DROP POLICY IF EXISTS "service_role_all_pre_bookings" ON pre_bookings;
+      CREATE POLICY "service_role_all_pre_bookings" ON pre_bookings FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
+      
+      DROP POLICY IF EXISTS "pre_bookings_public_insert" ON pre_bookings;
+      CREATE POLICY "pre_bookings_public_insert" ON pre_bookings FOR INSERT TO anon, authenticated WITH CHECK (true);
+      
+      DROP POLICY IF EXISTS "pre_bookings_anon_select" ON pre_bookings;
+      CREATE POLICY "pre_bookings_anon_select" ON pre_bookings FOR SELECT TO anon USING (true);
+      
+      DROP POLICY IF EXISTS "pre_bookings_auth_manage" ON pre_bookings;
+      CREATE POLICY "pre_bookings_auth_manage" ON pre_bookings FOR ALL TO authenticated USING (true) WITH CHECK (true);
     `).catch(() => {});
 
     // 1. Seed Roles idempotently

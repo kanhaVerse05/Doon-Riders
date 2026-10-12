@@ -54,7 +54,26 @@ export default function AdminLoginPage() {
           return;
         }
 
-        router.push('/admin/dashboard');
+        const isSuper = parsed?.roleName === 'SUPER_ADMIN' || parsed?.roleName?.includes('SUPER');
+        const userPerms: Array<{ code: string }> = Array.isArray(parsed?.permissions) ? parsed.permissions : [];
+        const hasPerm = (code: string) => isSuper || userPerms.some((p: any) => p.code === code || p.code?.toLowerCase() === code.toLowerCase());
+        const isPreBooking = parsed?.roleName === 'PRE_BOOKING' || parsed?.roleName?.includes('PRE_BOOK') || parsed?.roleDisplayName?.toLowerCase().includes('pre-booking');
+
+        if (isSuper || hasPerm('dashboard.view')) {
+          router.push('/admin/dashboard');
+        } else if (isPreBooking || hasPerm('pre_bookings.view')) {
+          router.push('/admin/pre-bookings');
+        } else if (hasPerm('leads.view')) {
+          router.push('/admin/leads');
+        } else if (hasPerm('complaints.view')) {
+          router.push('/admin/complaints');
+        } else if (hasPerm('repairs.view')) {
+          router.push('/admin/repair-jobs');
+        } else if (hasPerm('inventory.view')) {
+          router.push('/admin/inventory');
+        } else {
+          router.push('/admin/pre-bookings');
+        }
       } else {
         setError('Invalid credentials. Please check your email and password.');
       }

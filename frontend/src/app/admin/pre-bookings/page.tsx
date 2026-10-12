@@ -125,6 +125,12 @@ const formatIndianDateOnly = (dateVal?: string): string => {
 export default function PreBookingsAdminPage() {
   const { user, hasPermission } = useAuth();
   const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
+  const isPreBookingUser = 
+    user?.roleName === 'PRE_BOOKING' || 
+    user?.roleName?.includes('PRE_BOOK') || 
+    user?.roleDisplayName?.toLowerCase().includes('pre-booking');
+  const canCreatePreBooking = isSuperAdmin || hasPermission('pre_bookings.create') || isPreBookingUser;
+  const canViewAllBookings = isSuperAdmin || hasPermission('pre_bookings.view_all') || hasPermission('pre_bookings.view', 'ALL');
 
   const [bookings, setBookings] = useState<PreBooking[]>([]);
   const [stats, setStats] = useState({
@@ -201,7 +207,7 @@ export default function PreBookingsAdminPage() {
       const roleParam = user?.roleName || 'SALES_EXECUTIVE';
       const userIdParam = user?.id || 1;
 
-      let query = `/admin/pre-bookings?role=${encodeURIComponent(roleParam)}&user_id=${userIdParam}&status=${statusFilter}&paymentMode=${paymentModeFilter}`;
+      let query = `/admin/pre-bookings?role=${encodeURIComponent(roleParam)}&user_id=${userIdParam}&status=${statusFilter}&paymentMode=${paymentModeFilter}&view_all=${canViewAllBookings ? 'true' : 'false'}`;
       if (search) query += `&search=${encodeURIComponent(search)}`;
       if (dateFilter) query += `&date=${encodeURIComponent(dateFilter)}`;
 
@@ -571,28 +577,13 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 DOON RIDERS PRE-BOOKING
               </h1>
               
-              {isSuperAdmin ? (
+              {isSuperAdmin && (
                 <span className="bg-[#EAFBF2] text-[#00A854] text-[11px] font-black px-3 py-1 rounded-full border border-[#00D96B]/30 flex items-center gap-1.5 shadow-xs">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>SUPER ADMIN (COMPANY OVERVIEW)</span>
                 </span>
-              ) : (
-                <span className="bg-blue-50 text-blue-700 text-[11px] font-black px-3 py-1 rounded-full border border-blue-200 flex items-center gap-1.5 shadow-xs">
-                  <User className="w-3.5 h-3.5" />
-                  <span>MY PRE-BOOKINGS ({user?.name})</span>
-                </span>
               )}
-
-              <span className="bg-[#EAFBF2] text-[#00A854] text-[11px] font-black px-2.5 py-1 rounded-full border border-[#00D96B]/40 font-mono shadow-xs">
-                ₹499 FIXED
-              </span>
             </div>
-
-            <p className="text-xs text-[#667085] mt-1">
-              {isSuperAdmin
-                ? 'Full company dashboard, QR image upload, dynamic ID series & WhatsApp receipt dispatch.'
-                : 'Create customer pre-bookings, collect UPI / Cash & instant WhatsApp receipt share.'}
-            </p>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -617,7 +608,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               </button>
             )}
 
-            {(isSuperAdmin || hasPermission('pre_bookings.create')) && (
+            {canCreatePreBooking && (
               <button
                 onClick={() => {
                   resetForm();
@@ -640,21 +631,6 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           </div>
         )}
 
-        {/* Regular User Notice */}
-        {!isSuperAdmin && (
-          <div className="bg-blue-50/70 border border-blue-200 text-blue-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>
-                <strong>Agent Privacy Active:</strong> You are viewing only your personal customer pre-bookings. Full company analytics are reserved for Super Admin.
-              </span>
-            </div>
-            <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-              Logged in: {user?.name}
-            </span>
-          </div>
-        )}
-
         {/* ========================================================================= */}
         {/* STATS SUMMARY METRIC CARDS */}
         {/* ========================================================================= */}
@@ -663,7 +639,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#667085] uppercase tracking-wider">
-                {isSuperAdmin ? 'Total Pre-Bookings' : 'My Pre-Bookings'}
+                {canViewAllBookings ? 'Total Pre-Bookings' : 'My Pre-Bookings'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854]">
                 <Ticket className="w-4 h-4" />
@@ -674,7 +650,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               <span className="text-xs font-bold text-[#00A854]">({stats.totalQty} EV Units)</span>
             </div>
             <p className="text-[11px] text-[#98A2B3]">
-              {isSuperAdmin ? 'Company-wide bookings' : 'Created by you'}
+              {canViewAllBookings ? 'Company-wide bookings' : 'Created by you'}
             </p>
           </div>
 
@@ -682,7 +658,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           <div className="bg-white border-2 border-[#00D96B]/40 hover:border-[#00D96B] rounded-2xl p-5 shadow-sm space-y-2 transition-all">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#00A854] uppercase tracking-wider">
-                {isSuperAdmin ? 'Total Collected' : 'My Revenue'}
+                {canViewAllBookings ? 'Total Collected' : 'My Revenue'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/40 flex items-center justify-center text-[#00A854]">
                 <Zap className="w-4 h-4 fill-current" />
@@ -813,20 +789,20 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                   <th className="p-3.5 px-4 text-right">Amount</th>
                   <th className="p-3.5 px-4 text-center">Payment Mode</th>
                   <th className="p-3.5 px-4 text-center">Status</th>
-                  {isSuperAdmin && <th className="p-3.5 px-4">Created By</th>}
+                  {canViewAllBookings && <th className="p-3.5 px-4">Created By</th>}
                   <th className="p-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] font-medium bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={isSuperAdmin ? 10 : 9} className="p-8 text-center text-[#98A2B3]">
+                    <td colSpan={canViewAllBookings ? 10 : 9} className="p-8 text-center text-[#98A2B3]">
                       Loading pre-bookings...
                     </td>
                   </tr>
                 ) : bookings.length === 0 ? (
                   <tr>
-                    <td colSpan={isSuperAdmin ? 10 : 9} className="p-10 text-center text-[#98A2B3]">
+                    <td colSpan={canViewAllBookings ? 10 : 9} className="p-10 text-center text-[#98A2B3]">
                       <Ticket className="w-8 h-8 text-[#D0D5DD] mx-auto mb-2" />
                       <p className="font-bold text-sm text-[#475467]">No Pre-Bookings Found</p>
                       <p className="text-xs text-[#98A2B3] mt-1">Click "+ New Pre-Booking" to create a customer booking.</p>
@@ -915,8 +891,8 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                         )}
                       </td>
 
-                      {/* CREATED BY (Super Admin Only) */}
-                      {isSuperAdmin && (
+                      {/* CREATED BY (Company Overview Mode) */}
+                      {canViewAllBookings && (
                         <td className="p-3.5 px-4 text-[#667085] text-[11px]">
                           <span className="font-bold text-[#111827]">{booking.created_by_name || 'Staff'}</span>
                         </td>
