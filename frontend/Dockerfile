@@ -3,15 +3,15 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies (ensure devDependencies like typescript, tailwindcss are installed)
-ENV NODE_ENV=development
+# Install all dependencies (including devDependencies required for Next.js build)
 COPY package*.json ./
 RUN npm ci --include=dev
 
 # Copy frontend source
 COPY . .
 
-# Build Next.js application
+# Build Next.js application with standard production environment
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

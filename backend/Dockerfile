@@ -4,7 +4,6 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies (ensure devDependencies like typescript are installed)
-ENV NODE_ENV=development
 COPY package*.json ./
 RUN npm ci --include=dev
 
