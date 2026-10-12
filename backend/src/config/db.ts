@@ -1,5 +1,6 @@
 import { Pool, PoolConfig } from 'pg';
 import dotenv from 'dotenv';
+import net from 'net';
 
 dotenv.config();
 
@@ -634,6 +635,47 @@ export const pool = {
 
 let lastDbError: string | null = null;
 let activeDbHost: string = 'none';
+let probeResults: Record<string, string> = {};
+
+function probeTcpPort(host: string, port: number, timeoutMs = 1200): Promise<{ host: string; open: boolean; message: string }> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let done = false;
+
+    socket.setTimeout(timeoutMs);
+
+    socket.on('connect', () => {
+      done = true;
+      socket.destroy();
+      resolve({ host, open: true, message: 'OPEN' });
+    });
+
+    socket.on('timeout', () => {
+      if (!done) {
+        done = true;
+        socket.destroy();
+        resolve({ host, open: false, message: 'timeout' });
+      }
+    });
+
+    socket.on('error', (err) => {
+      if (!done) {
+        done = true;
+        socket.destroy();
+        resolve({ host, open: false, message: err.message });
+      }
+    });
+
+    try {
+      socket.connect(port, host);
+    } catch (e: any) {
+      if (!done) {
+        done = true;
+        resolve({ host, open: false, message: e.message });
+      }
+    }
+  });
+}
 
 export const getRawPool = (): Pool | null => pgPool;
 export const getDbStatus = (): boolean => isPostgresConnected;
@@ -654,6 +696,7 @@ export const getDbErrorDetails = () => {
     activeDbHost,
     hasEnvDatabaseUrl: Boolean(process.env.DATABASE_URL),
     configuredUrl: maskedUrl,
+    probedHosts: probeResults,
   };
 };
 
@@ -661,23 +704,58 @@ export const checkDbConnection = async (): Promise<boolean> => {
   try {
     const rawUrl = process.env.DATABASE_URL || `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDatabase}`;
     
-    const candidates = [rawUrl];
-    if (rawUrl.includes('supabase-db')) {
-      candidates.push(rawUrl.replace('supabase-db', 'host.docker.internal'));
-      candidates.push(rawUrl.replace('supabase-db', '172.17.0.1'));
-      candidates.push(rawUrl.replace('supabase-db', 'supabase-db-3o7vdsl1qr8jcenwzb5vdoal'));
-      candidates.push(rawUrl.replace('supabase-db', 'supabase-postgres'));
+    // Extract configured hostname and port from database URL
+    let configuredHost = 'supabase-db';
+    let targetPort = 5432;
+    try {
+      const parsed = new URL(rawUrl.replace(/^postgresql:\/\//, 'http://'));
+      configuredHost = parsed.hostname;
+      if (parsed.port) targetPort = Number(parsed.port);
+    } catch {}
+
+    const candidateHosts = [
+      configuredHost,
+      'db',
+      'supabase-db',
+      'doon-riders-supabase-db',
+      'doon-riders-supabase',
+      'doon-riders-supabase_db',
+      'doon-riders-supabase-db-1',
+      '3o7vdsl1qr8jcenwzb5vdoal-db',
+      'supabase-db-3o7vdsl1qr8jcenwzb5vdoal',
+      'host.docker.internal',
+      '172.17.0.1',
+      '172.18.0.1',
+      '172.19.0.1',
+      '172.20.0.1',
+      'localhost',
+    ].filter((v, i, a) => a.indexOf(v) === i);
+
+    // Fast parallel probe of all candidate hosts
+    const probeList = await Promise.all(candidateHosts.map(h => probeTcpPort(h, targetPort, 1200)));
+    probeResults = {};
+    for (const p of probeList) {
+      probeResults[p.host] = p.message;
+    }
+    console.log('Probed DB candidate hosts:', probeResults);
+
+    const openHosts = probeList.filter(p => p.open).map(p => p.host);
+    const prioritizedHosts = [...openHosts];
+    if (!prioritizedHosts.includes(configuredHost)) {
+      prioritizedHosts.push(configuredHost);
     }
 
     let connected = false;
 
-    for (const candUrl of candidates) {
+    for (const host of prioritizedHosts) {
+      const candUrl = rawUrl.replace(/@([^:/]+)(:\d+)?\//, `@${host}:${targetPort}/`);
       try {
-        const isInternalDb = candUrl.includes('supabase-db') ||
-                             candUrl.includes('localhost') ||
-                             candUrl.includes('127.0.0.1') ||
-                             candUrl.includes('host.docker.internal') ||
-                             candUrl.includes('172.17.0.1') ||
+        const isInternalDb = host.includes('db') ||
+                             host.includes('supabase') ||
+                             host.includes('localhost') ||
+                             host.includes('127.0.0.1') ||
+                             host.includes('host.docker.internal') ||
+                             host.startsWith('172.') ||
                              candUrl.includes('sslmode=disable');
 
         const isRemoteDb = !isInternalDb && (
@@ -694,7 +772,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
           connectionString: candUrl,
           max: 20,
           idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
+          connectionTimeoutMillis: 4000,
           ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {})
         };
 
@@ -706,18 +784,13 @@ export const checkDbConnection = async (): Promise<boolean> => {
         pgPool = testPool;
         isPostgresConnected = true;
         connected = true;
-
-        try {
-          const parsed = new URL(candUrl.replace(/^postgresql:\/\//, 'http://'));
-          activeDbHost = `${parsed.hostname}:${parsed.port || '5432'}`;
-        } catch {
-          activeDbHost = candUrl.split('@')[1]?.split('/')[0] || 'connected';
-        }
+        activeDbHost = `${host}:${targetPort}`;
 
         console.log(`✅ PostgreSQL Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
         break;
       } catch (candErr: any) {
         lastDbError = candErr.message || String(candErr);
+        probeResults[`connect_${host}`] = lastDbError;
       }
     }
 
