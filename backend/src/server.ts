@@ -71,7 +71,11 @@ app.use('/api/admin/audit', adminAuditRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/pricing-plans', adminPricingRoutes);
 
-// Healthcheck
+// Healthcheck endpoints (Supports both / and /api/health for Coolify & Docker)
+app.get('/', (req, res) => {
+  res.status(200).send('OK');
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
