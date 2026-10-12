@@ -330,10 +330,10 @@ export const bulkAssignLeads = async (req: AuthRequest, res: Response) => {
     const assignee = userRes.rows[0];
 
     // Update Leads
-    const placeholders = leadIds.map(() => '?').join(',');
+    const placeholders = leadIds.map((_: any, i: number) => `$${i + 2}`).join(',');
     await pool.query(`
       UPDATE leads 
-      SET assigned_to = ?, updated_at = NOW()
+      SET assigned_to = $1, updated_at = NOW()
       WHERE id IN (${placeholders})
     `, [assignToUserId, ...leadIds]);
 

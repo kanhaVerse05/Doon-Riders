@@ -10,31 +10,33 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
     if (getDbStatus()) {
       let sql = 'SELECT * FROM pre_bookings WHERE 1=1';
       const params: any[] = [];
+      let pIdx = 1;
 
       // RBAC: If not super admin, only show pre-bookings created by this user
       if (!isSuperAdmin && currentUserId) {
-        sql += ' AND (created_by_id = ? OR created_by_id IS NULL)';
+        sql += ` AND (created_by_id = $${pIdx++} OR created_by_id IS NULL)`;
         params.push(currentUserId);
       }
 
       if (status && status !== 'All') {
-        sql += ' AND payment_status = ?';
+        sql += ` AND payment_status = $${pIdx++}`;
         params.push(status);
       }
 
       if (paymentMode && paymentMode !== 'All') {
-        sql += ' AND payment_mode = ?';
+        sql += ` AND payment_mode = $${pIdx++}`;
         params.push(paymentMode);
       }
 
       if (date) {
-        sql += ' AND booking_date = ?';
+        sql += ` AND booking_date = $${pIdx++}`;
         params.push(date);
       }
 
       if (search) {
-        sql += ' AND (customer_name LIKE ? OR mobile_number LIKE ? OR booking_code LIKE ?)';
-        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        sql += ` AND (customer_name ILIKE $${pIdx} OR mobile_number ILIKE $${pIdx} OR booking_code ILIKE $${pIdx})`;
+        params.push(`%${search}%`);
+        pIdx++;
       }
 
       sql += ' ORDER BY created_at DESC';
@@ -177,17 +179,25 @@ export const createPreBooking = async (req: Request, res: Response) => {
         currentNext = Number(qrRows[0].next_booking_number) || Number(qrRows[0].starting_booking_number) || 1001;
       }
 
-      // Check if candidate booking code already exists in db; increment until unique
+      // Determine sequential booking code from series settings
       let candidateNum = currentNext;
       let bookingCode = `${prefix}${candidateNum}`;
 
-      while (true) {
-        const existing = await pool.query('SELECT id FROM pre_bookings WHERE booking_code = $1', [bookingCode]);
-        if (existing.rows.length === 0) {
-          break;
+      // Check if candidate booking code already exists in db
+      const existing = await pool.query('SELECT id FROM pre_bookings WHERE booking_code = $1', [bookingCode]);
+      if (existing.rows.length > 0) {
+        // Query max booking number for this prefix
+        const maxRes = await pool.query(
+          'SELECT booking_code FROM pre_bookings WHERE booking_code LIKE $1 ORDER BY id DESC LIMIT 1',
+          [`${prefix}%`]
+        );
+        if (maxRes.rows.length > 0) {
+          const numPart = parseInt(maxRes.rows[0].booking_code.replace(prefix, ''), 10);
+          if (!isNaN(numPart) && numPart >= candidateNum) {
+            candidateNum = numPart + 1;
+            bookingCode = `${prefix}${candidateNum}`;
+          }
         }
-        candidateNum++;
-        bookingCode = `${prefix}${candidateNum}`;
       }
 
       const insertSql = `
@@ -227,12 +237,8 @@ export const createPreBooking = async (req: Request, res: Response) => {
 
       // Update next_booking_number in upi_qr_settings for the next receipt
       await pool.query(
-        `INSERT INTO upi_qr_settings (id, booking_id_prefix, starting_booking_number, next_booking_number, updated_at)
-         VALUES (1, $1, $2, $3, NOW())
-         ON CONFLICT (id) DO UPDATE SET
-           next_booking_number = $3,
-           updated_at = NOW()`,
-        [prefix, currentNext, candidateNum + 1]
+        `UPDATE upi_qr_settings SET next_booking_number = $1, updated_at = NOW() WHERE id = 1`,
+        [candidateNum + 1]
       );
 
       return res.status(201).json({
@@ -292,10 +298,10 @@ export const updatePreBookingStatus = async (req: Request, res: Response) => {
 
     if (getDbStatus()) {
       await pool.query(
-        'UPDATE pre_bookings SET payment_status = COALESCE(?, payment_status), payment_mode = COALESCE(?, payment_mode), notes = COALESCE(?, notes) WHERE id = ?',
+        'UPDATE pre_bookings SET payment_status = COALESCE($1, payment_status), payment_mode = COALESCE($2, payment_mode), notes = COALESCE($3, notes) WHERE id = $4',
         [payment_status, payment_mode, notes, id]
       );
-      const [updated] = (await pool.query('SELECT * FROM pre_bookings WHERE id = ?', [id])).rows;
+      const [updated] = (await pool.query('SELECT * FROM pre_bookings WHERE id = $1', [id])).rows;
       return res.json({ success: true, data: updated, message: 'Pre-booking updated' });
     }
 
@@ -320,7 +326,7 @@ export const deletePreBooking = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (getDbStatus()) {
-      await pool.query('DELETE FROM pre_bookings WHERE id = ?', [id]);
+      await pool.query('DELETE FROM pre_bookings WHERE id = $1', [id]);
       return res.json({ success: true, message: 'Pre-booking deleted' });
     }
 

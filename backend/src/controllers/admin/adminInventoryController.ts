@@ -18,20 +18,22 @@ export const getAllInventory = async (req: Request, res: Response) => {
     if (getDbStatus()) {
       let sql = 'SELECT * FROM inventory WHERE 1=1';
       const params: any[] = [];
+      let pIdx = 1;
 
       if (status && status !== 'All') {
-        sql += ' AND status = ?';
+        sql += ` AND status = $${pIdx++}`;
         params.push(status);
       }
 
       if (category && category !== 'All') {
-        sql += ' AND category = ?';
+        sql += ` AND category = $${pIdx++}`;
         params.push(category);
       }
 
       if (search) {
-        sql += ' AND (part_name LIKE ? OR part_code LIKE ? OR category LIKE ? OR supplier LIKE ? OR location LIKE ?)';
-        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        sql += ` AND (part_name ILIKE $${pIdx} OR part_code ILIKE $${pIdx} OR category ILIKE $${pIdx} OR supplier ILIKE $${pIdx} OR location ILIKE $${pIdx})`;
+        params.push(`%${search}%`);
+        pIdx++;
       }
 
       // Sorting
@@ -154,7 +156,7 @@ export const getInventoryById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (getDbStatus()) {
-      const [item] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [id])).rows;
+      const [item] = (await pool.query('SELECT * FROM inventory WHERE id = $1', [id])).rows;
       if (!item) return res.status(404).json({ success: false, message: 'Item not found' });
       return res.json({ success: true, data: item });
     }
@@ -206,7 +208,8 @@ export const createInventoryItem = async (req: Request, res: Response) => {
         INSERT INTO inventory (
           part_code, part_name, category, image_url, quantity, min_threshold,
           unit_price, status, location, supplier, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
       `;
 
       const result = await pool.query(sql, [
@@ -223,7 +226,7 @@ export const createInventoryItem = async (req: Request, res: Response) => {
         description?.trim() || ''
       ]);
 
-      const [newRow] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [result.insertId])).rows;
+      const newRow = result.rows[0];
       return res.status(201).json({
         success: true,
         data: newRow,
@@ -283,7 +286,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     } = req.body;
 
     if (getDbStatus()) {
-      const [existing] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [id])).rows;
+      const [existing] = (await pool.query('SELECT * FROM inventory WHERE id = $1', [id])).rows;
       if (!existing) return res.status(404).json({ success: false, message: 'Item not found' });
 
       const newQty = quantity !== undefined ? Math.max(0, Number(quantity)) : existing.quantity;
@@ -293,21 +296,22 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
 
       const sql = `
         UPDATE inventory SET
-          part_code = COALESCE(?, part_code),
-          part_name = COALESCE(?, part_name),
-          category = COALESCE(?, category),
-          image_url = COALESCE(?, image_url),
-          quantity = ?,
-          min_threshold = ?,
-          unit_price = ?,
-          status = ?,
-          location = COALESCE(?, location),
-          supplier = COALESCE(?, supplier),
-          description = COALESCE(?, description)
-        WHERE id = ?
+          part_code = COALESCE($1, part_code),
+          part_name = COALESCE($2, part_name),
+          category = COALESCE($3, category),
+          image_url = COALESCE($4, image_url),
+          quantity = $5,
+          min_threshold = $6,
+          unit_price = $7,
+          status = $8,
+          location = COALESCE($9, location),
+          supplier = COALESCE($10, supplier),
+          description = COALESCE($11, description)
+        WHERE id = $12
+        RETURNING *
       `;
 
-      await pool.query(sql, [
+      const updateRes = await pool.query(sql, [
         part_code ? part_code.trim() : null,
         part_name ? part_name.trim() : null,
         category ? category.trim() : null,
@@ -322,7 +326,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
         id
       ]);
 
-      const [updated] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [id])).rows;
+      const updated = updateRes.rows[0];
       return res.json({
         success: true,
         data: updated,
@@ -372,7 +376,7 @@ export const adjustStock = async (req: Request, res: Response) => {
     const { delta, newQuantity } = req.body;
 
     if (getDbStatus()) {
-      const [existing] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [id])).rows;
+      const [existing] = (await pool.query('SELECT * FROM inventory WHERE id = $1', [id])).rows;
       if (!existing) return res.status(404).json({ success: false, message: 'Item not found' });
 
       let qty = existing.quantity;
@@ -384,8 +388,8 @@ export const adjustStock = async (req: Request, res: Response) => {
 
       const status = calculateStatus(qty, existing.min_threshold, existing.status);
 
-      await pool.query('UPDATE inventory SET quantity = ?, status = ? WHERE id = ?', [qty, status, id]);
-      const [updated] = (await pool.query('SELECT * FROM inventory WHERE id = ?', [id])).rows;
+      await pool.query('UPDATE inventory SET quantity = $1, status = $2 WHERE id = $3', [qty, status, id]);
+      const [updated] = (await pool.query('SELECT * FROM inventory WHERE id = $1', [id])).rows;
 
       return res.json({
         success: true,
@@ -425,7 +429,7 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (getDbStatus()) {
-      await pool.query('DELETE FROM inventory WHERE id = ?', [id]);
+      await pool.query('DELETE FROM inventory WHERE id = $1', [id]);
       return res.json({ success: true, message: 'Inventory item deleted successfully!' });
     }
 

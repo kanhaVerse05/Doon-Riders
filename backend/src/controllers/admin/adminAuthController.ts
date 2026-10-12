@@ -185,7 +185,12 @@ export const login = async (req: Request, res: Response) => {
       if (permRes.rows.length > 0) {
         permissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
       } else {
-        permissions = getPermissionsForRole(u.role_name || 'SALES_EXECUTIVE');
+        const standardRoles = ['SUPER_ADMIN', 'MANAGER', 'SALES_EXECUTIVE', 'HUB_INCHARGE', 'TECHNICIAN', 'CUSTOMER_SUPPORT'];
+        if (standardRoles.includes(u.role_name)) {
+          permissions = getPermissionsForRole(u.role_name);
+        } else {
+          permissions = [];
+        }
       }
 
       const authUser = {

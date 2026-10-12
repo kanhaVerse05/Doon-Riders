@@ -141,6 +141,7 @@ export const Sidebar: React.FC = () => {
               name: 'Scooty Recoveries',
               href: '/admin/recoveries',
               icon: ShieldAlert,
+              permission: 'fleet.view',
               badge: 'Recovery'
             },
             {
@@ -222,6 +223,8 @@ export const Sidebar: React.FC = () => {
         }
       ];
 
+  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
+
   return (
     <aside className="w-56 lg:w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between hidden md:flex flex-shrink-0 h-screen sticky top-0 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] z-30">
       <div className="flex flex-col flex-1 overflow-y-auto">
@@ -250,7 +253,7 @@ export const Sidebar: React.FC = () => {
         {/* Navigation Groups */}
         <div className="p-3 space-y-6 flex-1">
           {navGroups.map((grp, gIdx) => {
-            const visibleItems = grp.items.filter(item => !item.permission || hasPermission(item.permission));
+            const visibleItems = grp.items.filter(item => isSuperAdmin || (Boolean(item.permission) && hasPermission(item.permission!)));
             if (visibleItems.length === 0) return null;
 
             return (

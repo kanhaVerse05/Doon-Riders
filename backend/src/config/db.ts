@@ -680,7 +680,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
         phone VARCHAR(50),
         role_id INT REFERENCES roles(id) ON DELETE SET NULL,
         status VARCHAR(50) DEFAULT 'active',
-        avatar_url VARCHAR(500),
+        avatar_url TEXT,
         last_login TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -722,7 +722,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
         title VARCHAR(255) NOT NULL,
         category VARCHAR(100) NOT NULL,
         description TEXT,
-        image_url VARCHAR(500) NOT NULL,
+        image_url TEXT NOT NULL,
         vehicle_id INT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -746,7 +746,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
 
       CREATE TABLE IF NOT EXISTS pre_bookings (
         id SERIAL PRIMARY KEY,
-        booking_code VARCHAR(50) NOT NULL UNIQUE,
+        booking_code VARCHAR(50) NOT NULL,
         customer_name VARCHAR(150) NOT NULL,
         mobile_number VARCHAR(50) NOT NULL,
         booking_date DATE NOT NULL,
@@ -766,7 +766,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
         id INT PRIMARY KEY DEFAULT 1,
         upi_id VARCHAR(100) NOT NULL DEFAULT 'doonriders@icici',
         merchant_name VARCHAR(150) NOT NULL DEFAULT 'DOON RIDERS EV MOBILITY',
-        qr_image_url VARCHAR(500),
+        qr_image_url TEXT,
         booking_id_prefix VARCHAR(20) NOT NULL DEFAULT 'DR-PB-',
         starting_booking_number INT NOT NULL DEFAULT 1001,
         next_booking_number INT NOT NULL DEFAULT 1001,
@@ -778,7 +778,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
         part_code VARCHAR(50) NOT NULL UNIQUE,
         part_name VARCHAR(150) NOT NULL,
         category VARCHAR(100) NOT NULL DEFAULT 'Spare Parts',
-        image_url VARCHAR(500),
+        image_url TEXT,
         quantity INT NOT NULL DEFAULT 0,
         min_threshold INT NOT NULL DEFAULT 5,
         unit_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
@@ -1116,6 +1116,13 @@ export const checkDbConnection = async (): Promise<boolean> => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
+    // Auto-migrate column types for existing databases to support base64/long images
+    await pgPool.query('ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE gallery_images ALTER COLUMN image_url TYPE TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE upi_qr_settings ALTER COLUMN qr_image_url TYPE TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE inventory ALTER COLUMN image_url TYPE TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE pre_bookings DROP CONSTRAINT IF EXISTS pre_bookings_booking_code_key;').catch(() => {});
 
     // 1. Seed Roles if empty
     const roleCount = await pgPool.query('SELECT COUNT(*) FROM roles');

@@ -123,8 +123,8 @@ const formatIndianDateOnly = (dateVal?: string): string => {
 };
 
 export default function PreBookingsAdminPage() {
-  const { user } = useAuth();
-  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN';
+  const { user, hasPermission } = useAuth();
+  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
 
   const [bookings, setBookings] = useState<PreBooking[]>([]);
   const [stats, setStats] = useState({
@@ -150,7 +150,7 @@ export default function PreBookingsAdminPage() {
     qr_image_url: '',
     booking_id_prefix: 'DR-PB-',
     starting_booking_number: 1001,
-    next_booking_number: 1003
+    next_booking_number: 1001
   });
   const [showQrSettingsModal, setShowQrSettingsModal] = useState(false);
   const [tempUpiId, setTempUpiId] = useState('');
@@ -434,6 +434,10 @@ export default function PreBookingsAdminPage() {
   };
 
   const handleUpdateStatus = async (id: number, newStatus: 'PAID' | 'CANCELLED' | 'PENDING') => {
+    if (!isSuperAdmin && !hasPermission('pre_bookings.status_update')) {
+      alert('You do not have permission to change booking status or cancel bookings.');
+      return;
+    }
     try {
       await adminApi.patch(`/admin/pre-bookings/${id}`, { payment_status: newStatus });
       setBookings(prev =>
@@ -447,6 +451,10 @@ export default function PreBookingsAdminPage() {
   };
 
   const handleDelete = async (id: number) => {
+    if (!isSuperAdmin && !hasPermission('pre_bookings.delete')) {
+      alert('You do not have permission to delete pre-booking records.');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this pre-booking record?')) return;
     try {
       await adminApi.delete(`/admin/pre-bookings/${id}`);
@@ -655,7 +663,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
 
           <div className="flex items-center gap-3 flex-wrap">
             {/* Super Admin Settings Button */}
-            {isSuperAdmin && (
+            {(isSuperAdmin || hasPermission('pre_bookings.settings')) && (
               <button
                 onClick={handleOpenQrSettings}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F7F9FA] transition shadow-sm cursor-pointer"
@@ -665,24 +673,28 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               </button>
             )}
 
-            <button
-              onClick={handleExportCsv}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F7F9FA] transition shadow-sm cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-[#00A854]" />
-              <span>EXPORT CSV</span>
-            </button>
+            {(isSuperAdmin || hasPermission('pre_bookings.export')) && (
+              <button
+                onClick={handleExportCsv}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F7F9FA] transition shadow-sm cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-[#00A854]" />
+                <span>EXPORT CSV</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                resetForm();
-                setShowCreateModal(true);
-              }}
-              className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition transform hover:scale-[1.02] active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ NEW PRE-BOOKING</span>
-            </button>
+            {(isSuperAdmin || hasPermission('pre_bookings.create')) && (
+              <button
+                onClick={() => {
+                  resetForm();
+                  setShowCreateModal(true);
+                }}
+                className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition transform hover:scale-[1.02] active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>+ NEW PRE-BOOKING</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1000,27 +1012,29 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Toggle Status */}
-                          {booking.payment_status === 'PAID' ? (
-                            <button
-                              onClick={() => handleUpdateStatus(booking.id, 'CANCELLED')}
-                              title="Mark as Cancelled"
-                              className="p-1.5 bg-[#F7F9FA] hover:bg-red-50 text-[#667085] hover:text-red-600 border border-[#E5E7EB] hover:border-red-200 rounded-lg transition cursor-pointer"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleUpdateStatus(booking.id, 'PAID')}
-                              title="Mark as Paid"
-                              className="p-1.5 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#667085] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 rounded-lg transition cursor-pointer"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </button>
+                          {/* Toggle Status (Only with pre_bookings.status_update permission or Super Admin) */}
+                          {(isSuperAdmin || hasPermission('pre_bookings.status_update')) && (
+                            booking.payment_status === 'PAID' ? (
+                              <button
+                                onClick={() => handleUpdateStatus(booking.id, 'CANCELLED')}
+                                title="Mark as Cancelled"
+                                className="p-1.5 bg-[#F7F9FA] hover:bg-red-50 text-[#667085] hover:text-red-600 border border-[#E5E7EB] hover:border-red-200 rounded-lg transition cursor-pointer"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleUpdateStatus(booking.id, 'PAID')}
+                                title="Mark as Paid"
+                                className="p-1.5 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#667085] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 rounded-lg transition cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </button>
+                            )
                           )}
 
-                          {/* Delete (Super Admin or Owner) */}
-                          {(isSuperAdmin || booking.created_by_id === user?.id) && (
+                          {/* Delete (Only with pre_bookings.delete permission or Super Admin) */}
+                          {(isSuperAdmin || hasPermission('pre_bookings.delete')) && (
                             <button
                               onClick={() => handleDelete(booking.id)}
                               title="Delete Record"
@@ -1508,13 +1522,13 @@ _Please present this receipt confirmation at the hub during vehicle handover._
       {/* OFFICIAL PRE-BOOKING VOUCHER / RECEIPT MODAL (WITH WHATSAPP IMAGE & SHARE) */}
       {/* ========================================================================= */}
       {selectedReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-[32px] border border-[#E5E7EB] w-full max-w-md p-6 sm:p-8 shadow-2xl space-y-5 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-[24px] border border-[#E5E7EB] w-full max-w-sm sm:max-w-md p-4 sm:p-5 shadow-2xl space-y-3 relative my-auto max-h-[92vh] overflow-y-auto">
             
             {/* Close Button */}
             <button
               onClick={() => setSelectedReceipt(null)}
-              className="absolute top-5 right-5 p-1.5 text-[#98A2B3] hover:text-[#111827] rounded-full hover:bg-[#F2F4F7] transition cursor-pointer print:hidden"
+              className="absolute top-3.5 right-3.5 p-1 text-[#98A2B3] hover:text-[#111827] rounded-full hover:bg-[#F2F4F7] transition cursor-pointer print:hidden z-10"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1522,101 +1536,101 @@ _Please present this receipt confirmation at the hub during vehicle handover._
             {/* Receipt Printable Card (DOM Target for HTML2Canvas & Print) */}
             <div
               ref={receiptCardRef}
-              className="bg-white rounded-[24px] border border-[#E5E7EB] shadow-sm text-left"
+              className="bg-white rounded-[18px] border border-[#E5E7EB] shadow-sm text-left"
               id="printable-receipt"
               style={{
-                width: '420px',
-                maxWidth: '420px',
+                width: '100%',
+                maxWidth: '380px',
                 margin: '0 auto',
                 backgroundColor: '#ffffff',
-                padding: '24px',
+                padding: '16px 16px',
                 boxSizing: 'border-box',
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
               }}
             >
               
               {/* Receipt Header */}
-              <div style={{ textAlign: 'center', paddingBottom: '16px', borderBottom: '1px solid #E5E7EB' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#EAFBF2', border: '1.5px solid #00D96B', marginBottom: '10px' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="#00A854" style={{ display: 'block' }}>
+              <div style={{ textAlign: 'center', paddingBottom: '10px', borderBottom: '1px solid #E5E7EB' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '42px', height: '42px', borderRadius: '12px', backgroundColor: '#EAFBF2', border: '1.5px solid #00D96B', marginBottom: '6px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="#00A854" style={{ display: 'block' }}>
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                   </svg>
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', letterSpacing: '1px', textTransform: 'uppercase', lineHeight: '1.1', margin: 0 }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#111827', letterSpacing: '1px', textTransform: 'uppercase', lineHeight: '1.1', margin: 0 }}>
                     DOON <span style={{ color: '#00A854' }}>RIDERS</span>
                   </h3>
-                  <p style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '2px', textTransform: 'uppercase', marginTop: '5px', marginBottom: 0 }}>
+                  <p style={{ fontSize: '9px', fontWeight: 800, color: '#64748B', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: '3px', marginBottom: 0 }}>
                     OFFICIAL PRE-BOOKING RECEIPT
                   </p>
                 </div>
 
-                <div style={{ marginTop: '10px' }}>
-                  <span style={{ display: 'inline-block', backgroundColor: '#EAFBF2', color: '#00A854', fontSize: '12px', fontWeight: 900, fontFamily: 'monospace', padding: '5px 16px', borderRadius: '9999px', border: '1.5px solid #00D96B', letterSpacing: '1.5px' }}>
+                <div style={{ marginTop: '6px' }}>
+                  <span style={{ display: 'inline-block', backgroundColor: '#EAFBF2', color: '#00A854', fontSize: '11px', fontWeight: 900, fontFamily: 'monospace', padding: '3px 12px', borderRadius: '9999px', border: '1.5px solid #00D96B', letterSpacing: '1px' }}>
                     {selectedReceipt.booking_code}
                   </span>
                 </div>
               </div>
 
               {/* Receipt Info Table */}
-              <div style={{ backgroundColor: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '12px 18px', margin: '16px 0', boxSizing: 'border-box' }}>
+              <div style={{ backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '8px 12px', margin: '10px 0', boxSizing: 'border-box' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <tbody>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
                         Customer Name:
                       </td>
-                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle', wordBreak: 'break-word' }}>
+                      <td style={{ padding: '5.5px 0', color: '#0F172A', fontSize: '12px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle', wordBreak: 'break-word' }}>
                         {selectedReceipt.customer_name}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
                         Mobile Number:
                       </td>
-                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, fontFamily: 'monospace', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#0F172A', fontSize: '12px', fontWeight: 700, fontFamily: 'monospace', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
                         {selectedReceipt.mobile_number}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
-                        Booking Date &amp; Time:
+                      <td style={{ padding: '5.5px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Booking Date:
                       </td>
-                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12px', fontWeight: 600, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#0F172A', fontSize: '11.5px', fontWeight: 600, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
                         {formatIndianDateTime(selectedReceipt.created_at, selectedReceipt.booking_date)}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
-                        EV Scooty Quantity:
+                      <td style={{ padding: '5.5px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Quantity:
                       </td>
-                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#0F172A', fontSize: '12px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
                         {selectedReceipt.quantity} Unit{selectedReceipt.quantity > 1 ? 's' : ''} (₹499/unit)
                       </td>
                     </tr>
                     <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
-                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
                         Payment Mode:
                       </td>
-                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                      <td style={{ padding: '5.5px 0', color: '#0F172A', fontSize: '12px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
                         {selectedReceipt.payment_mode === 'UPI' ? 'UPI (Scan & Pay)' : 'Cash (Counter)'}
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '9px 0 4px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
-                        Payment Status:
+                      <td style={{ padding: '5.5px 0 2px 0', color: '#64748B', fontSize: '11.5px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Status:
                       </td>
-                      <td style={{ padding: '9px 0 4px 0', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
-                        <span style={{ display: 'inline-block', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px' }}>
+                      <td style={{ padding: '5.5px 0 2px 0', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        <span style={{ display: 'inline-block', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', borderRadius: '5px', padding: '2px 8px', fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.5px' }}>
                           PAID &amp; CONFIRMED
                         </span>
                       </td>
                     </tr>
                     {selectedReceipt.notes && (
                       <tr style={{ borderTop: '1px solid #E2E8F0' }}>
-                        <td colSpan={2} style={{ padding: '8px 0 2px 0', textAlign: 'left' }}>
-                          <span style={{ color: '#64748B', fontSize: '10px', fontWeight: 600, display: 'block' }}>Booking Notes:</span>
-                          <span style={{ color: '#0F172A', fontSize: '11px', fontStyle: 'italic', display: 'block', marginTop: '2px' }}>{selectedReceipt.notes}</span>
+                        <td colSpan={2} style={{ padding: '6px 0 2px 0', textAlign: 'left' }}>
+                          <span style={{ color: '#64748B', fontSize: '9.5px', fontWeight: 600, display: 'block' }}>Notes:</span>
+                          <span style={{ color: '#0F172A', fontSize: '10.5px', fontStyle: 'italic', display: 'block', marginTop: '1px' }}>{selectedReceipt.notes}</span>
                         </td>
                       </tr>
                     )}
@@ -1625,47 +1639,47 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               </div>
 
               {/* Total Paid Badge (AMOUNT) */}
-              <div style={{ backgroundColor: '#070D18', borderRadius: '16px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #1E293B', margin: '16px 0', boxSizing: 'border-box' }}>
+              <div style={{ backgroundColor: '#070D18', borderRadius: '12px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #1E293B', margin: '10px 0', boxSizing: 'border-box' }}>
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '2px' }}>
-                    AMOUNT
+                  <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1px' }}>
+                    AMOUNT PAID
                   </div>
-                  <div style={{ fontSize: '12px', color: '#00D96B', fontWeight: 700 }}>
+                  <div style={{ fontSize: '11px', color: '#00D96B', fontWeight: 700 }}>
                     100% Confirmed Pre-Booking
                   </div>
                 </div>
-                <div style={{ fontSize: '28px', color: '#00D96B', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1 }}>
+                <div style={{ fontSize: '22px', color: '#00D96B', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1 }}>
                   ₹{Number(selectedReceipt.total_amount).toLocaleString()}
                 </div>
               </div>
 
               {/* Receipt Footer */}
-              <div style={{ textAlign: 'center', paddingTop: '12px', borderTop: '1px solid #E5E7EB', color: '#64748B', fontSize: '10.5px', lineHeight: '1.4' }}>
-                <p style={{ fontWeight: 700, color: '#334155', margin: '0 0 3px 0' }}>
+              <div style={{ textAlign: 'center', paddingTop: '8px', borderTop: '1px solid #E5E7EB', color: '#64748B', fontSize: '9.5px', lineHeight: '1.35' }}>
+                <p style={{ fontWeight: 700, color: '#334155', margin: '0 0 2px 0' }}>
                   📍 Pickup Hub: Sahastradhara Rd, Kulhan, Dehradun
                 </p>
-                <p style={{ color: '#64748B', margin: '0 0 4px 0', fontSize: '10px' }}>
+                <p style={{ color: '#64748B', margin: '0 0 2px 0', fontSize: '9px' }}>
                   (Opposite Shiv Mandir, Kirsali, Dehradun, Uttarakhand 248013)
                 </p>
-                <p style={{ margin: '0 0 4px 0', fontSize: '10px', fontWeight: 600, color: '#475569' }}>
-                  Helpline: +91 84394 31999 &nbsp;|&nbsp; Website: https://doonriders.in
+                <p style={{ margin: '0 0 2px 0', fontSize: '9px', fontWeight: 600, color: '#475569' }}>
+                  Helpline: +91 84394 31999 &nbsp;|&nbsp; doonriders.in
                 </p>
-                <p style={{ margin: '0', fontSize: '9px', color: '#94A3B8', fontStyle: 'italic', paddingTop: '2px' }}>
+                <p style={{ margin: '0', fontSize: '8.5px', color: '#94A3B8', fontStyle: 'italic' }}>
                   Please present this receipt voucher at the hub during vehicle handover.
                 </p>
               </div>
             </div>
 
             {/* WHATSAPP SHARE & IMAGE ACTIONS */}
-            <div className="space-y-2.5 pt-2 print:hidden">
+            <div className="space-y-2 pt-1 print:hidden">
               
               {/* PRIMARY WHATSAPP SHARE BUTTON WITH OFFICIAL WHATSAPP ICON */}
               <button
                 type="button"
                 onClick={() => handleShareWhatsApp(selectedReceipt)}
-                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-black text-xs uppercase tracking-wider py-3.5 rounded-2xl shadow-[0_4px_18px_rgba(37,211,102,0.4)] transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer"
+                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-black text-xs uppercase tracking-wider py-2.5 rounded-xl shadow-[0_4px_14px_rgba(37,211,102,0.35)] transition transform hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <WhatsAppIcon className="w-5 h-5 fill-white" />
+                <WhatsAppIcon className="w-4 h-4 fill-white" />
                 <span>SEND RECEIPT ON WHATSAPP ({selectedReceipt.mobile_number})</span>
               </button>
 
@@ -1675,7 +1689,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                   type="button"
                   onClick={() => handleDownloadReceiptImage(selectedReceipt)}
                   disabled={generatingImage}
-                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-[#00A854]" />
                   <span>{generatingImage ? 'Generating...' : 'Save Image'}</span>
@@ -1685,7 +1699,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 <button
                   type="button"
                   onClick={() => handleCopyWhatsAppText(selectedReceipt)}
-                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                 >
                   {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-[#00A854]" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedWhatsApp ? 'Copied!' : 'Copy Text'}</span>
@@ -1695,7 +1709,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 <button
                   type="button"
                   onClick={handlePrintReceipt}
-                  className="bg-[#111827] hover:bg-[#070D18] text-white py-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+                  className="bg-[#111827] hover:bg-[#070D18] text-white py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
                 >
                   <Printer className="w-3.5 h-3.5 text-[#00D96B]" />
                   <span>Print</span>

@@ -128,20 +128,24 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
     ];
   }
 
-  // Sales Executive Default
-  return [
-    { code: 'dashboard.view', scope: 'ASSIGNED' },
-    { code: 'dashboard.view_sales', scope: 'ASSIGNED' },
-    { code: 'leads.view', scope: 'ASSIGNED' },
-    { code: 'leads.view_assigned', scope: 'ASSIGNED' },
-    { code: 'leads.create', scope: 'OWN' },
-    { code: 'leads.edit', scope: 'ASSIGNED' },
-    { code: 'customers.view', scope: 'ASSIGNED' },
-    { code: 'complaints.view', scope: 'ASSIGNED' },
-    { code: 'complaints.create', scope: 'ASSIGNED' },
-    { code: 'pre_bookings.view', scope: 'OWN' },
-    { code: 'fleet.view', scope: 'ALL' }
-  ];
+  if (norm === 'SALES_EXECUTIVE' || norm === 'SALES' || norm.includes('SALES')) {
+    return [
+      { code: 'dashboard.view', scope: 'ASSIGNED' },
+      { code: 'dashboard.view_sales', scope: 'ASSIGNED' },
+      { code: 'leads.view', scope: 'ASSIGNED' },
+      { code: 'leads.view_assigned', scope: 'ASSIGNED' },
+      { code: 'leads.create', scope: 'OWN' },
+      { code: 'leads.edit', scope: 'ASSIGNED' },
+      { code: 'customers.view', scope: 'ASSIGNED' },
+      { code: 'complaints.view', scope: 'ASSIGNED' },
+      { code: 'complaints.create', scope: 'ASSIGNED' },
+      { code: 'pre_bookings.view', scope: 'OWN' },
+      { code: 'fleet.view', scope: 'ALL' }
+    ];
+  }
+
+  // Custom roles have NO default permissions (admin must explicitly assign)
+  return [];
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -307,7 +311,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
-    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+    // 1. Check local custom permission overrides if set by Admin in UI
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
+        if (storedUserPerms) {
+          const uMap = JSON.parse(storedUserPerms);
+          const userEntry = uMap[user.id];
+          if (userEntry && typeof userEntry === 'object') {
+            const p = userEntry[permissionCode];
+            if (p) {
+              if (!p.enabled) return false;
+              if (requiredScope && p.scope !== requiredScope && p.scope !== 'ALL') {
+                return false;
+              }
+              return true;
+            }
+            return false;
+          }
+        }
+
+        const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
+        if (storedRolePerms) {
+          const rMap = JSON.parse(storedRolePerms);
+          const roleKey = (user.roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+          const roleEntry = rMap[roleKey] || (user.roleDisplayName ? rMap[user.roleDisplayName] : null);
+          if (roleEntry && typeof roleEntry === 'object') {
+            const p = roleEntry[permissionCode];
+            if (p) {
+              if (!p.enabled) return false;
+              if (requiredScope && p.scope !== requiredScope && p.scope !== 'ALL') {
+                return false;
+              }
+              return true;
+            }
+            return false;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Check user.permissions from database
+    if (user.permissions && Array.isArray(user.permissions)) {
       const perm = user.permissions.find(p => p.code === permissionCode);
       if (perm) {
         if (requiredScope && perm.scope !== requiredScope && perm.scope !== 'ALL') {
@@ -315,8 +360,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return true;
       }
+      return false;
     }
 
+    // 3. Fallback only if no permissions array provided
     const defaults = getDefaultRolePermissions(user.roleName);
     const defPerm = defaults.find(p => p.code === permissionCode);
     if (defPerm) {
@@ -336,13 +383,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
-    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
-      const has = user.permissions.some(p => p.code.startsWith(`${module.toLowerCase()}.`));
-      if (has) return true;
+    const modPrefix = `${module.toLowerCase()}.`;
+
+    // 1. Check local custom overrides
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
+        if (storedUserPerms) {
+          const uMap = JSON.parse(storedUserPerms);
+          const userEntry = uMap[user.id];
+          if (userEntry && typeof userEntry === 'object') {
+            return Object.entries(userEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
+          }
+        }
+
+        const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
+        if (storedRolePerms) {
+          const rMap = JSON.parse(storedRolePerms);
+          const roleKey = (user.roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+          const roleEntry = rMap[roleKey] || (user.roleDisplayName ? rMap[user.roleDisplayName] : null);
+          if (roleEntry && typeof roleEntry === 'object') {
+            return Object.entries(roleEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
+          }
+        }
+      } catch (e) {}
     }
 
+    // 2. Check user.permissions from DB
+    if (user.permissions && Array.isArray(user.permissions)) {
+      return user.permissions.some(p => p.code.startsWith(modPrefix));
+    }
+
+    // 3. Fallback
     const defaults = getDefaultRolePermissions(user.roleName);
-    return defaults.some(p => p.code.startsWith(`${module.toLowerCase()}.`));
+    return defaults.some(p => p.code.startsWith(modPrefix));
   };
 
   return (

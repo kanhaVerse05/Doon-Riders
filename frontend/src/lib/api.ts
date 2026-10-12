@@ -1,6 +1,28 @@
 // API Client for DOON Riders Backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api';
+export function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('dr_backend_api_url');
+    if (custom && custom.trim()) {
+      return custom.trim().replace(/\/+$/, '');
+    }
+  }
+
+  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim()) {
+    return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    }
+    return `${window.location.origin}/api`;
+  }
+
+  return 'https://doon-riders-backend.onrender.com/api';
+}
+
+const API_BASE_URL = typeof window !== 'undefined' ? getApiBaseUrl() : (process.env.NEXT_PUBLIC_API_URL || 'https://doon-riders-backend.onrender.com/api');
 
 export interface Vehicle {
   id: number;
