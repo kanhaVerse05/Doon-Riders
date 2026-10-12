@@ -3,9 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (ensure devDependencies like typescript are installed)
+ENV NODE_ENV=development
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy source code
 COPY . .
@@ -23,7 +24,7 @@ ENV PORT=5000
 
 # Install production dependencies only
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy compiled files from builder
 COPY --from=builder /app/dist ./dist

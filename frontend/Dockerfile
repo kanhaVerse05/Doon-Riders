@@ -3,9 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (ensure devDependencies like typescript, tailwindcss are installed)
+ENV NODE_ENV=development
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy frontend source
 COPY . .
