@@ -790,8 +790,8 @@ export const checkDbConnection = async (): Promise<boolean> => {
         console.log(`✅ PostgreSQL Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
         break;
       } catch (candErr: any) {
-        lastDbError = candErr.message || String(candErr);
-        probeResults[`connect_${host}`] = lastDbError;
+        lastDbError = candErr?.message || String(candErr) || 'connection failed';
+        probeResults[`connect_${host}`] = String(lastDbError);
       }
     }
 
