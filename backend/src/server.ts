@@ -8,7 +8,7 @@ import faqRoutes, { faqRouter, testimonialRouter } from './routes/faqRoutes';
 import galleryRoutes from './routes/galleryRoutes';
 import pricingRoutes from './routes/pricingRoutes';
 import path from 'path';
-import { checkDbConnection, getDbStatus } from './config/db';
+import { checkDbConnection, getDbStatus, getDbErrorDetails } from './config/db';
 
 // Admin Routes (Streamlined CRM & RBAC)
 import adminAuthRoutes from './routes/admin/adminAuthRoutes';
@@ -82,6 +82,7 @@ app.get('/api/health', (req, res) => {
     app: 'DOON Riders Backend & RBAC CRM API (PostgreSQL)',
     timestamp: new Date().toISOString(),
     postgresConnected: getDbStatus(),
+    database: getDbErrorDetails(),
   });
 });
 

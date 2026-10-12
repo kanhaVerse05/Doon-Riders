@@ -632,41 +632,98 @@ export const pool = {
   }
 };
 
+let lastDbError: string | null = null;
+let activeDbHost: string = 'none';
+
 export const getRawPool = (): Pool | null => pgPool;
 export const getDbStatus = (): boolean => isPostgresConnected;
 
+export const getDbErrorDetails = () => {
+  let maskedUrl = 'not configured (using default localhost:5432)';
+  if (process.env.DATABASE_URL) {
+    try {
+      maskedUrl = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':****@');
+    } catch {
+      maskedUrl = 'configured';
+    }
+  }
+
+  return {
+    isPostgresConnected,
+    lastDbError,
+    activeDbHost,
+    hasEnvDatabaseUrl: Boolean(process.env.DATABASE_URL),
+    configuredUrl: maskedUrl,
+  };
+};
+
 export const checkDbConnection = async (): Promise<boolean> => {
   try {
-    const isInternalDb = databaseUrl.includes('supabase-db') ||
-                         databaseUrl.includes('localhost') ||
-                         databaseUrl.includes('127.0.0.1') ||
-                         databaseUrl.includes('sslmode=disable');
+    const rawUrl = process.env.DATABASE_URL || `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDatabase}`;
+    
+    const candidates = [rawUrl];
+    if (rawUrl.includes('supabase-db')) {
+      candidates.push(rawUrl.replace('supabase-db', 'host.docker.internal'));
+      candidates.push(rawUrl.replace('supabase-db', '172.17.0.1'));
+      candidates.push(rawUrl.replace('supabase-db', 'supabase-db-3o7vdsl1qr8jcenwzb5vdoal'));
+      candidates.push(rawUrl.replace('supabase-db', 'supabase-postgres'));
+    }
 
-    const isRemoteDb = !isInternalDb && (
-                         databaseUrl.includes('supabase.co') || 
-                         databaseUrl.includes('pooler') ||
-                         databaseUrl.includes('neon.tech') || 
-                         databaseUrl.includes('sslmode=require') || 
-                         databaseUrl.includes('railway') || 
-                         databaseUrl.includes('render') ||
-                         process.env.DATABASE_SSL === 'true'
-                       );
+    let connected = false;
 
-    const config: PoolConfig = {
-      connectionString: databaseUrl,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {})
-    };
+    for (const candUrl of candidates) {
+      try {
+        const isInternalDb = candUrl.includes('supabase-db') ||
+                             candUrl.includes('localhost') ||
+                             candUrl.includes('127.0.0.1') ||
+                             candUrl.includes('host.docker.internal') ||
+                             candUrl.includes('172.17.0.1') ||
+                             candUrl.includes('sslmode=disable');
 
-    pgPool = new Pool(config);
-    const client = await pgPool.connect();
-    const res = await client.query('SELECT NOW() as current_time');
-    client.release();
+        const isRemoteDb = !isInternalDb && (
+                             candUrl.includes('supabase.co') || 
+                             candUrl.includes('pooler') ||
+                             candUrl.includes('neon.tech') || 
+                             candUrl.includes('sslmode=require') || 
+                             candUrl.includes('railway') || 
+                             candUrl.includes('render') ||
+                             process.env.DATABASE_SSL === 'true'
+                           );
 
-    isPostgresConnected = true;
-    console.log(`✅ PostgreSQL Database connected successfully! [DB: ${pgDatabase}, Time: ${res.rows[0].current_time}]`);
+        const config: PoolConfig = {
+          connectionString: candUrl,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+          ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {})
+        };
+
+        const testPool = new Pool(config);
+        const client = await testPool.connect();
+        const testRes = await client.query('SELECT NOW() as current_time');
+        client.release();
+
+        pgPool = testPool;
+        isPostgresConnected = true;
+        connected = true;
+
+        try {
+          const parsed = new URL(candUrl.replace(/^postgresql:\/\//, 'http://'));
+          activeDbHost = `${parsed.hostname}:${parsed.port || '5432'}`;
+        } catch {
+          activeDbHost = candUrl.split('@')[1]?.split('/')[0] || 'connected';
+        }
+
+        console.log(`✅ PostgreSQL Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
+        break;
+      } catch (candErr: any) {
+        lastDbError = candErr.message || String(candErr);
+      }
+    }
+
+    if (!connected || !pgPool) {
+      throw new Error(lastDbError || 'Unable to connect to any database candidate host');
+    }
 
     // 1. Roles & Permissions Tables
     await pgPool.query(`
@@ -1243,6 +1300,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
     return true;
   } catch (err: any) {
     isPostgresConnected = false;
+    lastDbError = err.message || String(err);
     console.warn(`⚠️ PostgreSQL connection Notice: ${err.message}. Using resilient in-memory database store.`);
     return false;
   }
