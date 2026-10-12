@@ -168,23 +168,27 @@ export const createPreBooking = async (req: Request, res: Response) => {
 
     // Determine sequential booking code from series settings
     let prefix = 'DR-PB-';
-    let nextNum = 1001;
+    let currentNext = 1001;
 
     if (getDbStatus()) {
       const qrRows = (await pool.query('SELECT * FROM upi_qr_settings WHERE id = 1')).rows;
       if (qrRows.length > 0) {
         prefix = qrRows[0].booking_id_prefix || 'DR-PB-';
-        nextNum = qrRows[0].next_booking_number || qrRows[0].starting_booking_number || 1001;
+        currentNext = Number(qrRows[0].next_booking_number) || Number(qrRows[0].starting_booking_number) || 1001;
       }
 
-      // Check max existing ID in db to avoid duplicate key collisions
-      const countRes = (await pool.query('SELECT COUNT(*) as cnt FROM pre_bookings')).rows;
-      const totalInDb = countRes[0]?.cnt || 0;
-      if (totalInDb > 0) {
-        nextNum = Math.max(nextNum, 1001 + totalInDb);
-      }
+      // Check if candidate booking code already exists in db; increment until unique
+      let candidateNum = currentNext;
+      let bookingCode = `${prefix}${candidateNum}`;
 
-      const bookingCode = `${prefix}${nextNum}`;
+      while (true) {
+        const existing = await pool.query('SELECT id FROM pre_bookings WHERE booking_code = $1', [bookingCode]);
+        if (existing.rows.length === 0) {
+          break;
+        }
+        candidateNum++;
+        bookingCode = `${prefix}${candidateNum}`;
+      }
 
       const insertSql = `
         INSERT INTO pre_bookings (
@@ -200,10 +204,11 @@ export const createPreBooking = async (req: Request, res: Response) => {
           notes,
           created_by_id,
           created_by_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *
       `;
 
-      const result = await pool.query(insertSql, [
+      const insertRes = await pool.query(insertSql, [
         bookingCode,
         customer_name,
         mobile_number,
@@ -218,10 +223,18 @@ export const createPreBooking = async (req: Request, res: Response) => {
         created_by_name
       ]);
 
-      // Update next booking number
-      await pool.query('UPDATE upi_qr_settings SET next_booking_number = ? WHERE id = 1', [nextNum + 1]);
+      const newRow = insertRes.rows[0];
 
-      const [newRow] = (await pool.query('SELECT * FROM pre_bookings WHERE id = ?', [result.insertId])).rows;
+      // Update next_booking_number in upi_qr_settings for the next receipt
+      await pool.query(
+        `INSERT INTO upi_qr_settings (id, booking_id_prefix, starting_booking_number, next_booking_number, updated_at)
+         VALUES (1, $1, $2, $3, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           next_booking_number = $3,
+           updated_at = NOW()`,
+        [prefix, currentNext, candidateNum + 1]
+      );
+
       return res.status(201).json({
         success: true,
         data: newRow,
@@ -233,13 +246,13 @@ export const createPreBooking = async (req: Request, res: Response) => {
     const settings = (memoryStore as any).qrSettings || {
       booking_id_prefix: 'DR-PB-',
       starting_booking_number: 1001,
-      next_booking_number: 1003
+      next_booking_number: 1001
     };
 
     prefix = settings.booking_id_prefix || 'DR-PB-';
-    const currentNext = settings.next_booking_number || settings.starting_booking_number || 1001;
-    const bookingCode = `${prefix}${currentNext}`;
-    settings.next_booking_number = currentNext + 1;
+    const currentNextNum = Number(settings.next_booking_number) || Number(settings.starting_booking_number) || 1001;
+    const bookingCode = `${prefix}${currentNextNum}`;
+    settings.next_booking_number = currentNextNum + 1;
 
     const newBooking = {
       id: Date.now(),
@@ -355,40 +368,58 @@ export const updateQrSettings = async (req: Request, res: Response) => {
       merchant_name,
       qr_image_url,
       booking_id_prefix = 'DR-PB-',
-      starting_booking_number = 1001
+      starting_booking_number = 1001,
+      next_booking_number
     } = req.body;
 
     const startNum = Number(starting_booking_number) || 1001;
+    const nextNum = next_booking_number !== undefined ? Number(next_booking_number) : startNum;
+    const cleanPrefix = (booking_id_prefix || 'DR-PB-').trim();
+    const cleanUpi = (upi_id || 'doonriders@icici').trim();
+    const cleanMerchant = (merchant_name || 'DOON RIDERS EV MOBILITY').trim();
+    const cleanQrUrl = qr_image_url || '';
 
     if (getDbStatus()) {
-      await pool.query(
-        `INSERT INTO upi_qr_settings (id, upi_id, merchant_name, qr_image_url, booking_id_prefix, starting_booking_number, next_booking_number)
-         VALUES (1, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           upi_id = VALUES(upi_id),
-           merchant_name = VALUES(merchant_name),
-           qr_image_url = VALUES(qr_image_url),
-           booking_id_prefix = VALUES(booking_id_prefix),
-           starting_booking_number = VALUES(starting_booking_number),
-           next_booking_number = VALUES(next_booking_number)`,
+      const upsertRes = await pool.query(
+        `INSERT INTO upi_qr_settings (id, upi_id, merchant_name, qr_image_url, booking_id_prefix, starting_booking_number, next_booking_number, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           upi_id = EXCLUDED.upi_id,
+           merchant_name = EXCLUDED.merchant_name,
+           qr_image_url = EXCLUDED.qr_image_url,
+           booking_id_prefix = EXCLUDED.booking_id_prefix,
+           starting_booking_number = EXCLUDED.starting_booking_number,
+           next_booking_number = EXCLUDED.next_booking_number,
+           updated_at = NOW()
+         RETURNING *`,
         [
-          upi_id || 'doonriders@icici',
-          merchant_name || 'DOON RIDERS EV MOBILITY',
-          qr_image_url || '',
-          booking_id_prefix || 'DR-PB-',
+          cleanUpi,
+          cleanMerchant,
+          cleanQrUrl,
+          cleanPrefix,
           startNum,
-          startNum
+          nextNum
         ]
       );
+
+      const savedData = upsertRes.rows[0];
+      (memoryStore as any).qrSettings = savedData;
+
+      return res.json({
+        success: true,
+        data: savedData,
+        message: 'Payment & Receipt Series settings updated successfully!'
+      });
     }
 
     (memoryStore as any).qrSettings = {
-      upi_id: upi_id || 'doonriders@icici',
-      merchant_name: merchant_name || 'DOON RIDERS EV MOBILITY',
-      qr_image_url: qr_image_url || '',
-      booking_id_prefix: booking_id_prefix || 'DR-PB-',
+      id: 1,
+      upi_id: cleanUpi,
+      merchant_name: cleanMerchant,
+      qr_image_url: cleanQrUrl,
+      booking_id_prefix: cleanPrefix,
       starting_booking_number: startNum,
-      next_booking_number: startNum
+      next_booking_number: nextNum
     };
 
     return res.json({
@@ -397,6 +428,7 @@ export const updateQrSettings = async (req: Request, res: Response) => {
       message: 'Payment & Receipt Series settings updated successfully!'
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: 'Failed to update QR settings' });
+    console.error('Error in updateQrSettings:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update QR settings: ' + err.message });
   }
 };

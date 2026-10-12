@@ -239,11 +239,11 @@ export default function PreBookingsAdminPage() {
 
   // Open QR & Series Settings Modal (Super Admin only)
   const handleOpenQrSettings = () => {
-    setTempUpiId(qrSettings.upi_id);
-    setTempMerchantName(qrSettings.merchant_name);
-    setTempQrImageUrl(qrSettings.qr_image_url);
+    setTempUpiId(qrSettings.upi_id || 'doonriders@icici');
+    setTempMerchantName(qrSettings.merchant_name || 'DOON RIDERS EV MOBILITY');
+    setTempQrImageUrl(qrSettings.qr_image_url || '');
     setTempBookingPrefix(qrSettings.booking_id_prefix || 'DR-PB-');
-    setTempStartingNumber(qrSettings.starting_booking_number || 1001);
+    setTempStartingNumber(qrSettings.next_booking_number || qrSettings.starting_booking_number || 1001);
     setShowQrSettingsModal(true);
   };
 
@@ -268,17 +268,24 @@ export default function PreBookingsAdminPage() {
     e.preventDefault();
     setSavingQr(true);
     try {
+      const startNum = Number(tempStartingNumber) || 1001;
       const payload = {
         upi_id: tempUpiId.trim() || 'doonriders@icici',
         merchant_name: tempMerchantName.trim() || 'DOON RIDERS EV MOBILITY',
         qr_image_url: tempQrImageUrl,
         booking_id_prefix: tempBookingPrefix.trim() || 'DR-PB-',
-        starting_booking_number: Number(tempStartingNumber) || 1001
+        starting_booking_number: startNum,
+        next_booking_number: startNum
       };
 
-      await adminApi.post('/admin/pre-bookings/settings/qr', payload);
-      setQrSettings(payload);
-      localStorage.setItem('dr_custom_qr_settings', JSON.stringify(payload));
+      const res = await adminApi.post('/admin/pre-bookings/settings/qr', payload);
+      if (res && res.success && res.data) {
+        setQrSettings(res.data);
+        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(res.data));
+      } else {
+        setQrSettings(payload);
+        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(payload));
+      }
       setShowQrSettingsModal(false);
       setToastMessage('Payment QR & Receipt Series settings updated successfully!');
     } catch (err: any) {
@@ -325,11 +332,12 @@ export default function PreBookingsAdminPage() {
         setSelectedReceipt(res.data);
         resetForm();
         fetchPreBookings();
+        fetchQrSettings();
       } else {
-        // Local add
+        // Local add fallback
         const prefix = qrSettings.booking_id_prefix || 'DR-PB-';
-        const start = qrSettings.starting_booking_number || 1001;
-        const codeNum = start + bookings.length;
+        const start = qrSettings.next_booking_number || qrSettings.starting_booking_number || 1001;
+        const codeNum = start;
         const localNew: PreBooking = {
           id: Date.now(),
           booking_code: `${prefix}${codeNum}`,
@@ -346,6 +354,12 @@ export default function PreBookingsAdminPage() {
           created_by_name: user?.name || 'Staff',
           created_at: new Date().toISOString()
         };
+        const nextUpdated = {
+          ...qrSettings,
+          next_booking_number: start + 1
+        };
+        setQrSettings(nextUpdated);
+        localStorage.setItem('dr_custom_qr_settings', JSON.stringify(nextUpdated));
         setBookings(prev => [localNew, ...prev]);
         setShowCreateModal(false);
         setSelectedReceipt(localNew);
