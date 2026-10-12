@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: doon_riders_mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: doon_riders_db
-      MYSQL_USER: doon_user
-      MYSQL_PASSWORD: doon_user_pass
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/mysql_schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
-      - ./database/mysql_seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-
   backend:
     build:
       context: ./backend
@@ -27,19 +10,13 @@ services:
     environment:
       PORT: 5000
       NODE_ENV: production
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: doon_user
-      MYSQL_PASSWORD: doon_user_pass
-      MYSQL_DATABASE: doon_riders_db
-      JWT_SECRET: doon_riders_production_jwt_secret_2026
-      CLIENT_URL: http://localhost:3000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:!Admin%408285@supabase-db:5432/postgres}
+      JWT_SECRET: ${JWT_SECRET:-doon_riders_production_jwt_secret_2026}
+      CLIENT_URL: ${CLIENT_URL:-*}
     ports:
       - "5000:5000"
     volumes:
       - backend_uploads:/app/uploads
-    depends_on:
-      - mysql
 
   frontend:
     build:
@@ -48,14 +25,14 @@ services:
     container_name: doon_riders_frontend
     restart: always
     environment:
-      NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: http://localhost:5000/api
+      NODE_ENV: production
+      BACKEND_INTERNAL_URL: http://backend:5000
+      BACKEND_URL: http://backend:5000
     ports:
       - "3000:3000"
     depends_on:
       - backend
 
 volumes:
-  mysql_data:
   backend_uploads:

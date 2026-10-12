@@ -637,12 +637,20 @@ export const getDbStatus = (): boolean => isPostgresConnected;
 
 export const checkDbConnection = async (): Promise<boolean> => {
   try {
-    const isRemoteDb = databaseUrl.includes('supabase.co') || 
-                       databaseUrl.includes('neon.tech') || 
-                       databaseUrl.includes('sslmode=') || 
-                       databaseUrl.includes('railway') || 
-                       databaseUrl.includes('render') ||
-                       process.env.NODE_ENV === 'production';
+    const isInternalDb = databaseUrl.includes('supabase-db') ||
+                         databaseUrl.includes('localhost') ||
+                         databaseUrl.includes('127.0.0.1') ||
+                         databaseUrl.includes('sslmode=disable');
+
+    const isRemoteDb = !isInternalDb && (
+                         databaseUrl.includes('supabase.co') || 
+                         databaseUrl.includes('pooler') ||
+                         databaseUrl.includes('neon.tech') || 
+                         databaseUrl.includes('sslmode=require') || 
+                         databaseUrl.includes('railway') || 
+                         databaseUrl.includes('render') ||
+                         process.env.DATABASE_SSL === 'true'
+                       );
 
     const config: PoolConfig = {
       connectionString: databaseUrl,
