@@ -491,9 +491,10 @@ _Please present this receipt confirmation at the hub during vehicle handover._
     try {
       setGeneratingImage(true);
       const canvas = await html2canvas(receiptCardRef.current, {
-        scale: 3,
+        scale: 2.5,
         backgroundColor: '#ffffff',
         useCORS: true,
+        allowTaint: true,
         logging: false
       });
       const dataUrl = canvas.toDataURL('image/png');
@@ -529,9 +530,10 @@ _Please present this receipt confirmation at the hub during vehicle handover._
     try {
       setGeneratingImage(true);
       const canvas = await html2canvas(receiptCardRef.current, {
-        scale: 3,
+        scale: 2.5,
         backgroundColor: '#ffffff',
         useCORS: true,
+        allowTaint: true,
         logging: false
       });
 
@@ -1520,95 +1522,137 @@ _Please present this receipt confirmation at the hub during vehicle handover._
             {/* Receipt Printable Card (DOM Target for HTML2Canvas & Print) */}
             <div
               ref={receiptCardRef}
-              className="bg-white p-5 rounded-[24px] border border-[#E5E7EB] shadow-sm space-y-4 text-left"
+              className="bg-white rounded-[24px] border border-[#E5E7EB] shadow-sm text-left"
               id="printable-receipt"
-              style={{ minWidth: '380px', maxWidth: '440px', margin: '0 auto', backgroundColor: '#ffffff' }}
+              style={{
+                width: '420px',
+                maxWidth: '420px',
+                margin: '0 auto',
+                backgroundColor: '#ffffff',
+                padding: '24px',
+                boxSizing: 'border-box',
+                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+              }}
             >
               
               {/* Receipt Header */}
-              <div className="text-center pb-3 border-b border-[#E5E7EB] space-y-1.5">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#EAFBF2] border border-[#00D96B]/50 text-[#00A854] shadow-sm mb-1">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#00A854" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
-                    <path d="M13 5v2" />
-                    <path d="M13 17v2" />
-                    <path d="M13 11v2" />
+              <div style={{ textAlign: 'center', paddingBottom: '16px', borderBottom: '1px solid #E5E7EB' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#EAFBF2', border: '1.5px solid #00D96B', marginBottom: '10px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="#00A854" style={{ display: 'block' }}>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-heading font-black text-2xl text-[#111827] tracking-wider uppercase leading-none">
-                    DOON <span className="text-[#00A854]">RIDERS</span>
+                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', letterSpacing: '1px', textTransform: 'uppercase', lineHeight: '1.1', margin: 0 }}>
+                    DOON <span style={{ color: '#00A854' }}>RIDERS</span>
                   </h3>
-                  <p className="text-[10px] font-extrabold text-[#667085] uppercase tracking-[0.2em] mt-1">
+                  <p style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', letterSpacing: '2px', textTransform: 'uppercase', marginTop: '5px', marginBottom: 0 }}>
                     OFFICIAL PRE-BOOKING RECEIPT
                   </p>
                 </div>
 
-                <div className="pt-1">
-                  <span className="inline-block bg-[#EAFBF2] text-[#00A854] text-xs font-black font-mono px-4 py-1.5 rounded-full border border-[#00D96B] shadow-xs tracking-wider">
+                <div style={{ marginTop: '10px' }}>
+                  <span style={{ display: 'inline-block', backgroundColor: '#EAFBF2', color: '#00A854', fontSize: '12px', fontWeight: 900, fontFamily: 'monospace', padding: '5px 16px', borderRadius: '9999px', border: '1.5px solid #00D96B', letterSpacing: '1.5px' }}>
                     {selectedReceipt.booking_code}
                   </span>
                 </div>
               </div>
 
-              {/* Receipt Info Rows */}
-              <div className="space-y-2 text-xs bg-[#F8FAFC] p-4 rounded-2xl border border-[#E2E8F0]">
-                <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">Customer Name:</span>
-                  <span className="font-bold text-[#0F172A] text-right">{selectedReceipt.customer_name}</span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">Mobile Number:</span>
-                  <span className="font-mono font-bold text-[#0F172A] text-right">{selectedReceipt.mobile_number}</span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">Booking Date &amp; Time:</span>
-                  <span className="font-medium text-[#0F172A] text-right">
-                    {formatIndianDateTime(selectedReceipt.created_at, selectedReceipt.booking_date)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">EV Scooty Quantity:</span>
-                  <span className="font-bold text-[#0F172A] text-right">
-                    {selectedReceipt.quantity} Unit{selectedReceipt.quantity > 1 ? 's' : ''} (₹499/unit)
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]/70">
-                  <span className="text-[#64748B] font-medium">Payment Mode:</span>
-                  <span className="font-bold text-[#0F172A] text-right">
-                    {selectedReceipt.payment_mode === 'UPI' ? 'UPI (Scan & Pay)' : 'Cash (Counter)'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-[#64748B] font-medium">Payment Status:</span>
-                  <span className="font-black text-[#15803D] bg-[#DCFCE7] px-3 py-1 rounded-md border border-[#86EFAC] text-[11px] leading-normal inline-block text-right">
-                    PAID &amp; CONFIRMED
-                  </span>
-                </div>
-                {selectedReceipt.notes && (
-                  <div className="pt-2 border-t border-[#E2E8F0]">
-                    <span className="text-[#64748B] block text-[10px] font-medium">Booking Notes:</span>
-                    <span className="text-[#0F172A] text-[11px] font-medium italic block mt-0.5">{selectedReceipt.notes}</span>
-                  </div>
-                )}
+              {/* Receipt Info Table */}
+              <div style={{ backgroundColor: '#F8FAFC', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '12px 18px', margin: '16px 0', boxSizing: 'border-box' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Customer Name:
+                      </td>
+                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle', wordBreak: 'break-word' }}>
+                        {selectedReceipt.customer_name}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Mobile Number:
+                      </td>
+                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, fontFamily: 'monospace', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        {selectedReceipt.mobile_number}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Booking Date &amp; Time:
+                      </td>
+                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12px', fontWeight: 600, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        {formatIndianDateTime(selectedReceipt.created_at, selectedReceipt.booking_date)}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        EV Scooty Quantity:
+                      </td>
+                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        {selectedReceipt.quantity} Unit{selectedReceipt.quantity > 1 ? 's' : ''} (₹499/unit)
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <td style={{ padding: '9px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Payment Mode:
+                      </td>
+                      <td style={{ padding: '9px 0', color: '#0F172A', fontSize: '12.5px', fontWeight: 700, width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        {selectedReceipt.payment_mode === 'UPI' ? 'UPI (Scan & Pay)' : 'Cash (Counter)'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '9px 0 4px 0', color: '#64748B', fontSize: '12px', fontWeight: 500, width: '45%', textAlign: 'left', verticalAlign: 'middle' }}>
+                        Payment Status:
+                      </td>
+                      <td style={{ padding: '9px 0 4px 0', width: '55%', textAlign: 'right', verticalAlign: 'middle' }}>
+                        <span style={{ display: 'inline-block', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px' }}>
+                          PAID &amp; CONFIRMED
+                        </span>
+                      </td>
+                    </tr>
+                    {selectedReceipt.notes && (
+                      <tr style={{ borderTop: '1px solid #E2E8F0' }}>
+                        <td colSpan={2} style={{ padding: '8px 0 2px 0', textAlign: 'left' }}>
+                          <span style={{ color: '#64748B', fontSize: '10px', fontWeight: 600, display: 'block' }}>Booking Notes:</span>
+                          <span style={{ color: '#0F172A', fontSize: '11px', fontStyle: 'italic', display: 'block', marginTop: '2px' }}>{selectedReceipt.notes}</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
 
               {/* Total Paid Badge (AMOUNT) */}
-              <div className="bg-gradient-to-br from-[#0B1528] to-[#070D18] text-white p-4 rounded-2xl flex items-center justify-between border border-white/10 shadow-md">
-                <div>
-                  <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider block">AMOUNT</span>
-                  <span className="text-xs text-[#00D96B] font-bold">100% Confirmed Pre-Booking</span>
+              <div style={{ backgroundColor: '#070D18', borderRadius: '16px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #1E293B', margin: '16px 0', boxSizing: 'border-box' }}>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '2px' }}>
+                    AMOUNT
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#00D96B', fontWeight: 700 }}>
+                    100% Confirmed Pre-Booking
+                  </div>
                 </div>
-                <span className="text-2xl sm:text-3xl font-black text-[#00D96B] tracking-tight font-mono">
+                <div style={{ fontSize: '28px', color: '#00D96B', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '-0.5px', lineHeight: 1 }}>
                   ₹{Number(selectedReceipt.total_amount).toLocaleString()}
-                </span>
+                </div>
               </div>
 
               {/* Receipt Footer */}
-              <div className="text-center pt-2 border-t border-[#E5E7EB] space-y-1 text-[#64748B] text-[10px] leading-tight">
-                <p className="font-bold text-[#334155]">📍 Pickup Hub: Sahastradhara Rd, opposite Shiv Mandir, Kulhan, Kirsali, Dehradun, Uttarakhand 248013</p>
-                <p>Helpline: +91 84394 31999 | Website: https://doonriders.in</p>
-                <p className="text-[9px] text-[#94A3B8] italic pt-0.5">Please present this receipt voucher at the hub during vehicle handover.</p>
+              <div style={{ textAlign: 'center', paddingTop: '12px', borderTop: '1px solid #E5E7EB', color: '#64748B', fontSize: '10.5px', lineHeight: '1.4' }}>
+                <p style={{ fontWeight: 700, color: '#334155', margin: '0 0 3px 0' }}>
+                  📍 Pickup Hub: Sahastradhara Rd, Kulhan, Dehradun
+                </p>
+                <p style={{ color: '#64748B', margin: '0 0 4px 0', fontSize: '10px' }}>
+                  (Opposite Shiv Mandir, Kirsali, Dehradun, Uttarakhand 248013)
+                </p>
+                <p style={{ margin: '0 0 4px 0', fontSize: '10px', fontWeight: 600, color: '#475569' }}>
+                  Helpline: +91 84394 31999 &nbsp;|&nbsp; Website: https://doonriders.in
+                </p>
+                <p style={{ margin: '0', fontSize: '9px', color: '#94A3B8', fontStyle: 'italic', paddingTop: '2px' }}>
+                  Please present this receipt voucher at the hub during vehicle handover.
+                </p>
               </div>
             </div>
 
