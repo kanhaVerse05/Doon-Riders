@@ -102,12 +102,45 @@ export const MobileBottomNav: React.FC = () => {
           }
         }
       ]
+    : isPreBookingUser
+    ? [
+        {
+          name: 'Pre-Bookings',
+          href: '/admin/pre-bookings',
+          icon: Ticket,
+          show: true
+        },
+        {
+          name: 'Profile',
+          href: '#profile',
+          icon: User,
+          show: true,
+          onClick: () => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('open-technician-profile'));
+            }
+          }
+        },
+        {
+          name: 'Logout',
+          href: '#logout',
+          icon: LogOut,
+          show: true,
+          onClick: () => logout()
+        }
+      ]
     : [
         {
           name: 'Dashboard',
           href: '/admin/dashboard',
           icon: LayoutDashboard,
           show: hasPermission('dashboard.view')
+        },
+        {
+          name: 'Pre-Bookings',
+          href: '/admin/pre-bookings',
+          icon: Ticket,
+          show: hasPermission('pre_bookings.view')
         },
         {
           name: 'Repair Jobs',

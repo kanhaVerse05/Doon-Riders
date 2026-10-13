@@ -33,7 +33,8 @@ import {
   ExternalLink,
   Check,
   Image as ImageIcon,
-  Hash
+  Hash,
+  RotateCw
 } from 'lucide-react';
 
 interface PreBooking {
@@ -122,6 +123,13 @@ const formatIndianDateOnly = (dateVal?: string): string => {
   }
 };
 
+const getCustomerInitials = (nameStr?: string): string => {
+  if (!nameStr) return 'CU';
+  const parts = nameStr.trim().split(' ').filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return parts[0].slice(0, 2).toUpperCase();
+};
+
 export default function PreBookingsAdminPage() {
   const { user, hasPermission } = useAuth();
   const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
@@ -148,6 +156,7 @@ export default function PreBookingsAdminPage() {
   const [paymentModeFilter, setPaymentModeFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // QR & Series Settings
   const [qrSettings, setQrSettings] = useState<QrSettings>({
@@ -256,6 +265,26 @@ export default function PreBookingsAdminPage() {
     navigator.clipboard.writeText(qrSettings.upi_id);
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2000);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchPreBookings(), fetchQrSettings()]);
+      setToastMessage('Pre-bookings and settings refreshed!');
+    } catch (e) {
+      console.warn('Refresh notice:', e);
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  const handleCopyBookingCode = (code: string) => {
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    setToastMessage(`Booking code "${code}" copied to clipboard!`);
+    setTimeout(() => setToastMessage(null), 2500);
   };
 
   // Open QR & Series Settings Modal (Super Admin only)
@@ -602,12 +631,68 @@ _Please present this receipt confirmation at the hub during vehicle handover._
 
   return (
     <AdminLayout>
-      <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto">
         
         {/* ========================================================================= */}
-        {/* PAGE HEADER */}
+        {/* MOBILE NATIVE APP BAR (md:hidden) */}
         {/* ========================================================================= */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex md:hidden items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E5E7EB] shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854] shrink-0 shadow-xs">
+              <Ticket className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#00D96B] animate-pulse" />
+                <h1 className="text-sm font-black text-[#111827] tracking-tight uppercase">
+                  Pre-Bookings
+                </h1>
+              </div>
+              <p className="text-[10px] text-[#667085] font-semibold">
+                {isSuperAdmin ? 'Super Admin Overview' : `Agent: ${user?.name || 'Staff'}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] rounded-xl border border-[#E5E7EB] transition active:scale-95 cursor-pointer"
+              title="Refresh pre-bookings"
+            >
+              <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00A854]' : ''}`} />
+            </button>
+
+            {/* QR Settings Button (Super Admin) */}
+            {(isSuperAdmin || hasPermission('pre_bookings.settings')) && (
+              <button
+                onClick={handleOpenQrSettings}
+                className="p-2 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] rounded-xl border border-[#E5E7EB] transition active:scale-95 cursor-pointer"
+                title="QR & ID Settings"
+              >
+                <Settings className="w-4 h-4 text-[#00A854]" />
+              </button>
+            )}
+
+            {/* Export CSV Button */}
+            {(isSuperAdmin || hasPermission('pre_bookings.export')) && (
+              <button
+                onClick={handleExportCsv}
+                className="p-2 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] rounded-xl border border-[#E5E7EB] transition active:scale-95 cursor-pointer"
+                title="Export CSV"
+              >
+                <Download className="w-4 h-4 text-[#00A854]" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* DESKTOP PAGE HEADER (hidden md:flex) */}
+        {/* ========================================================================= */}
+        <div className="hidden md:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="w-2.5 h-2.5 rounded-full bg-[#00D96B] animate-pulse" />
@@ -625,6 +710,17 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-[#111827] bg-white border border-[#E5E7EB] hover:bg-[#F7F9FA] transition shadow-sm cursor-pointer"
+              title="Refresh Pre-Bookings"
+            >
+              <RotateCw className={`w-4 h-4 text-[#00A854] ${refreshing ? 'animate-spin' : ''}`} />
+              <span>REFRESH</span>
+            </button>
+
             {/* Super Admin Settings Button */}
             {(isSuperAdmin || hasPermission('pre_bookings.settings')) && (
               <button
@@ -663,16 +759,83 @@ _Please present this receipt confirmation at the hub during vehicle handover._
 
         {/* Toast Alert */}
         {toastMessage && (
-          <div className="bg-[#EAFBF2] border border-[#00D96B] text-[#00A854] p-3.5 rounded-2xl flex items-center gap-2 font-bold text-xs shadow-sm animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 stroke-[3]" />
+          <div className="bg-[#EAFBF2] border border-[#00D96B] text-[#00A854] p-3 sm:p-3.5 rounded-2xl flex items-center gap-2 font-bold text-xs shadow-sm animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 stroke-[3] shrink-0" />
             <span>{toastMessage}</span>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* STATS SUMMARY METRIC CARDS */}
+        {/* MOBILE REACT NATIVE FINTECH WALLET OVERVIEW CARD (md:hidden) */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="block md:hidden bg-gradient-to-br from-[#0B1528] via-[#0E2238] to-[#0A1728] text-white rounded-3xl p-4.5 border border-slate-800 shadow-xl relative overflow-hidden">
+          {/* Subtle Ambient Glow */}
+          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#00D96B]/15 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative space-y-3.5">
+            {/* Header chip row */}
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-emerald-400 border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00D96B] animate-pulse" />
+                <span>COLLECTIONS OVERVIEW</span>
+              </div>
+              <span className="text-[11px] font-mono font-bold text-slate-300">
+                {stats.totalCount} Bookings • {stats.totalQty} Units
+              </span>
+            </div>
+
+            {/* Big Revenue Number */}
+            <div className="flex items-baseline justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Collected</p>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-3xl font-black text-[#00D96B] font-mono tracking-tight">
+                    ₹{stats.totalRevenue.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-slate-400 font-bold">INR</span>
+                </div>
+              </div>
+
+              {/* Quick Action Button right inside Wallet Card */}
+              {canCreatePreBooking && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className="bg-[#00D96B] active:bg-[#00A854] text-[#070D18] font-black text-[11px] uppercase tracking-wider px-3.5 py-2 rounded-xl shadow-[0_2px_12px_rgba(0,217,107,0.4)] flex items-center gap-1.5 active:scale-95 transition"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>+ BOOKING</span>
+                </button>
+              )}
+            </div>
+
+            {/* UPI & Cash Quick Split Pills */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2.5">
+                <div className="flex items-center justify-between text-[10px] font-bold text-blue-400 mb-0.5">
+                  <span className="flex items-center gap-1"><QrCode className="w-3 h-3" /> UPI</span>
+                  <span>{stats.upiCount} txns</span>
+                </div>
+                <p className="text-sm font-black text-white font-mono">₹{stats.upiAmount.toLocaleString()}</p>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
+                <div className="flex items-center justify-between text-[10px] font-bold text-amber-400 mb-0.5">
+                  <span className="flex items-center gap-1"><Banknote className="w-3 h-3" /> Cash</span>
+                  <span>{stats.cashCount} txns</span>
+                </div>
+                <p className="text-sm font-black text-white font-mono">₹{stats.cashAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* DESKTOP STATS SUMMARY METRIC CARDS (hidden md:grid) */}
+        {/* ========================================================================= */}
+        <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* TOTAL PRE-BOOKINGS */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
@@ -741,9 +904,80 @@ _Please present this receipt confirmation at the hub during vehicle handover._
         </div>
 
         {/* ========================================================================= */}
-        {/* TOOLBAR & FILTERS */}
+        {/* MOBILE SEARCH & SEGMENTED FILTER CHIP BAR (md:hidden) */}
         {/* ========================================================================= */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="block md:hidden space-y-2.5">
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search customer, phone, code..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-10 pr-9 py-2.5 text-xs text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] shadow-xs"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Horizontal Chip Slider */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {/* Status chips */}
+            {['All', 'PAID', 'PENDING', 'CANCELLED'].map(st => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-[#00D96B] text-[#070D18] shadow-sm font-black'
+                    : 'bg-white text-[#475467] border border-[#E5E7EB] hover:bg-gray-50'
+                }`}
+              >
+                {st === 'All' ? 'All Status' : st}
+              </button>
+            ))}
+
+            <div className="w-[1px] h-5 bg-[#E5E7EB] shrink-0 mx-0.5" />
+
+            {/* Mode chips */}
+            {['All', 'UPI', 'Cash'].map(pm => (
+              <button
+                key={pm}
+                onClick={() => setPaymentModeFilter(pm)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer ${
+                  paymentModeFilter === pm
+                    ? 'bg-[#111827] text-white shadow-sm font-black'
+                    : 'bg-white text-[#475467] border border-[#E5E7EB] hover:bg-gray-50'
+                }`}
+              >
+                {pm === 'All' ? 'All Mode' : pm}
+              </button>
+            ))}
+
+            {/* Date reset if active */}
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter('')}
+                className="px-2.5 py-1.5 rounded-full text-[11px] font-bold shrink-0 bg-red-50 text-red-600 border border-red-200 flex items-center gap-1"
+              >
+                <span>{dateFilter}</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* DESKTOP TOOLBAR & FILTERS (hidden md:flex) */}
+        {/* ========================================================================= */}
+        <div className="hidden md:flex bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm flex-col md:flex-row items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative w-full md:w-80">
             <Search className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -812,9 +1046,232 @@ _Please present this receipt confirmation at the hub during vehicle handover._
         </div>
 
         {/* ========================================================================= */}
-        {/* PRE-BOOKINGS TABLE */}
+        {/* MOBILE REACT NATIVE APP CARD LIST (block md:hidden) */}
         {/* ========================================================================= */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div className="block md:hidden space-y-3 pb-24">
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-xs animate-pulse space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gray-200" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-4 bg-gray-200 rounded w-1/2" />
+                      <div className="h-3 bg-gray-200 rounded w-1/3" />
+                    </div>
+                  </div>
+                  <div className="h-8 bg-gray-100 rounded-xl" />
+                  <div className="h-9 bg-gray-200 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          ) : bookings.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 border border-[#E5E7EB] shadow-xs text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#EAFBF2] text-[#00A854] flex items-center justify-center mx-auto">
+                <Ticket className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-[#111827]">No Pre-Bookings Found</p>
+                <p className="text-xs text-[#667085] mt-0.5">
+                  {search || statusFilter !== 'All' || paymentModeFilter !== 'All'
+                    ? 'Try clearing active filters to see more results.'
+                    : 'Start by creating your first customer pre-booking.'}
+                </p>
+              </div>
+              {canCreatePreBooking && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-[#00D96B] text-[#070D18] font-bold text-xs px-4 py-2 rounded-xl shadow-xs"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Create Pre-Booking</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            bookings.map((booking) => (
+              <div
+                key={booking.id}
+                className="bg-white rounded-2xl border border-[#E5E7EB] shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md transition active:bg-slate-50 overflow-hidden"
+              >
+                {/* Card Top: Avatar, Name, Direct Call, Status */}
+                <div className="p-3.5 pb-2.5 flex items-start justify-between gap-2.5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-[#EAFBF2] border border-[#00D96B]/30 text-[#00A854] font-black flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                      {getCustomerInitials(booking.customer_name)}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm text-[#111827] truncate">
+                        {booking.customer_name}
+                      </h4>
+                      <a
+                        href={`tel:${booking.mobile_number}`}
+                        className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#00A854] hover:underline"
+                        title="Tap to call"
+                      >
+                        <Phone className="w-3 h-3 fill-current" />
+                        <span>{booking.mobile_number}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Payment Status Pill */}
+                  <div className="shrink-0">
+                    {booking.payment_status === 'PAID' ? (
+                      <span className="inline-flex items-center gap-1 bg-[#EAFBF2] text-[#00A854] border border-[#00D96B]/30 px-2 py-0.5 rounded-full text-[10px] font-black">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>PAID</span>
+                      </span>
+                    ) : booking.payment_status === 'CANCELLED' ? (
+                      <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full text-[10px] font-black">
+                        <XCircle className="w-3 h-3" />
+                        <span>CANCELLED</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        <Clock className="w-3 h-3" />
+                        <span>PENDING</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Middle Info Strip: Booking Code, Qty, Amount, Payment Mode */}
+                <div className="bg-[#F8FAFC] px-3.5 py-2 border-y border-[#F1F5F9] flex items-center justify-between text-xs">
+                  {/* Left: Booking Code pill + Payment Mode badge */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyBookingCode(booking.booking_code)}
+                      className="inline-flex items-center gap-1 bg-white border border-[#E2E8F0] px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-[#0F172A] active:bg-[#EAFBF2] transition shadow-2xs cursor-pointer"
+                      title="Tap to copy booking code"
+                    >
+                      <span>{booking.booking_code}</span>
+                      <Copy className="w-3 h-3 text-[#94A3B8]" />
+                    </button>
+
+                    {booking.payment_mode === 'UPI' ? (
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        <QrCode className="w-3 h-3" />
+                        <span>UPI</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        <Banknote className="w-3 h-3" />
+                        <span>Cash</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: Units & Total Amount */}
+                  <div className="text-right">
+                    <span className="text-[11px] text-[#64748B] font-mono mr-1">
+                      {booking.quantity} {booking.quantity > 1 ? 'Units' : 'Unit'} •
+                    </span>
+                    <span className="text-sm font-black text-[#0F172A] font-mono">
+                      ₹{Number(booking.total_amount).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Date & Note Row */}
+                <div className="px-3.5 py-2 text-[11px] text-[#64748B] flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-[#94A3B8]" />
+                    <span>{formatIndianDateTime(booking.created_at, booking.booking_date)}</span>
+                  </div>
+                  {booking.created_by_name && (
+                    <span className="text-[10px] text-[#94A3B8]">
+                      By: <strong className="text-[#334155]">{booking.created_by_name}</strong>
+                    </span>
+                  )}
+                </div>
+
+                {booking.notes && (
+                  <div className="mx-3.5 mb-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-2.5 py-1.5 text-[11px] text-[#475467] italic">
+                    "{booking.notes}"
+                  </div>
+                )}
+
+                {/* Bottom Native Action Bar */}
+                <div className="p-3 pt-1 flex items-center gap-2">
+                  {/* 1-Tap WhatsApp Share Button */}
+                  <button
+                    onClick={() => {
+                      setSelectedReceipt(booking);
+                      handleShareWhatsApp(booking);
+                    }}
+                    className="flex-1 bg-[#25D366] active:bg-[#1EBE5D] text-white font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow-[0_2px_8px_rgba(37,211,102,0.3)] transition cursor-pointer"
+                  >
+                    <WhatsAppIcon className="w-4 h-4 fill-white" />
+                    <span>WhatsApp Receipt</span>
+                  </button>
+
+                  {/* View Voucher / Receipt modal */}
+                  <button
+                    onClick={() => setSelectedReceipt(booking)}
+                    className="p-2.5 bg-[#F8FAFC] active:bg-[#EAFBF2] text-[#334155] border border-[#E2E8F0] rounded-xl transition cursor-pointer"
+                    title="View / Print Receipt"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+
+                  {/* Download Image Button */}
+                  <button
+                    onClick={() => {
+                      setSelectedReceipt(booking);
+                      setTimeout(() => handleDownloadReceiptImage(booking), 250);
+                    }}
+                    className="p-2.5 bg-[#F8FAFC] active:bg-[#EAFBF2] text-[#334155] border border-[#E2E8F0] rounded-xl transition cursor-pointer"
+                    title="Download Receipt Image"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+
+                  {/* Status Toggle (if authorized) */}
+                  {(isSuperAdmin || hasPermission('pre_bookings.status_update')) && (
+                    booking.payment_status === 'PAID' ? (
+                      <button
+                        onClick={() => handleUpdateStatus(booking.id, 'CANCELLED')}
+                        className="p-2.5 bg-[#F8FAFC] active:bg-red-50 text-[#64748B] active:text-red-600 border border-[#E2E8F0] rounded-xl transition cursor-pointer"
+                        title="Mark Cancelled"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUpdateStatus(booking.id, 'PAID')}
+                        className="p-2.5 bg-[#F8FAFC] active:bg-[#EAFBF2] text-[#64748B] active:text-[#00A854] border border-[#E2E8F0] rounded-xl transition cursor-pointer"
+                        title="Mark Paid"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                    )
+                  )}
+
+                  {/* Delete Button (if authorized) */}
+                  {(isSuperAdmin || hasPermission('pre_bookings.delete')) && (
+                    <button
+                      onClick={() => handleDelete(booking.id)}
+                      className="p-2.5 bg-[#F8FAFC] active:bg-red-50 text-[#94A3B8] active:text-red-600 border border-[#E2E8F0] rounded-xl transition cursor-pointer"
+                      title="Delete Record"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* DESKTOP PRE-BOOKINGS TABLE (hidden md:block) */}
+        {/* ========================================================================= */}
+        <div className="hidden md:block bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden flex flex-col">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
@@ -1004,14 +1461,33 @@ _Please present this receipt confirmation at the hub during vehicle handover._
       </div>
 
       {/* ========================================================================= */}
-      {/* PRE-BOOKING MODAL (MAIN USER FLOW) */}
+      {/* REACT NATIVE STYLE FLOATING ACTION BUTTON (FAB) (fixed md:hidden) */}
+      {/* ========================================================================= */}
+      {canCreatePreBooking && (
+        <button
+          onClick={() => {
+            resetForm();
+            setShowCreateModal(true);
+          }}
+          className="fixed bottom-20 right-4 z-30 md:hidden bg-[#00D96B] active:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-4.5 py-3.5 rounded-full shadow-[0_8px_24px_rgba(0,217,107,0.5)] flex items-center gap-2 active:scale-95 transition-all cursor-pointer border border-[#00D96B]/50"
+          title="Create New Pre-Booking"
+        >
+          <Plus className="w-5 h-5 stroke-[3]" />
+          <span>New Booking</span>
+        </button>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PRE-BOOKING MODAL (MAIN USER FLOW - NATIVE BOTTOM SHEET ON MOBILE) */}
       {/* ========================================================================= */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-[32px] border border-[#E5E7EB] w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-t-[28px] sm:rounded-[32px] border-t sm:border border-[#E5E7EB] w-full max-w-xl p-5 sm:p-8 shadow-2xl space-y-5 relative max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
+            {/* Native Mobile Swipe Drag Indicator */}
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-1 sm:hidden shrink-0" />
             
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
+            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-[#E5E7EB]">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-[#EAFBF2] border border-[#00D96B]/40 flex items-center justify-center text-[#00A854] shadow-sm">
                   <Ticket className="w-5 h-5" />
@@ -1306,10 +1782,12 @@ _Please present this receipt confirmation at the hub during vehicle handover._
       {/* SUPER ADMIN QR CODE & ID SERIES CONFIGURATION MODAL */}
       {/* ========================================================================= */}
       {showQrSettingsModal && isSuperAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-[32px] border border-[#E5E7EB] w-full max-w-lg p-6 sm:p-8 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-t-[28px] sm:rounded-[32px] border-t sm:border border-[#E5E7EB] w-full max-w-lg p-5 sm:p-8 shadow-2xl space-y-5 relative max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
+            {/* Native Mobile Drag Handle */}
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-1 sm:hidden shrink-0" />
             
-            <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]">
+            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-[#E5E7EB]">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-[#EAFBF2] border border-[#00D96B]/40 flex items-center justify-center text-[#00A854]">
                   <Settings className="w-5 h-5" />
@@ -1470,9 +1948,11 @@ _Please present this receipt confirmation at the hub during vehicle handover._
       {/* OFFICIAL PRE-BOOKING VOUCHER / RECEIPT MODAL (WITH WHATSAPP IMAGE & SHARE) */}
       {/* ========================================================================= */}
       {selectedReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-[24px] border border-[#E5E7EB] w-full max-w-sm sm:max-w-md p-4 sm:p-5 shadow-2xl space-y-3 relative my-auto max-h-[92vh] overflow-y-auto">
-            
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-t-[28px] sm:rounded-[24px] border-t sm:border border-[#E5E7EB] w-full max-w-sm sm:max-w-md p-4 sm:p-5 shadow-2xl space-y-3 relative max-h-[94vh] sm:max-h-[92vh] overflow-y-auto">
+            {/* Native Mobile Swipe Drag Indicator */}
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-1 sm:hidden shrink-0" />
+
             {/* Close Button */}
             <button
               onClick={() => setSelectedReceipt(null)}
