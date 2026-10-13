@@ -207,6 +207,9 @@ function RolesAndPermissionsContent() {
       if (norm === 'SUPER_ADMIN') {
         enabled = true;
         scope = 'ALL';
+      } else if (norm === 'PRE_BOOKING' || norm.includes('PRE_BOOK') || norm.includes('BOOKING')) {
+        enabled = ['pre_bookings.view', 'pre_bookings.create', 'pre_bookings.status_update'].includes(p.code);
+        scope = 'ALL';
       } else if (norm === 'MANAGER') {
         enabled = ['Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports'].includes(p.module) && !p.code.includes('.delete');
         scope = 'ALL';
@@ -237,88 +240,98 @@ function RolesAndPermissionsContent() {
   const fetchRolesAndUsers = async () => {
     setLoading(true);
     try {
-      // 1. Load Roles
-      const storedRoles = localStorage.getItem('dr_custom_roles_list');
+      // 1. Load Roles directly from PostgreSQL
       let combinedRoles: RoleItem[] = [...DEFAULT_SYSTEM_ROLES];
-      if (storedRoles) {
-        try {
-          const parsed = JSON.parse(storedRoles);
-          parsed.forEach((pr: RoleItem) => {
-            if (!combinedRoles.some(c => c.name === pr.name || c.display_name.toLowerCase() === pr.display_name.toLowerCase())) {
-              combinedRoles.push(pr);
-            }
-          });
-        } catch (e) {}
-      }
+      let rolePermissionsList: any[] = [];
 
       try {
         const res = await adminApi.get('/admin/roles');
-        if (res && res.success && res.data && res.data.roles) {
-          res.data.roles.forEach((br: any) => {
-            if (!combinedRoles.some(c => c.name === br.name || c.id === br.id)) {
-              combinedRoles.push({
-                id: br.id,
-                name: br.name,
-                display_name: br.display_name,
-                description: br.description,
-                is_system: br.is_system
-              });
-            }
-          });
+        if (res && res.success && res.data) {
+          if (Array.isArray(res.data.roles)) {
+            res.data.roles.forEach((br: any) => {
+              if (!combinedRoles.some(c => c.name === br.name || c.id === br.id)) {
+                combinedRoles.push({
+                  id: br.id,
+                  name: br.name,
+                  display_name: br.display_name,
+                  description: br.description,
+                  is_system: br.is_system
+                });
+              }
+            });
+          }
+          if (Array.isArray(res.data.rolePermissions)) {
+            rolePermissionsList = res.data.rolePermissions;
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('API roles fetch notice:', e);
+      }
 
-      // Filter out any ADMIN role
+      // Filter out redundant ADMIN role
       combinedRoles = combinedRoles.filter(r => r.name !== 'ADMIN');
-      localStorage.setItem('dr_custom_roles_list', JSON.stringify(combinedRoles));
       setRoles(combinedRoles);
 
-      // 2. Load Users
-      const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
+      // 2. Load Users from PostgreSQL
       let customList: any[] = [];
-      if (storedCustomUsers) {
-        try {
-          const parsed = JSON.parse(storedCustomUsers);
-          customList = parsed.filter((u: any) => !DEMO_EMAILS.includes(u.email?.toLowerCase()) && u.email !== 'doonridersmain@gmail.com');
-        } catch (e) {}
-      }
 
       try {
         const res = await adminApi.get('/admin/users');
-        if (res && res.success && res.data) {
+        if (res && res.success && Array.isArray(res.data)) {
           const nonSuper = res.data.filter((u: any) => 
             u.id !== 1 && 
             u.email !== 'doonridersmain@gmail.com' && 
             !DEMO_EMAILS.includes(u.email?.toLowerCase())
           );
           nonSuper.forEach((bu: any) => {
-            if (!customList.some(cu => cu.email === bu.email)) {
-              customList.push({
-                id: bu.id,
-                name: bu.name,
-                email: bu.email,
-                role: bu.role_name || 'SALES_EXECUTIVE',
-                role_name: bu.role_name || 'SALES_EXECUTIVE',
-                roleDisplayName: bu.role_display_name || 'Team Member',
-                role_display_name: bu.role_display_name || 'Team Member',
-                avatar: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : ''
-              });
-            }
+            const userObj = {
+              id: bu.id,
+              name: bu.name,
+              email: bu.email,
+              role_id: bu.role_id,
+              role: bu.role_name || 'SALES_EXECUTIVE',
+              role_name: bu.role_name || 'SALES_EXECUTIVE',
+              roleDisplayName: bu.role_display_name || 'Team Member',
+              role_display_name: bu.role_display_name || 'Team Member',
+              avatar: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : ''
+            };
+            customList.push(userObj);
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('API users fetch notice:', e);
+      }
 
       setTeamUsers(customList);
 
-      // 3. Load saved user permissions
-      const storedPerms = localStorage.getItem('dr_user_custom_permissions');
+      // 3. Load user permissions directly from PostgreSQL role_permissions
       let userPermMap: UserPermMap = {};
-      if (storedPerms) {
-        try { userPermMap = JSON.parse(storedPerms); } catch (e) {}
-      }
 
       customList.forEach(u => {
-        if (!userPermMap[u.id]) {
+        const uRoleId = Number(u.role_id);
+        const userRoleName = (u.role_name || u.role || '').toUpperCase();
+
+        if (userRoleName === 'SUPER_ADMIN') {
+          userPermMap[u.id] = getInitialUserPermissions('SUPER_ADMIN');
+          return;
+        }
+
+        // Check if DB has saved role_permissions for this role
+        const rolePermsFromDb = rolePermissionsList.filter(rp => Number(rp.role_id) === uRoleId);
+
+        if (rolePermsFromDb.length > 0) {
+          const map: any = {};
+          allPermissions.forEach(p => {
+            const matched = rolePermsFromDb.find(rp => rp.code === p.code);
+            if (matched) {
+              map[p.code] = { enabled: true, scope: matched.scope || 'ALL' };
+            } else {
+              map[p.code] = { enabled: false, scope: 'ALL' };
+            }
+          });
+          userPermMap[u.id] = map;
+        } else {
+          // Fall back to role defaults if DB has not configured custom overrides yet
           userPermMap[u.id] = getInitialUserPermissions(u.role_name || u.role || 'SALES_EXECUTIVE');
         }
       });
@@ -494,6 +507,7 @@ function RolesAndPermissionsContent() {
     try {
       await adminApi.post('/admin/roles/permission', {
         userId: selectedUser.id,
+        roleId: selectedUser.role_id,
         roleName: selectedUser.role_name || selectedUser.role,
         permissions: userPermissions[selectedUser.id]
       });

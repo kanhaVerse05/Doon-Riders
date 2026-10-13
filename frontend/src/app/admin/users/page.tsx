@@ -135,37 +135,27 @@ export default function UsersPage() {
 
   const fetchRoles = async () => {
     try {
-      const storedRoles = localStorage.getItem('dr_custom_roles_list');
-      let combined: RoleItem[] = [...DEFAULT_ROLES];
-      if (storedRoles) {
-        try {
-          const parsed = JSON.parse(storedRoles);
-          parsed.forEach((pr: RoleItem) => {
-            if (!combined.some(c => c.name === pr.name || c.display_name.toLowerCase() === pr.display_name.toLowerCase())) {
-              combined.push(pr);
-            }
-          });
-        } catch (e) {}
-      }
+      let combined: RoleItem[] = [];
 
       try {
         const res = await adminApi.get('/admin/roles');
-        if (res && res.success && res.data && res.data.roles) {
-          res.data.roles.forEach((br: any) => {
-            if (br.name !== 'SUPER_ADMIN' && br.name !== 'ADMIN' && !combined.some(c => c.name === br.name || c.id === br.id)) {
-              combined.push({
-                id: br.id,
-                name: br.name,
-                display_name: br.display_name,
-                is_system: br.is_system
-              });
-            }
-          });
+        if (res && res.success && res.data && Array.isArray(res.data.roles)) {
+          combined = res.data.roles
+            .filter((br: any) => br.name !== 'SUPER_ADMIN' && br.name !== 'ADMIN')
+            .map((br: any) => ({
+              id: br.id,
+              name: br.name,
+              display_name: br.display_name,
+              is_system: br.is_system
+            }));
         }
       } catch (e) {}
 
-      combined = combined.filter(r => r.name !== 'ADMIN' && r.name !== 'SUPER_ADMIN');
-      localStorage.setItem('dr_custom_roles_list', JSON.stringify(combined));
+      // If API returned nothing, fallback to DEFAULT_ROLES
+      if (combined.length === 0) {
+        combined = [...DEFAULT_ROLES];
+      }
+
       setRoles(combined);
     } catch (e) {
       console.warn('Error fetching roles:', e);
@@ -176,16 +166,9 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const superAdmin = getSuperAdmin();
-      const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
       let customList: TeamMember[] = [];
-      if (storedCustomUsers) {
-        try {
-          const parsed = JSON.parse(storedCustomUsers);
-          customList = parsed.filter((u: any) => !DEMO_EMAILS.includes(u.email?.toLowerCase()) && u.email !== 'doonridersmain@gmail.com');
-        } catch (e) {}
-      }
 
-      // Try Backend API
+      // Try Backend API (PostgreSQL is source of truth)
       try {
         const res = await adminApi.get('/admin/users');
         if (res && res.success && Array.isArray(res.data)) {
@@ -194,26 +177,34 @@ export default function UsersPage() {
             u.id !== 1 && 
             !DEMO_EMAILS.includes(u.email?.toLowerCase())
           );
-          customList = backendNonDemo.map((bu: any) => {
-            const existingCustom = customList.find((cu: any) => cu.email?.toLowerCase() === bu.email?.toLowerCase());
-            return {
-              id: bu.id,
-              name: bu.name,
-              email: bu.email,
-              phone: bu.phone,
-              role_id: bu.role_id,
-              role_name: bu.role_name,
-              role_display_name: bu.role_display_name,
-              status: bu.status || 'active',
-              avatar_url: bu.avatar_url || existingCustom?.avatar_url || '',
-              is_super_admin: false
-            };
-          });
-          localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
+          customList = backendNonDemo.map((bu: any) => ({
+            id: bu.id,
+            name: bu.name,
+            email: bu.email,
+            phone: bu.phone,
+            role_id: bu.role_id,
+            role_name: bu.role_name,
+            role_display_name: bu.role_display_name,
+            status: bu.status || 'active',
+            avatar_url: bu.avatar_url || '',
+            is_super_admin: false
+          }));
         }
       } catch (apiErr) {}
 
-      localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
+      // Only fallback to localStorage if API failed completely and returned 0 users
+      if (customList.length === 0) {
+        const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
+        if (storedCustomUsers) {
+          try {
+            const parsed = JSON.parse(storedCustomUsers);
+            customList = parsed.filter((u: any) => !DEMO_EMAILS.includes(u.email?.toLowerCase()) && u.email !== 'doonridersmain@gmail.com');
+          } catch (e) {}
+        }
+      } else {
+        localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
+      }
+
       setUsers([superAdmin, ...customList]);
     } catch (err) {
       console.warn('Error loading users:', err);

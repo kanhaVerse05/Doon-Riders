@@ -5,7 +5,8 @@ import { generateToken } from '../../middleware/authMiddleware';
 import { logAuditEvent } from '../../helpers/auditLogger';
 import { AuthRequest } from '../../types/auth';
 
-export { getPermissionsForRole } from '../../helpers/rbacHelper';
+import { getPermissionsForRole } from '../../helpers/rbacHelper';
+export { getPermissionsForRole };
 
 export const login = async (req: Request, res: Response) => {
   try {

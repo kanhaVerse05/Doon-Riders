@@ -123,6 +123,14 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
     ];
   }
 
+  if (norm === 'PRE_BOOKING' || norm.includes('PRE_BOOK') || norm.includes('BOOKING')) {
+    return [
+      { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'pre_bookings.create', scope: 'ALL' },
+      { code: 'pre_bookings.status_update', scope: 'ALL' }
+    ];
+  }
+
   // Sales Executive / Standard Rep / Custom role default
   return [
     { code: 'dashboard.view', scope: 'ASSIGNED' },

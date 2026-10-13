@@ -75,10 +75,13 @@ export const createRole = async (req: AuthRequest, res: Response) => {
       const result = await pool.query(`
         INSERT INTO roles (name, display_name, description, is_system)
         VALUES ($1, $2, $3, FALSE)
+        RETURNING id
       `, [cleanName, cleanDisplayName, description || `Custom ${cleanDisplayName} role`]);
 
+      const createdRoleId = result.rows[0]?.id || result.insertId;
+
       const newRole = {
-        id: result.insertId,
+        id: createdRoleId,
         name: cleanName,
         display_name: cleanDisplayName,
         description: description || `Custom ${cleanDisplayName} role`,
@@ -91,7 +94,7 @@ export const createRole = async (req: AuthRequest, res: Response) => {
         userRole: req.user?.roleName,
         action: 'CREATE',
         module: 'ROLES',
-        recordId: result.insertId,
+        recordId: createdRoleId,
         notes: `Created new custom role: ${cleanDisplayName} (${cleanName})`
       });
 
@@ -214,22 +217,31 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
           return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be modified.' });
         }
 
+        // Filter for enabled permissions
+        const enabledEntries = Object.entries(permissions as Record<string, any>).filter(([_, val]) => val && val.enabled);
+
+        // Protect against accidental wiping of all permissions if an empty or all-disabled map was passed
+        if (enabledEntries.length === 0 && !req.body.forceClear) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot save empty permissions: At least 1 permission must be enabled, or pass forceClear: true.'
+          });
+        }
+
         // Clear existing role permissions
         await pool.query('DELETE FROM role_permissions WHERE role_id = $1', [targetRoleId]);
 
         // Insert each enabled permission
-        for (const [code, val] of Object.entries(permissions as Record<string, any>)) {
-          if (val && val.enabled) {
-            const pRes = await pool.query('SELECT id FROM permissions WHERE code = $1', [code]);
-            if (pRes.rows.length > 0) {
-              const permId = pRes.rows[0].id;
-              const permScope = val.scope || 'ALL';
-              await pool.query(`
-                INSERT INTO role_permissions (role_id, permission_id, scope)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
-              `, [targetRoleId, permId, permScope]);
-            }
+        for (const [code, val] of enabledEntries) {
+          const pRes = await pool.query('SELECT id FROM permissions WHERE code = $1', [code]);
+          if (pRes.rows.length > 0) {
+            const permId = pRes.rows[0].id;
+            const permScope = val.scope || 'ALL';
+            await pool.query(`
+              INSERT INTO role_permissions (role_id, permission_id, scope)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+            `, [targetRoleId, permId, permScope]);
           }
         }
 

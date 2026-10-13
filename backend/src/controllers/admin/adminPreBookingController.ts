@@ -5,6 +5,7 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
   try {
     const { search, status, paymentMode, date, user_id, role, view_all } = req.query;
     const canViewAll = role === 'SUPER_ADMIN' || view_all === 'true' || view_all === '1';
+    const isSuperAdmin = Boolean(role === 'SUPER_ADMIN' || canViewAll);
     const currentUserId = user_id ? Number(user_id) : null;
 
     if (getDbStatus()) {
