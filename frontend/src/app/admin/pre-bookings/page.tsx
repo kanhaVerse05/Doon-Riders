@@ -34,7 +34,9 @@ import {
   Check,
   Image as ImageIcon,
   Hash,
-  RotateCw
+  RotateCw,
+  SlidersHorizontal,
+  Filter
 } from 'lucide-react';
 
 interface PreBooking {
@@ -157,6 +159,7 @@ export default function PreBookingsAdminPage() {
   const [dateFilter, setDateFilter] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showMobileFilterModal, setShowMobileFilterModal] = useState(false);
 
   // QR & Series Settings
   const [qrSettings, setQrSettings] = useState<QrSettings>({
@@ -751,7 +754,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition transform hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
-                <span>+ NEW PRE-BOOKING</span>
+                <span>NEW PRE-BOOKING</span>
               </button>
             )}
           </div>
@@ -766,68 +769,67 @@ _Please present this receipt confirmation at the hub during vehicle handover._
         )}
 
         {/* ========================================================================= */}
-        {/* MOBILE REACT NATIVE FINTECH WALLET OVERVIEW CARD (md:hidden) */}
+        {/* MOBILE REACT NATIVE WALLET OVERVIEW CARD (GREEN & WHITE THEME - md:hidden) */}
         {/* ========================================================================= */}
-        <div className="block md:hidden bg-gradient-to-br from-[#0B1528] via-[#0E2238] to-[#0A1728] text-white rounded-3xl p-4.5 border border-slate-800 shadow-xl relative overflow-hidden">
-          {/* Subtle Ambient Glow */}
-          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#00D96B]/15 rounded-full blur-2xl pointer-events-none" />
+        <div className="block md:hidden bg-white border-2 border-[#00D96B]/50 rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
+          {/* Subtle Green Ambient Corner Accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#00D96B]/10 rounded-bl-[80px] pointer-events-none" />
 
-          <div className="relative space-y-3.5">
-            {/* Header chip row */}
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-emerald-400 border border-white/10">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#00D96B] animate-pulse" />
-                <span>COLLECTIONS OVERVIEW</span>
+          {/* Header row: badge and stats */}
+          <div className="flex items-center justify-between relative">
+            <div className="inline-flex items-center gap-1.5 bg-[#EAFBF2] border border-[#00D96B]/30 px-3 py-1 rounded-full text-[10px] font-black text-[#00A854] shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00D96B] animate-pulse" />
+              <span>COLLECTIONS OVERVIEW</span>
+            </div>
+            <span className="text-xs font-mono font-bold text-[#667085]">
+              {stats.totalCount} Bookings • {stats.totalQty} Units
+            </span>
+          </div>
+
+          {/* Big Revenue Number & Quick Action Button */}
+          <div className="flex items-center justify-between gap-3 relative">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-[#00A854]">Total Collected</p>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span className="text-3xl font-black text-[#111827] font-mono tracking-tight">
+                  ₹{stats.totalRevenue.toLocaleString()}
+                </span>
+                <span className="text-xs text-[#667085] font-bold">INR</span>
               </div>
-              <span className="text-[11px] font-mono font-bold text-slate-300">
-                {stats.totalCount} Bookings • {stats.totalQty} Units
-              </span>
+              <p className="text-[11px] text-[#667085] font-mono mt-0.5">₹499 × {stats.totalQty} EV Units</p>
             </div>
 
-            {/* Big Revenue Number */}
-            <div className="flex items-baseline justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Collected</p>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="text-3xl font-black text-[#00D96B] font-mono tracking-tight">
-                    ₹{stats.totalRevenue.toLocaleString()}
-                  </span>
-                  <span className="text-xs text-slate-400 font-bold">INR</span>
-                </div>
-              </div>
+            {/* Quick Action Button right inside Wallet Card (Single Plus Icon) */}
+            {canCreatePreBooking && (
+              <button
+                onClick={() => {
+                  resetForm();
+                  setShowCreateModal(true);
+                }}
+                className="bg-[#00D96B] hover:bg-[#00A854] active:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] flex items-center gap-1.5 active:scale-95 transition cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>BOOKING</span>
+              </button>
+            )}
+          </div>
 
-              {/* Quick Action Button right inside Wallet Card */}
-              {canCreatePreBooking && (
-                <button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
-                  className="bg-[#00D96B] active:bg-[#00A854] text-[#070D18] font-black text-[11px] uppercase tracking-wider px-3.5 py-2 rounded-xl shadow-[0_2px_12px_rgba(0,217,107,0.4)] flex items-center gap-1.5 active:scale-95 transition"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>+ BOOKING</span>
-                </button>
-              )}
+          {/* UPI & Cash Quick Split Cards */}
+          <div className="grid grid-cols-2 gap-2.5 pt-1 relative">
+            <div className="bg-[#F0F7FF] border border-blue-200/80 rounded-2xl p-3 space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-blue-700">
+                <span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" /> UPI</span>
+                <span className="text-[10px] text-blue-600 font-semibold">{stats.upiCount} txns</span>
+              </div>
+              <p className="text-base font-black text-[#111827] font-mono">₹{stats.upiAmount.toLocaleString()}</p>
             </div>
 
-            {/* UPI & Cash Quick Split Pills */}
-            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2.5">
-                <div className="flex items-center justify-between text-[10px] font-bold text-blue-400 mb-0.5">
-                  <span className="flex items-center gap-1"><QrCode className="w-3 h-3" /> UPI</span>
-                  <span>{stats.upiCount} txns</span>
-                </div>
-                <p className="text-sm font-black text-white font-mono">₹{stats.upiAmount.toLocaleString()}</p>
+            <div className="bg-[#FFFBEB] border border-amber-200/80 rounded-2xl p-3 space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-800">
+                <span className="flex items-center gap-1"><Banknote className="w-3.5 h-3.5" /> Cash</span>
+                <span className="text-[10px] text-amber-600 font-semibold">{stats.cashCount} txns</span>
               </div>
-
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
-                <div className="flex items-center justify-between text-[10px] font-bold text-amber-400 mb-0.5">
-                  <span className="flex items-center gap-1"><Banknote className="w-3 h-3" /> Cash</span>
-                  <span>{stats.cashCount} txns</span>
-                </div>
-                <p className="text-sm font-black text-white font-mono">₹{stats.cashAmount.toLocaleString()}</p>
-              </div>
+              <p className="text-base font-black text-[#111827] font-mono">₹{stats.cashAmount.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -904,33 +906,53 @@ _Please present this receipt confirmation at the hub during vehicle handover._
         </div>
 
         {/* ========================================================================= */}
-        {/* MOBILE SEARCH & SEGMENTED FILTER CHIP BAR (md:hidden) */}
+        {/* MOBILE SEARCH & FILTER BAR (md:hidden) */}
         {/* ========================================================================= */}
         <div className="block md:hidden space-y-2.5">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search customer, phone, code..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-10 pr-9 py-2.5 text-xs text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] shadow-xs"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          {/* Search bar + Compact Filter button side-by-side */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search customer, phone, code..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-white border border-[#E5E7EB] rounded-2xl pl-10 pr-9 py-2.5 text-xs text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] shadow-xs"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter button beside search bar */}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilterModal(true)}
+              className={`p-2.5 px-3 rounded-2xl border flex items-center gap-1.5 text-xs font-bold transition shrink-0 cursor-pointer shadow-xs ${
+                statusFilter !== 'All' || paymentModeFilter !== 'All' || dateFilter
+                  ? 'bg-[#00D96B] text-[#070D18] border-[#00D96B] shadow-[0_2px_8px_rgba(0,217,107,0.3)] font-black'
+                  : 'bg-white text-[#475467] border-[#E5E7EB] hover:bg-gray-50'
+              }`}
+              title="Filter Pre-Bookings"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Filter</span>
+              {(statusFilter !== 'All' || paymentModeFilter !== 'All' || dateFilter) && (
+                <span className="w-2 h-2 rounded-full bg-[#070D18]" />
+              )}
+            </button>
           </div>
 
-          {/* Horizontal Chip Slider */}
+          {/* Horizontal Chip Slider (PENDING Removed) */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {/* Status chips */}
-            {['All', 'PAID', 'PENDING', 'CANCELLED'].map(st => (
+            {/* Status chips: ONLY All, PAID, CANCELLED */}
+            {['All', 'PAID', 'CANCELLED'].map(st => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -965,7 +987,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
             {dateFilter && (
               <button
                 onClick={() => setDateFilter('')}
-                className="px-2.5 py-1.5 rounded-full text-[11px] font-bold shrink-0 bg-red-50 text-red-600 border border-red-200 flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-full text-[11px] font-bold shrink-0 bg-red-50 text-red-600 border border-red-200 flex items-center gap-1 cursor-pointer"
               >
                 <span>{dateFilter}</span>
                 <X className="w-3 h-3" />
@@ -991,9 +1013,9 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 flex-wrap">
-            {/* Status Filter */}
+            {/* Status Filter: ONLY All, PAID, CANCELLED (PENDING Removed) */}
             <div className="flex items-center gap-1 bg-[#F7F9FA] p-1 rounded-xl border border-[#E5E7EB]">
-              {['All', 'PAID', 'PENDING', 'CANCELLED'].map(st => (
+              {['All', 'PAID', 'CANCELLED'].map(st => (
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
@@ -1774,6 +1796,137 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MOBILE COMPACT FILTER BOTTOM SHEET MODAL */}
+      {/* ========================================================================= */}
+      {showMobileFilterModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-t-[28px] sm:rounded-[32px] border-t sm:border border-[#E5E7EB] w-full max-w-md p-5 sm:p-6 shadow-2xl space-y-4.5 relative max-h-[90vh] overflow-y-auto">
+            {/* Native Mobile Drag Handle */}
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-1 sm:hidden shrink-0" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854]">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-[#111827] uppercase tracking-tight">Filter Pre-Bookings</h3>
+                  <p className="text-[11px] text-[#667085]">Filter by Status, Payment Mode &amp; Date</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMobileFilterModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 1. STATUS FILTER (ONLY ALL, PAID, CANCELLED - PENDING REMOVED) */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#00A854] block">
+                1. Booking Status (PAID / CANCELLED)
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'All', label: 'All Status' },
+                  { id: 'PAID', label: 'PAID' },
+                  { id: 'CANCELLED', label: 'CANCELLED' }
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setStatusFilter(st.id)}
+                    className={`p-2.5 rounded-xl text-xs font-bold transition text-center cursor-pointer ${
+                      statusFilter === st.id
+                        ? 'bg-[#00D96B] text-[#070D18] font-black shadow-xs ring-2 ring-[#00D96B]/30'
+                        : 'bg-[#F7F9FA] text-[#475467] border border-[#E5E7EB] hover:bg-gray-100'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. PAYMENT MODE FILTER */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#00A854] block">
+                2. Payment Mode (All / UPI / Cash)
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'All', label: 'All Modes' },
+                  { id: 'UPI', label: 'UPI' },
+                  { id: 'Cash', label: 'Cash' }
+                ].map((pm) => (
+                  <button
+                    key={pm.id}
+                    type="button"
+                    onClick={() => setPaymentModeFilter(pm.id)}
+                    className={`p-2.5 rounded-xl text-xs font-bold transition text-center cursor-pointer ${
+                      paymentModeFilter === pm.id
+                        ? 'bg-[#111827] text-white font-black shadow-xs'
+                        : 'bg-[#F7F9FA] text-[#475467] border border-[#E5E7EB] hover:bg-gray-100'
+                    }`}
+                  >
+                    {pm.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. DATE FILTER */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#00A854] block">
+                3. Filter by Specific Date
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="flex-1 bg-[#F7F9FA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B]"
+                />
+                {dateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter('')}
+                    className="p-2 px-3 bg-red-50 text-red-600 rounded-xl border border-red-200 text-xs font-bold hover:bg-red-100 transition cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-3 border-t border-[#E5E7EB] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter('All');
+                  setPaymentModeFilter('All');
+                  setDateFilter('');
+                }}
+                className="text-xs font-bold text-red-600 hover:underline cursor-pointer"
+              >
+                Reset All Filters
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowMobileFilterModal(false)}
+                className="bg-[#00D96B] hover:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95 transition"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
