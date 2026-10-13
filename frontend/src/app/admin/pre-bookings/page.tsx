@@ -949,51 +949,39 @@ _Please present this receipt confirmation at the hub during vehicle handover._
             </button>
           </div>
 
-          {/* Horizontal Chip Slider (PENDING Removed) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {/* Status chips: ONLY All, PAID, CANCELLED */}
-            {['All', 'PAID', 'CANCELLED'].map(st => (
+          {/* Active Filter Indicator (Only shown when filter is applied) */}
+          {(statusFilter !== 'All' || paymentModeFilter !== 'All' || dateFilter) && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              {statusFilter !== 'All' && (
+                <span className="inline-flex items-center gap-1 bg-[#EAFBF2] text-[#00A854] border border-[#00D96B]/30 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                  <span>{statusFilter}</span>
+                  <button onClick={() => setStatusFilter('All')} className="hover:text-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {paymentModeFilter !== 'All' && (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                  <span>{paymentModeFilter}</span>
+                  <button onClick={() => setPaymentModeFilter('All')} className="hover:text-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {dateFilter && (
+                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                  <span>{dateFilter}</span>
+                  <button onClick={() => setDateFilter('')} className="hover:text-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
               <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer ${
-                  statusFilter === st
-                    ? 'bg-[#00D96B] text-[#070D18] shadow-sm font-black'
-                    : 'bg-white text-[#475467] border border-[#E5E7EB] hover:bg-gray-50'
-                }`}
+                onClick={() => {
+                  setStatusFilter('All');
+                  setPaymentModeFilter('All');
+                  setDateFilter('');
+                }}
+                className="text-[10px] text-red-600 hover:underline font-bold px-1"
               >
-                {st === 'All' ? 'All Status' : st}
+                Clear all
               </button>
-            ))}
-
-            <div className="w-[1px] h-5 bg-[#E5E7EB] shrink-0 mx-0.5" />
-
-            {/* Mode chips */}
-            {['All', 'UPI', 'Cash'].map(pm => (
-              <button
-                key={pm}
-                onClick={() => setPaymentModeFilter(pm)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer ${
-                  paymentModeFilter === pm
-                    ? 'bg-[#111827] text-white shadow-sm font-black'
-                    : 'bg-white text-[#475467] border border-[#E5E7EB] hover:bg-gray-50'
-                }`}
-              >
-                {pm === 'All' ? 'All Mode' : pm}
-              </button>
-            ))}
-
-            {/* Date reset if active */}
-            {dateFilter && (
-              <button
-                onClick={() => setDateFilter('')}
-                className="px-2.5 py-1.5 rounded-full text-[11px] font-bold shrink-0 bg-red-50 text-red-600 border border-red-200 flex items-center gap-1 cursor-pointer"
-              >
-                <span>{dateFilter}</span>
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* ========================================================================= */}
@@ -1481,23 +1469,6 @@ _Please present this receipt confirmation at the hub during vehicle handover._
         </div>
 
       </div>
-
-      {/* ========================================================================= */}
-      {/* REACT NATIVE STYLE FLOATING ACTION BUTTON (FAB) (fixed md:hidden) */}
-      {/* ========================================================================= */}
-      {canCreatePreBooking && (
-        <button
-          onClick={() => {
-            resetForm();
-            setShowCreateModal(true);
-          }}
-          className="fixed bottom-20 right-4 z-30 md:hidden bg-[#00D96B] active:bg-[#00A854] text-[#070D18] font-black text-xs uppercase tracking-wider px-4.5 py-3.5 rounded-full shadow-[0_8px_24px_rgba(0,217,107,0.5)] flex items-center gap-2 active:scale-95 transition-all cursor-pointer border border-[#00D96B]/50"
-          title="Create New Pre-Booking"
-        >
-          <Plus className="w-5 h-5 stroke-[3]" />
-          <span>New Booking</span>
-        </button>
-      )}
 
       {/* ========================================================================= */}
       {/* PRE-BOOKING MODAL (MAIN USER FLOW - NATIVE BOTTOM SHEET ON MOBILE) */}
