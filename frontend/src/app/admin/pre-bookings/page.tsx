@@ -272,15 +272,53 @@ export default function PreBookingsAdminPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit');
+    if (file.size > 15 * 1024 * 1024) {
+      alert('File size exceeds 15MB limit. Please select an image under 15MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const base64 = evt.target?.result as string;
-      setTempQrImageUrl(base64);
+      const rawBase64 = evt.target?.result as string;
+      if (!rawBase64) return;
+
+      // Optimize image via Canvas to keep base64 ultra-clean (< 80KB) and razor sharp
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 800; // QR codes are optimal and crisp at 600-800px
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.88);
+            setTempQrImageUrl(optimizedBase64);
+            return;
+          }
+        } catch (err) {
+          console.warn('QR image canvas resize notice:', err);
+        }
+        setTempQrImageUrl(rawBase64);
+      };
+      img.onerror = () => {
+        setTempQrImageUrl(rawBase64);
+      };
+      img.src = rawBase64;
     };
     reader.readAsDataURL(file);
   };

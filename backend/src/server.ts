@@ -36,7 +36,19 @@ app.use(cors({
   origin: process.env.CLIENT_URL || '*',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Body parser error handler (graceful JSON for 413 Payload Too Large)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err?.type === 'entity.too.large' || err?.status === 413) {
+    return res.status(413).json({
+      success: false,
+      message: 'Uploaded payload or image is too large. Please upload an image under 10MB.'
+    });
+  }
+  next(err);
+});
 
 // Public Website API Routes
 app.use('/api/vehicles', vehicleRoutes);

@@ -30,7 +30,12 @@ export const adminApi = {
         headers
       });
 
-      const data = await res.json().catch(() => ({ success: false, message: 'Invalid response from server' }));
+      const data = await res.json().catch(() => ({
+        success: false,
+        message: res.status === 413
+          ? 'Image or payload is too large for the server. Please upload an image under 10MB.'
+          : (res.statusText ? `Error (${res.status}): ${res.statusText}` : 'Invalid response from server')
+      }));
       
       if (!res.ok) {
         if (res.status === 401 && typeof window !== 'undefined') {
@@ -46,6 +51,12 @@ export const adminApi = {
               window.location.href = '/admin/login?session_expired=1';
             }
           }
+        }
+        if (res.status === 413) {
+          return {
+            success: false,
+            message: data?.message || 'Image or payload is too large for the server. Please upload an image under 10MB.'
+          };
         }
         return data || { success: false, message: `Error HTTP ${res.status}` };
       }
