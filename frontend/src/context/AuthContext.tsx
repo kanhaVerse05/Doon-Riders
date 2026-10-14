@@ -361,9 +361,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
-    // Role-specific baseline: PRE_BOOKING always has pre_bookings.view & pre_bookings.create
+    // Role-specific baseline: PRE_BOOKING always has pre_bookings permissions
     const isPreBookingRole = normRole === 'PRE_BOOKING' || normRole.includes('PRE_BOOK') || normRole.includes('PRE-BOOK');
-    if (isPreBookingRole && (permissionCode === 'pre_bookings.view' || permissionCode === 'pre_bookings.create')) {
+    if (isPreBookingRole && (
+      permissionCode === 'pre_bookings.view' || 
+      permissionCode === 'pre_bookings.view_all' || 
+      permissionCode === 'pre_bookings.create' || 
+      permissionCode === 'pre_bookings.status_update'
+    )) {
       return true;
     }
 

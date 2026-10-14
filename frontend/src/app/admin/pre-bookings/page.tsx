@@ -139,9 +139,10 @@ export default function PreBookingsAdminPage() {
   const isPreBookingUser = 
     user?.roleName === 'PRE_BOOKING' || 
     user?.roleName?.includes('PRE_BOOK') || 
-    user?.roleDisplayName?.toLowerCase().includes('pre-booking');
+    Boolean(user?.roleDisplayName?.toLowerCase().includes('pre-booking'));
+  const isManager = user?.roleName === 'MANAGER' || user?.roleName?.includes('MANAGER');
   const canCreatePreBooking = isSuperAdmin || hasPermission('pre_bookings.create') || isPreBookingUser;
-  const canViewAllBookings = isSuperAdmin || hasPermission('pre_bookings.view_all') || hasPermission('pre_bookings.view', 'ALL');
+  const canViewAllBookings = isSuperAdmin || isPreBookingUser || isManager || hasPermission('pre_bookings.view_all') || hasPermission('pre_bookings.view', 'ALL') || hasPermission('pre_bookings.view');
 
   const [bookings, setBookings] = useState<PreBooking[]>([]);
   const [stats, setStats] = useState({

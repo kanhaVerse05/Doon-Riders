@@ -1,11 +1,27 @@
 import { Request, Response } from 'express';
 import { pool, memoryStore, getDbStatus } from '../../config/db';
+import {
+  loadPreBookingsBackup,
+  savePreBookingsBackup,
+  appendPreBookingBackup,
+  syncPreBookingsWithDb
+} from '../../helpers/preBookingStorage';
 
 export const getAllPreBookings = async (req: Request, res: Response) => {
   try {
     const { search, status, paymentMode, date, user_id, role, view_all } = req.query;
-    const canViewAll = role === 'SUPER_ADMIN' || view_all === 'true' || view_all === '1';
-    const isSuperAdmin = Boolean(role === 'SUPER_ADMIN' || canViewAll);
+    const normalizedRole = String(role || '').toUpperCase();
+    const canViewAll = 
+      normalizedRole === 'SUPER_ADMIN' || 
+      normalizedRole === 'MANAGER' || 
+      normalizedRole === 'PRE_BOOKING' || 
+      normalizedRole.includes('SUPER') || 
+      normalizedRole.includes('BOOKING') || 
+      normalizedRole.includes('ADMIN') || 
+      view_all === 'true' || 
+      view_all === '1' ||
+      !user_id;
+    const isSuperAdmin = Boolean(normalizedRole === 'SUPER_ADMIN' || canViewAll);
     const currentUserId = user_id ? Number(user_id) : null;
 
     if (getDbStatus()) {
@@ -20,13 +36,13 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
           params.push(currentUserId);
         }
 
-        if (status && status !== 'All') {
-          sql += ` AND payment_status = $${pIdx++}`;
+        if (status && status !== 'All' && status !== 'all') {
+          sql += ` AND UPPER(payment_status) = UPPER($${pIdx++})`;
           params.push(status);
         }
 
-        if (paymentMode && paymentMode !== 'All') {
-          sql += ` AND payment_mode = $${pIdx++}`;
+        if (paymentMode && paymentMode !== 'All' && paymentMode !== 'all') {
+          sql += ` AND UPPER(payment_mode) = UPPER($${pIdx++})`;
           params.push(paymentMode);
         }
 
@@ -44,7 +60,10 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
         sql += ' ORDER BY created_at DESC';
 
         const result = await pool.query(sql, params);
-        const bookings = result.rows || [];
+        let bookings = result.rows || [];
+
+        // Self-healing synchronization with persistent disk backup
+        bookings = await syncPreBookingsWithDb(bookings, pool);
 
         // Calculate stats (scoped to current view)
         const totalCount = bookings.length;
@@ -82,19 +101,22 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
       }
     }
 
-    // In-memory fallback
-    let list = [...(memoryStore.preBookings || [])];
+    // In-memory / disk fallback
+    let list = loadPreBookingsBackup();
+    if (!list || list.length === 0) {
+      list = [...(memoryStore.preBookings || [])];
+    }
 
     // RBAC: If not permitted to view all, only show pre-bookings created by this user
     if (!canViewAll && currentUserId) {
       list = list.filter(b => b.created_by_id === currentUserId || !b.created_by_id);
     }
 
-    if (status && status !== 'All') {
-      list = list.filter(b => b.payment_status === status);
+    if (status && status !== 'All' && status !== 'all') {
+      list = list.filter(b => String(b.payment_status || '').toUpperCase() === String(status).toUpperCase());
     }
-    if (paymentMode && paymentMode !== 'All') {
-      list = list.filter(b => b.payment_mode === paymentMode);
+    if (paymentMode && paymentMode !== 'All' && paymentMode !== 'all') {
+      list = list.filter(b => String(b.payment_mode || '').toUpperCase() === String(paymentMode).toUpperCase());
     }
     if (date) {
       list = list.filter(b => b.booking_date === date);
@@ -246,6 +268,9 @@ export const createPreBooking = async (req: Request, res: Response) => {
         [candidateNum + 1]
       );
 
+      // Persist to disk backup
+      appendPreBookingBackup(newRow);
+
       return res.status(201).json({
         success: true,
         data: newRow,
@@ -285,6 +310,9 @@ export const createPreBooking = async (req: Request, res: Response) => {
     if (!memoryStore.preBookings) memoryStore.preBookings = [];
     memoryStore.preBookings.unshift(newBooking as any);
 
+    // Persist to disk backup
+    appendPreBookingBackup(newBooking);
+
     return res.status(201).json({
       success: true,
       data: newBooking,
@@ -307,6 +335,9 @@ export const updatePreBookingStatus = async (req: Request, res: Response) => {
         [payment_status, payment_mode, notes, id]
       );
       const [updated] = (await pool.query('SELECT * FROM pre_bookings WHERE id = $1', [id])).rows;
+      if (updated) {
+        appendPreBookingBackup(updated);
+      }
       return res.json({ success: true, data: updated, message: 'Pre-booking updated' });
     }
 
@@ -316,6 +347,7 @@ export const updatePreBookingStatus = async (req: Request, res: Response) => {
       if (payment_status) memoryStore.preBookings[idx].payment_status = payment_status;
       if (payment_mode) memoryStore.preBookings[idx].payment_mode = payment_mode;
       if (notes !== undefined) memoryStore.preBookings[idx].notes = notes;
+      appendPreBookingBackup(memoryStore.preBookings[idx]);
       return res.json({ success: true, data: memoryStore.preBookings[idx], message: 'Pre-booking updated' });
     }
 
