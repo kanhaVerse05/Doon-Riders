@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AdminLayout } from '../../../components/admin/AdminLayout';
@@ -14,24 +14,15 @@ import {
   AlertTriangle,
   Clock,
   Phone,
-  MessageSquare,
-  ChevronRight,
-  ExternalLink,
-  User,
   RotateCw,
-  Building,
-  Check,
   X,
-  SlidersHorizontal,
   Wrench,
-  ShieldCheck,
-  Printer,
-  DollarSign,
-  FileText,
-  Sparkles,
+  Check,
   ArrowRight,
-  AlertCircle,
-  Truck
+  Truck,
+  MapPin,
+  Camera,
+  UserCheck
 } from 'lucide-react';
 
 interface DamageItem {
@@ -48,6 +39,15 @@ interface DamageItem {
   is_payable?: boolean;
 }
 
+interface RecoveryAgentUser {
+  id: number;
+  name: string;
+  phone?: string;
+  email?: string;
+  role_name?: string;
+  role_display_name?: string;
+}
+
 interface ScootyRecovery {
   id: number;
   recovery_number: string;
@@ -55,6 +55,18 @@ interface ScootyRecovery {
   rider_phone: string;
   scooter_number: string;
   scooter_id?: number | null;
+  pickup_location?: string;
+  pickup_live_location?: string;
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
+  pickup_photos?: Array<{ id: string; angle: string; url: string; uploaded_at?: string }>;
+  recovery_agent_id?: number | null;
+  recovery_agent_name?: string | null;
+  recovery_agent_phone?: string | null;
+  accepted_at?: string | null;
+  picked_up_at?: string | null;
+  reached_hub_at?: string | null;
+  agent_notes?: string | null;
   hub_id: number;
   hub_name: string;
   hub_incharge_id?: number | null;
@@ -69,10 +81,16 @@ interface ScootyRecovery {
   technician_phone?: string | null;
   technician_code?: string | null;
   status:
+    | 'ASSIGNED'
+    | 'ACCEPTED'
+    | 'PICKED_UP'
+    | 'REACHED_HUB'
+    | 'INSPECTION_IN_PROGRESS'
+    | 'INSPECTION_COMPLETED'
+    | 'Completed'
     | 'Pending Inspection'
     | 'Inspection in Progress'
     | 'Inspection Completed'
-    | 'Completed'
     | 'Cancelled';
   damage_items?: DamageItem[];
   gross_damage_total: number;
@@ -122,21 +140,22 @@ export default function ScootyRecoveriesListPage() {
   const [recoveries, setRecoveries] = useState<ScootyRecovery[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [fleetList, setFleetList] = useState<any[]>([]);
+  const [recoveryAgents, setRecoveryAgents] = useState<RecoveryAgentUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters & Search
   const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState<'ALL' | 'PENDING' | 'INSPECTED' | 'COMPLETED'>('ALL');
+  const [statusTab, setStatusTab] = useState<'ALL' | 'ASSIGNED' | 'ACCEPTED' | 'PICKED_UP' | 'REACHED_HUB' | 'INSPECTED' | 'COMPLETED'>('ALL');
   const [selectedHub, setSelectedHub] = useState<string>('all');
-  const [selectedTechnician, setSelectedTechnician] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week'>('all');
 
   // Stats
   const [stats, setStats] = useState({
     total: 0,
-    pendingInspection: 0,
+    assigned: 0,
+    accepted: 0,
+    pickedUp: 0,
+    reachedHub: 0,
     inProgress: 0,
     inspectionCompleted: 0,
     completed: 0,
@@ -144,25 +163,20 @@ export default function ScootyRecoveriesListPage() {
     totalDueCollected: 0
   });
 
-  // Modal: Create New Recovery
+  // Modal: Create New Recovery (Step 1 Hub Incharge Assignment)
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creatingRecovery, setCreatingRecovery] = useState(false);
   const [newRecoveryForm, setNewRecoveryForm] = useState({
     rider_name: '',
-    rider_phone: '',
     scooter_number: '',
+    rider_phone: '',
+    pickup_location: '',
+    recovery_agent_id: '',
     hub_id: '',
-    recovered_by: '',
-    recovery_date: new Date().toISOString().split('T')[0],
-    recovery_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     recovery_charge: 1000,
     security_deposit_amount: 2000,
-    technician_id: '',
-    recovery_reason: 'Vehicle overdue / recovery operation',
-    initial_remarks: ''
+    recovery_reason: 'Non-payment / overdue vehicle'
   });
-
-  const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
 
   const fetchRecoveries = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -174,6 +188,7 @@ export default function ScootyRecoveriesListPage() {
         if (res.stats) setStats(res.stats);
         if (res.hubs) setHubs(res.hubs);
         if (res.technicians) setTechnicians(res.technicians);
+        if (res.recoveryAgents) setRecoveryAgents(res.recoveryAgents);
 
         if (!newRecoveryForm.hub_id && res.hubs && res.hubs.length > 0) {
           const defaultHub = (user as any)?.hub_id
@@ -181,8 +196,7 @@ export default function ScootyRecoveriesListPage() {
             : res.hubs[0];
           setNewRecoveryForm(prev => ({
             ...prev,
-            hub_id: String(defaultHub.id),
-            recovered_by: user?.name || defaultHub.incharge_name || ''
+            hub_id: String(defaultHub.id)
           }));
         }
       }
@@ -201,19 +215,31 @@ export default function ScootyRecoveriesListPage() {
   // Handle Form Submit for New Recovery
   const handleCreateRecoverySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRecoveryForm.rider_name.trim() || !newRecoveryForm.rider_phone.trim() || !newRecoveryForm.scooter_number.trim()) {
-      alert('Please fill in Rider Name, Phone Number, and Scooter Number.');
+    if (
+      !newRecoveryForm.rider_name.trim() ||
+      !newRecoveryForm.scooter_number.trim() ||
+      !newRecoveryForm.rider_phone.trim() ||
+      !newRecoveryForm.pickup_location.trim()
+    ) {
+      alert('Please fill in Rider Name, Scooty Number, Contact Number, and Recovery Location.');
       return;
     }
 
     setCreatingRecovery(true);
     try {
+      const selectedAgent = recoveryAgents.find(a => String(a.id) === String(newRecoveryForm.recovery_agent_id));
       const payload = {
-        ...newRecoveryForm,
+        rider_name: newRecoveryForm.rider_name.trim(),
+        scooter_number: newRecoveryForm.scooter_number.toUpperCase().trim(),
+        rider_phone: newRecoveryForm.rider_phone.trim(),
+        pickup_location: newRecoveryForm.pickup_location.trim(),
+        recovery_agent_id: newRecoveryForm.recovery_agent_id ? Number(newRecoveryForm.recovery_agent_id) : null,
+        recovery_agent_name: selectedAgent?.name || null,
+        recovery_agent_phone: selectedAgent?.phone || null,
         hub_id: Number(newRecoveryForm.hub_id) || (hubs[0]?.id || 1),
-        technician_id: newRecoveryForm.technician_id ? Number(newRecoveryForm.technician_id) : null,
         recovery_charge: Number(newRecoveryForm.recovery_charge) || 1000,
-        security_deposit_amount: Number(newRecoveryForm.security_deposit_amount) || 2000
+        security_deposit_amount: Number(newRecoveryForm.security_deposit_amount) || 2000,
+        recovery_reason: newRecoveryForm.recovery_reason.trim()
       };
 
       const res = await adminApi.post('/recoveries', payload);
@@ -221,24 +247,21 @@ export default function ScootyRecoveriesListPage() {
         setShowCreateModal(false);
         setNewRecoveryForm({
           rider_name: '',
-          rider_phone: '',
           scooter_number: '',
+          rider_phone: '',
+          pickup_location: '',
+          recovery_agent_id: '',
           hub_id: String(hubs[0]?.id || '1'),
-          recovered_by: user?.name || hubs[0]?.incharge_name || '',
-          recovery_date: new Date().toISOString().split('T')[0],
-          recovery_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
           recovery_charge: 1000,
           security_deposit_amount: 2000,
-          technician_id: '',
-          recovery_reason: 'Vehicle overdue / recovery operation',
-          initial_remarks: ''
+          recovery_reason: 'Non-payment / overdue vehicle'
         });
         fetchRecoveries(true);
         if (res.data?.id) {
           router.push(`/admin/recoveries/${res.data.id}`);
         }
       } else {
-        alert(res.message || 'Failed to create recovery record.');
+        alert(res.message || 'Failed to assign recovery.');
       }
     } catch (err: any) {
       console.error('Error creating recovery:', err);
@@ -254,20 +277,32 @@ export default function ScootyRecoveriesListPage() {
     const term = search.toLowerCase().trim();
     if (term) {
       const matchSearch =
-        item.recovery_number.toLowerCase().includes(term) ||
-        item.scooter_number.toLowerCase().includes(term) ||
-        item.rider_name.toLowerCase().includes(term) ||
-        item.rider_phone.toLowerCase().includes(term) ||
-        item.recovered_by?.toLowerCase().includes(term) ||
-        item.hub_name.toLowerCase().includes(term);
+        item.recovery_number?.toLowerCase().includes(term) ||
+        item.scooter_number?.toLowerCase().includes(term) ||
+        item.rider_name?.toLowerCase().includes(term) ||
+        item.rider_phone?.toLowerCase().includes(term) ||
+        item.recovery_agent_name?.toLowerCase().includes(term) ||
+        item.pickup_location?.toLowerCase().includes(term) ||
+        item.hub_name?.toLowerCase().includes(term);
       if (!matchSearch) return false;
     }
 
     // Status Tab
-    if (statusTab === 'PENDING') {
-      if (item.status !== 'Pending Inspection' && item.status !== 'Inspection in Progress') return false;
+    if (statusTab === 'ASSIGNED') {
+      if (item.status !== 'ASSIGNED' && item.status !== 'Pending Inspection') return false;
+    } else if (statusTab === 'ACCEPTED') {
+      if (item.status !== 'ACCEPTED') return false;
+    } else if (statusTab === 'PICKED_UP') {
+      if (item.status !== 'PICKED_UP') return false;
+    } else if (statusTab === 'REACHED_HUB') {
+      if (item.status !== 'REACHED_HUB') return false;
     } else if (statusTab === 'INSPECTED') {
-      if (item.status !== 'Inspection Completed') return false;
+      if (
+        item.status !== 'INSPECTION_IN_PROGRESS' &&
+        item.status !== 'INSPECTION_COMPLETED' &&
+        item.status !== 'Inspection in Progress' &&
+        item.status !== 'Inspection Completed'
+      ) return false;
     } else if (statusTab === 'COMPLETED') {
       if (item.status !== 'Completed') return false;
     }
@@ -275,30 +310,39 @@ export default function ScootyRecoveriesListPage() {
     // Hub
     if (selectedHub !== 'all' && item.hub_id !== Number(selectedHub)) return false;
 
-    // Technician
-    if (selectedTechnician !== 'all' && item.technician_id !== Number(selectedTechnician)) return false;
-
-    // Date
-    if (dateFilter === 'today') {
-      const today = new Date().toISOString().split('T')[0];
-      if (item.recovery_date !== today) return false;
-    }
-
     return true;
   });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'ASSIGNED':
       case 'Pending Inspection':
         return {
-          label: 'Pending Inspection',
+          label: 'Assigned to Agent',
           style: 'bg-amber-50 text-amber-800 border-amber-200'
         };
+      case 'ACCEPTED':
+        return {
+          label: 'Agent Accepted',
+          style: 'bg-blue-50 text-blue-800 border-blue-200 font-bold'
+        };
+      case 'PICKED_UP':
+        return {
+          label: 'Scooty Picked Up',
+          style: 'bg-indigo-50 text-indigo-800 border-indigo-200 font-bold'
+        };
+      case 'REACHED_HUB':
+        return {
+          label: 'At Hub (Assign Tech)',
+          style: 'bg-orange-50 text-orange-900 border-orange-200 font-bold animate-pulse'
+        };
+      case 'INSPECTION_IN_PROGRESS':
       case 'Inspection in Progress':
         return {
           label: 'Inspection In Progress',
-          style: 'bg-blue-50 text-blue-800 border-blue-200'
+          style: 'bg-sky-50 text-sky-800 border-sky-200 font-medium'
         };
+      case 'INSPECTION_COMPLETED':
       case 'Inspection Completed':
         return {
           label: 'Inspected (Ready to Settle)',
@@ -309,11 +353,6 @@ export default function ScootyRecoveriesListPage() {
           label: 'Settled & Closed',
           style: 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold'
         };
-      case 'Cancelled':
-        return {
-          label: 'Cancelled',
-          style: 'bg-red-50 text-red-700 border-red-200'
-        };
       default:
         return {
           label: status,
@@ -322,22 +361,32 @@ export default function ScootyRecoveriesListPage() {
     }
   };
 
+  const tabs = [
+    { key: 'ALL', label: 'All Recoveries', count: recoveries.length },
+    { key: 'ASSIGNED', label: 'Assigned', count: stats.assigned || recoveries.filter(r => r.status === 'ASSIGNED' || r.status === 'Pending Inspection').length },
+    { key: 'ACCEPTED', label: 'Accepted', count: stats.accepted || recoveries.filter(r => r.status === 'ACCEPTED').length },
+    { key: 'PICKED_UP', label: 'Picked Up', count: stats.pickedUp || recoveries.filter(r => r.status === 'PICKED_UP').length },
+    { key: 'REACHED_HUB', label: 'At Hub', count: stats.reachedHub || recoveries.filter(r => r.status === 'REACHED_HUB').length },
+    { key: 'INSPECTED', label: 'Inspection', count: (stats.inProgress || 0) + (stats.inspectionCompleted || 0) },
+    { key: 'COMPLETED', label: 'Settled', count: stats.completed || recoveries.filter(r => r.status === 'Completed').length }
+  ];
+
   return (
     <AdminLayout>
-      <div className="space-y-6 pb-12">
+      <div className="space-y-5 pb-12">
         {/* Header Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-black">
-                <ShieldAlert className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                <Truck className="w-4 h-4" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-sans">
-                Scooty Recovery Management
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Scooty Recovery
               </h1>
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              Log recovered vehicles &bull; Fixed ₹1,000 Recovery Fee &bull; Technician Damage Inspection &bull; Smart Security Settlement
+              Hub Incharge &rarr; Recovery Agent &rarr; Scooty Pickup (GPS &amp; 4 Photos) &rarr; Hub Arrival &rarr; Technician Damage Check &rarr; Settlement
             </p>
           </div>
 
@@ -356,7 +405,7 @@ export default function ScootyRecoveriesListPage() {
               className="px-4 py-2.5 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Log Scooty Recovery</span>
+              <span>Assign Recovery</span>
             </button>
           </div>
         </div>
@@ -374,37 +423,37 @@ export default function ScootyRecoveriesListPage() {
               {stats.total}
             </p>
             <span className="text-[11px] text-slate-500 mt-0.5 block font-medium">
-              Registered vehicle recoveries
+              All registered tickets
             </span>
           </div>
 
           <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
-                Pending Inspection
+              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                Active In Transit
               </span>
-              <Clock className="w-4 h-4 text-amber-600" />
+              <Clock className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-2xl font-black text-amber-900 mt-1.5 font-mono">
-              {stats.pendingInspection + stats.inProgress}
+            <p className="text-2xl font-black text-blue-900 mt-1.5 font-mono">
+              {(stats.assigned || 0) + (stats.accepted || 0) + (stats.pickedUp || 0)}
             </p>
-            <span className="text-[11px] text-amber-700 mt-0.5 block font-medium">
-              Assigned for technician check
+            <span className="text-[11px] text-blue-700 mt-0.5 block font-medium">
+              With recovery agent
             </span>
           </div>
 
           <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
-                Inspection Ready
+                At Hub / Inspection
               </span>
               <Wrench className="w-4 h-4 text-purple-600" />
             </div>
             <p className="text-2xl font-black text-purple-900 mt-1.5 font-mono">
-              {stats.inspectionCompleted}
+              {(stats.reachedHub || 0) + (stats.inProgress || 0) + (stats.inspectionCompleted || 0)}
             </p>
             <span className="text-[11px] text-purple-700 mt-0.5 block font-medium">
-              Ready for Hub Incharge settlement
+              Ready for Hub settlement
             </span>
           </div>
 
@@ -419,14 +468,14 @@ export default function ScootyRecoveriesListPage() {
               {stats.completed}
             </p>
             <span className="text-[11px] text-emerald-700 mt-0.5 block font-medium">
-              Refunded: ₹{stats.totalRefunded.toLocaleString('en-IN')}
+              Security reconciled
             </span>
           </div>
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-3">
-          <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+        <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -434,7 +483,7 @@ export default function ScootyRecoveriesListPage() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search by Recovery Ticket #, Scooty #, Rider Name, Phone, or Recovered By..."
+                placeholder="Search Scooty #, Rider Name, Phone, Location, or Agent..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B] transition"
               />
               {search && (
@@ -447,60 +496,28 @@ export default function ScootyRecoveriesListPage() {
               )}
             </div>
 
-            {/* Select Dropdowns */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {!isHubIncharge && (
-                <select
-                  value={selectedHub}
-                  onChange={e => setSelectedHub(e.target.value)}
-                  className="px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#00D96B] cursor-pointer"
-                >
-                  <option value="all">All Service Hubs</option>
-                  {hubs.map(h => (
-                    <option key={h.id} value={h.id}>
-                      {h.hub_name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <select
-                value={selectedTechnician}
-                onChange={e => setSelectedTechnician(e.target.value)}
-                className="px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#00D96B] cursor-pointer"
-              >
-                <option value="all">All Technicians</option>
-                {technicians.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value as any)}
-                className="px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#00D96B] cursor-pointer"
-              >
-                <option value="all">All Time</option>
-                <option value="today">Recovered Today</option>
-                <option value="week">Past 7 Days</option>
-              </select>
-            </div>
+            {/* Hub Selector */}
+            <select
+              value={selectedHub}
+              onChange={e => setSelectedHub(e.target.value)}
+              className="px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
+            >
+              <option value="all">All Service Hubs</option>
+              {hubs.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.hub_name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pt-1 no-scrollbar">
-            {[
-              { key: 'ALL', label: 'All Recoveries', count: recoveries.length },
-              { key: 'PENDING', label: 'Pending Inspection', count: stats.pendingInspection + stats.inProgress },
-              { key: 'INSPECTED', label: 'Inspection Completed (Review)', count: stats.inspectionCompleted },
-              { key: 'COMPLETED', label: 'Settled / Closed', count: stats.completed }
-            ].map(tab => (
+          {/* Quick Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-1 border-t border-slate-100">
+            {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setStatusTab(tab.key as any)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
                   statusTab === tab.key
                     ? 'bg-[#0A0F1D] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -526,38 +543,37 @@ export default function ScootyRecoveriesListPage() {
         ) : filteredRecoveries.length === 0 ? (
           <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-6">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-              <ShieldAlert className="w-6 h-6 text-red-400" />
+              <ShieldAlert className="w-6 h-6 text-emerald-500" />
             </div>
             <h3 className="text-sm font-black text-slate-900">No Recovery Records Found</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              No recovery tickets match your current filters. Click "Log Scooty Recovery" to register a recovered vehicle.
+              No recovery records match this filter. Click "Assign Recovery" to create one.
             </p>
           </div>
         ) : (
-          <div className="space-y-3.5">
+          <div className="space-y-3">
             {filteredRecoveries.map(item => {
               const statusInfo = getStatusBadge(item.status);
-              const damageCount = item.damage_items?.length || 0;
-              const hasWaived = Number(item.waived_damage_total) > 0;
+              const photoCount = item.pickup_photos?.length || 0;
 
               return (
                 <div
                   key={item.id}
-                  className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E5E7EB] hover:border-slate-300 hover:shadow-md transition-all space-y-4"
+                  className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E5E7EB] hover:border-slate-300 hover:shadow-sm transition-all space-y-3.5"
                 >
-                  {/* Row 1: Ticket Header & Status */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-3 flex-wrap">
+                  {/* Row 1: Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-xl">
                         {item.recovery_number}
                       </span>
                       <span className="text-xs text-slate-400">&bull;</span>
-                      <span className="text-xs font-mono text-slate-600 font-bold">
-                        Recovered on {new Date(item.recovery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} at {item.recovery_time}
+                      <span className="text-xs font-mono text-slate-600 font-medium">
+                        {item.recovery_date} {item.recovery_time}
                       </span>
                       <span className="text-xs text-slate-400">&bull;</span>
-                      <span className="text-xs text-slate-700 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full font-bold">
-                        By: {item.recovered_by}
+                      <span className="text-xs text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full font-bold">
+                        {item.hub_name}
                       </span>
                     </div>
 
@@ -568,95 +584,103 @@ export default function ScootyRecoveriesListPage() {
                     </div>
                   </div>
 
-                  {/* Row 2: Scooty Details & Rider Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    {/* Vehicle */}
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Recovered Scooty
-                      </span>
+                  {/* Row 2: Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    {/* Vehicle & Location */}
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-black text-slate-900 font-mono">
-                          {item.scooter_number}
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          Scooty Number
                         </span>
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                          {item.hub_name}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Rider Contact */}
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Rider Details
-                      </span>
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-slate-800 text-xs truncate max-w-[140px]">
-                          {item.rider_name}
-                        </span>
-                        <a
-                          href={`tel:${item.rider_phone}`}
-                          className="flex items-center gap-1 text-[11px] text-blue-600 hover:underline font-mono font-bold"
-                        >
-                          <Phone className="w-3 h-3" />
-                          <span>{item.rider_phone}</span>
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Financial Summary */}
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1 font-mono">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Financial Overview
-                      </span>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500 font-sans font-medium">Sec: ₹{item.security_deposit_amount}</span>
-                        <span className="text-red-700 font-sans font-bold">+ ₹{item.recovery_charge} Fee</span>
-                      </div>
-                      <div className="text-[11px] font-bold text-slate-800">
-                        {item.status === 'Completed' ? (
-                          item.settlement_type === 'DUE_FROM_RIDER' ? (
-                            <span className="text-red-700">Due Collected: ₹{item.due_amount_from_rider}</span>
-                          ) : (
-                            <span className="text-emerald-700">Refunded: ₹{item.refund_amount_to_rider}</span>
-                          )
-                        ) : (
-                          <span className="text-slate-600">Damage: ₹{item.gross_damage_total} ({damageCount} parts)</span>
+                        {photoCount > 0 && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                            <Camera className="w-3 h-3" />
+                            <span>{photoCount} Photos</span>
+                          </span>
                         )}
                       </div>
+                      <div className="text-sm font-black text-slate-900 font-mono">
+                        {item.scooter_number}
+                      </div>
+                      <div className="flex items-start gap-1 text-[11px] text-slate-600">
+                        <MapPin className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
+                        <span className="truncate">{item.pickup_live_location || item.pickup_location || 'Customer Location'}</span>
+                      </div>
+                    </div>
+
+                    {/* Rider Info */}
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Customer Details
+                      </span>
+                      <div className="font-extrabold text-slate-800 text-xs">
+                        {item.rider_name}
+                      </div>
+                      <a
+                        href={`tel:${item.rider_phone}`}
+                        className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline font-mono font-bold"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>{item.rider_phone}</span>
+                      </a>
+                    </div>
+
+                    {/* Assigned Agent */}
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Recovery Agent
+                      </span>
+                      <div className="font-extrabold text-slate-800 text-xs flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{item.recovery_agent_name || item.recovered_by || 'Not assigned'}</span>
+                      </div>
+                      {item.recovery_agent_phone ? (
+                        <a
+                          href={`tel:${item.recovery_agent_phone}`}
+                          className="inline-flex items-center gap-1 text-[11px] text-slate-600 font-mono"
+                        >
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          <span>{item.recovery_agent_phone}</span>
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Agent assigned by Hub</span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Row 3: Action Buttons */}
+                  {/* Row 3: Actions & Financials */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-                    <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-                      {item.technician_name ? (
-                        <span className="flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
-                          <User className="w-3 h-3 text-blue-600" />
-                          <span>Inspector: <b>{item.technician_name}</b></span>
-                        </span>
-                      ) : (
-                        <span className="text-amber-700 font-bold bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
-                          No technician assigned
-                        </span>
-                      )}
-
-                      {item.recovery_reason && (
-                        <span className="truncate max-w-xs text-slate-500 italic">
-                          "{item.recovery_reason}"
-                        </span>
+                    <div className="flex items-center gap-3 text-slate-500 text-[11px] font-mono">
+                      <span>Recovery Fee: <b className="text-slate-800">₹{item.recovery_charge || 1000}</b></span>
+                      <span>&bull;</span>
+                      <span>Security: <b className="text-slate-800">₹{item.security_deposit_amount || 2000}</b></span>
+                      {Number(item.gross_damage_total) > 0 && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="text-red-600 font-bold">Damages: ₹{item.gross_damage_total}</span>
+                        </>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <Link
-                        href={`/admin/recoveries/${item.id}`}
-                        className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
-                      >
-                        <span>{item.status === 'Completed' ? 'View Settlement' : 'Review & Settle'}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
+                    <Link
+                      href={`/admin/recoveries/${item.id}`}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95 self-end sm:self-auto"
+                    >
+                      <span>
+                        {item.status === 'ASSIGNED'
+                          ? 'Agent Accept'
+                          : item.status === 'ACCEPTED'
+                          ? 'Pickup & Photos'
+                          : item.status === 'PICKED_UP'
+                          ? 'Reached Hub'
+                          : item.status === 'REACHED_HUB'
+                          ? 'Assign Tech'
+                          : item.status === 'Completed'
+                          ? 'View Slip'
+                          : 'Review & Settle'}
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
                   </div>
                 </div>
               );
@@ -664,20 +688,20 @@ export default function ScootyRecoveriesListPage() {
           </div>
         )}
 
-        {/* Modal: Create New Scooty Recovery */}
+        {/* Modal: Step 1 Hub Incharge Assigns Recovery Agent */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-            <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-xl p-5 sm:p-7 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
-                    <ShieldAlert className="w-5 h-5" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <Truck className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="font-black text-base text-slate-900">
-                      Log New Scooty Recovery
+                      Step 1: Assign Recovery Agent
                     </h3>
-                    <p className="text-xs text-slate-500">Record recovered vehicle &amp; initiate damage inspection</p>
+                    <p className="text-[11px] text-slate-500">Hub Incharge dispatches agent to pick up scooty</p>
                   </div>
                 </div>
                 <button
@@ -688,43 +712,27 @@ export default function ScootyRecoveriesListPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateRecoverySubmit} className="space-y-4 text-xs font-sans">
-                {/* Rider Name & Phone */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-extrabold mb-1">
-                      Rider Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Rahul Verma"
-                      value={newRecoveryForm.rider_name}
-                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, rider_name: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-extrabold mb-1">
-                      Rider Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="e.g. +91 98765 43210"
-                      value={newRecoveryForm.rider_phone}
-                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, rider_phone: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                    />
-                  </div>
+              <form onSubmit={handleCreateRecoverySubmit} className="space-y-3.5 text-xs">
+                {/* 1. Customer Name */}
+                <div>
+                  <label className="block text-slate-700 font-extrabold mb-1">
+                    Customer Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter customer name"
+                    value={newRecoveryForm.rider_name}
+                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, rider_name: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                  />
                 </div>
 
-                {/* Scooter Number & Hub */}
+                {/* 2. Scooty Number & 3. Contact Number */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-700 font-extrabold mb-1">
-                      Vehicle / Scooter Number <span className="text-red-500">*</span>
+                      Scooty Number <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -738,12 +746,64 @@ export default function ScootyRecoveriesListPage() {
 
                   <div>
                     <label className="block text-slate-700 font-extrabold mb-1">
-                      Service Hub <span className="text-red-500">*</span>
+                      Contact Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. 9876543210"
+                      value={newRecoveryForm.rider_phone}
+                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, rider_phone: e.target.value }))}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Recovery Location */}
+                <div>
+                  <label className="block text-slate-700 font-extrabold mb-1">
+                    Recovery Location <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter pickup address / landmark (e.g. Clock Tower, Dehradun)"
+                    value={newRecoveryForm.pickup_location}
+                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, pickup_location: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                  />
+                </div>
+
+                {/* Assign Recovery Agent Dropdown */}
+                <div>
+                  <label className="block text-slate-700 font-extrabold mb-1">
+                    Assign Recovery Agent <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={newRecoveryForm.recovery_agent_id}
+                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_agent_id: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
+                  >
+                    <option value="">-- Select Recovery Agent --</option>
+                    {recoveryAgents.map(ag => (
+                      <option key={ag.id} value={ag.id}>
+                        {ag.name} ({ag.role_display_name || ag.role_name || 'Agent'}{ag.phone ? ` - ${ag.phone}` : ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Service Hub & Reason */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-extrabold mb-1">
+                      Destination Hub
                     </label>
                     <select
                       value={newRecoveryForm.hub_id}
                       onChange={e => setNewRecoveryForm(prev => ({ ...prev, hub_id: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
                     >
                       {hubs.map(h => (
                         <option key={h.id} value={h.id}>
@@ -752,142 +812,34 @@ export default function ScootyRecoveriesListPage() {
                       ))}
                     </select>
                   </div>
-                </div>
-
-                {/* Recovered By Staff */}
-                <div>
-                  <label className="block text-slate-700 font-extrabold mb-1">
-                    Recovered By (Staff / Incharge Name) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Karan Joshi / Recovery Team"
-                    value={newRecoveryForm.recovered_by}
-                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovered_by: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                  />
-                </div>
-
-                {/* Recovery Date & Time (2 Equal Columns) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-extrabold mb-1">
-                      Recovery Date
-                    </label>
-                    <input
-                      type="date"
-                      value={newRecoveryForm.recovery_date}
-                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_date: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                    />
-                  </div>
 
                   <div>
                     <label className="block text-slate-700 font-extrabold mb-1">
-                      Recovery Time
+                      Reason
                     </label>
                     <input
                       type="text"
-                      value={newRecoveryForm.recovery_time}
-                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_time: e.target.value }))}
-                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+                      value={newRecoveryForm.recovery_reason}
+                      onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_reason: e.target.value }))}
+                      placeholder="e.g. Overdue / Repossession"
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
                     />
                   </div>
                 </div>
 
-                {/* Fixed Recovery Charge & Security Deposit (Clean Aligned Cards) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* Card 1: Fixed Recovery Charge */}
-                  <div className="p-3.5 bg-red-50/50 rounded-2xl border border-red-200/80 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-extrabold text-red-900 tracking-tight">
-                        Fixed Recovery Charge
-                      </span>
-                      <span className="text-[10px] font-extrabold bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
-                        Standard Fee
-                      </span>
-                    </div>
-
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 text-slate-400 font-mono font-black text-sm">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={newRecoveryForm.recovery_charge}
-                        onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_charge: Number(e.target.value) }))}
-                        className="w-full pl-7 pr-3 py-2 bg-white border border-red-200 rounded-xl font-mono font-black text-slate-900 text-sm focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 shadow-xs"
-                      />
-                    </div>
-
-                    <p className="text-[10px] text-red-700/90 font-medium leading-tight">
-                      Added to payable damages during final settlement.
-                    </p>
+                {/* Standard Charges Pill */}
+                <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-900 block">Fixed Standard Rates</span>
+                    <span className="text-[10px] text-emerald-700">Recovery Fee: ₹1,000 &bull; Security Deposit: ₹2,000</span>
                   </div>
-
-                  {/* Card 2: Security Deposit Paid */}
-                  <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-extrabold text-emerald-900 tracking-tight">
-                        Security Deposit Paid
-                      </span>
-                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">
-                        Collected
-                      </span>
-                    </div>
-
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3 text-slate-400 font-mono font-black text-sm">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={newRecoveryForm.security_deposit_amount}
-                        onChange={e => setNewRecoveryForm(prev => ({ ...prev, security_deposit_amount: Number(e.target.value) }))}
-                        className="w-full pl-7 pr-3 py-2 bg-white border border-emerald-200 rounded-xl font-mono font-black text-slate-900 text-sm focus:outline-none focus:border-[#00D96B] focus:ring-1 focus:ring-[#00D96B] shadow-xs"
-                      />
-                    </div>
-
-                    <p className="text-[10px] text-emerald-700/90 font-medium leading-tight">
-                      Subtracted from (Damages + Recovery Fee).
-                    </p>
-                  </div>
+                  <span className="text-[10px] font-extrabold bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full">
+                    Auto-Configured
+                  </span>
                 </div>
 
-                {/* Assign Technician */}
-                <div>
-                  <label className="block text-slate-700 font-extrabold mb-1">
-                    Assign Technician for Damage Inspection
-                  </label>
-                  <select
-                    value={newRecoveryForm.technician_id}
-                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, technician_id: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
-                  >
-                    <option value="">-- Assign Later / Select Technician --</option>
-                    {technicians.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.specialization} - {t.hub_name})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Recovery Reason */}
-                <div>
-                  <label className="block text-slate-700 font-extrabold mb-1">
-                    Reason for Recovery &amp; Initial Condition
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={newRecoveryForm.recovery_reason}
-                    onChange={e => setNewRecoveryForm(prev => ({ ...prev, recovery_reason: e.target.value }))}
-                    placeholder="e.g. Non-payment of weekly rental / abandoned near railway station / repossession"
-                    className="w-full px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
-                  />
-                </div>
-
-                {/* Submit Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                {/* Submit Button */}
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
@@ -898,14 +850,14 @@ export default function ScootyRecoveriesListPage() {
                   <button
                     type="submit"
                     disabled={creatingRecovery}
-                    className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer active:scale-95 transition"
+                    className="px-5 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer active:scale-95 transition"
                   >
                     {creatingRecovery ? (
                       <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <Check className="w-4 h-4 stroke-[3]" />
                     )}
-                    <span>Create Recovery &amp; Send to Technician</span>
+                    <span>Assign Recovery Agent</span>
                   </button>
                 </div>
               </form>

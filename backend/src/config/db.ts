@@ -1234,6 +1234,18 @@ export const checkDbConnection = async (): Promise<boolean> => {
         inspection_started_at TIMESTAMPTZ,
         inspection_completed_at TIMESTAMPTZ,
         settled_at TIMESTAMPTZ,
+        recovery_agent_id INT,
+        recovery_agent_name VARCHAR(150),
+        recovery_agent_phone VARCHAR(50),
+        pickup_location TEXT,
+        pickup_live_location TEXT,
+        pickup_latitude NUMERIC(10, 7),
+        pickup_longitude NUMERIC(10, 7),
+        pickup_photos JSONB DEFAULT '[]',
+        accepted_at TIMESTAMPTZ,
+        picked_up_at TIMESTAMPTZ,
+        reached_hub_at TIMESTAMPTZ,
+        agent_notes TEXT,
         created_by_id INT,
         created_by_name VARCHAR(150),
         created_by_role VARCHAR(100),
@@ -1262,6 +1274,20 @@ export const checkDbConnection = async (): Promise<boolean> => {
     await pgPool.query('ALTER TABLE upi_qr_settings ALTER COLUMN qr_image_url TYPE TEXT;').catch(() => {});
     await pgPool.query('ALTER TABLE inventory ALTER COLUMN image_url TYPE TEXT;').catch(() => {});
     await pgPool.query('ALTER TABLE pre_bookings DROP CONSTRAINT IF EXISTS pre_bookings_booking_code_key;').catch(() => {});
+
+    // Recovery workflow columns migration
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_id INT;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_name VARCHAR(150);').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_phone VARCHAR(50);').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_location TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_live_location TEXT;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_latitude NUMERIC(10, 7);').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_longitude NUMERIC(10, 7);').catch(() => {});
+    await pgPool.query("ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_photos JSONB DEFAULT '[]';").catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS reached_hub_at TIMESTAMPTZ;').catch(() => {});
+    await pgPool.query('ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS agent_notes TEXT;').catch(() => {});
 
     // Ensure Row Level Security (RLS) is enabled across all tables
     await pgPool.query(`
@@ -1303,6 +1329,12 @@ export const checkDbConnection = async (): Promise<boolean> => {
       
       DROP POLICY IF EXISTS "pre_bookings_auth_manage" ON pre_bookings;
       CREATE POLICY "pre_bookings_auth_manage" ON pre_bookings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+      DROP POLICY IF EXISTS "scooty_recoveries_auth_manage" ON scooty_recoveries;
+      CREATE POLICY "scooty_recoveries_auth_manage" ON scooty_recoveries FOR ALL TO authenticated, postgres, service_role USING (true) WITH CHECK (true);
+
+      DROP POLICY IF EXISTS "scooty_recovery_events_auth_manage" ON scooty_recovery_events;
+      CREATE POLICY "scooty_recovery_events_auth_manage" ON scooty_recovery_events FOR ALL TO authenticated, postgres, service_role USING (true) WITH CHECK (true);
     `).catch(() => {});
 
     // 1. Seed Roles idempotently
@@ -1313,7 +1345,8 @@ export const checkDbConnection = async (): Promise<boolean> => {
         (4, 'SALES_EXECUTIVE', 'Sales Executive', 'Direct rider onboarding & lead CRM', TRUE),
         (5, 'HUB_INCHARGE', 'Hub Incharge', 'Hub fleet, repair dispatch & billing control', FALSE),
         (6, 'TECHNICIAN', 'Technician', 'Scooter diagnostics, job card execution & parts replacement', FALSE),
-        (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE)
+        (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE),
+        (8, 'RECOVERY_AGENT', 'Recovery Agent', 'Field scooty recovery & pickup execution', FALSE)
       ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
     `).catch(() => {});
 

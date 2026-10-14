@@ -98,7 +98,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+import { cleanupExpiredRecoveryImages } from './helpers/recoveryCleanup';
+
 app.listen(PORT, async () => {
   console.log(`🚀 DOON Riders Node.js Server running on port ${PORT}`);
   await checkDbConnection();
+  // Run 30-day image retention cleanup on boot and every 24 hours
+  cleanupExpiredRecoveryImages().catch(() => {});
+  setInterval(() => {
+    cleanupExpiredRecoveryImages().catch(() => {});
+  }, 24 * 60 * 60 * 1000);
 });

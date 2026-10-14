@@ -1,7 +1,35 @@
+import fs from 'fs';
+import path from 'path';
 import { Request, Response } from 'express';
 import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { logAuditEvent } from '../../helpers/auditLogger';
+
+// Helper: Save Base64 Compressed Image to Disk in uploads/recoveries
+export const saveRecoveryPhoto = (base64Str: string, recoveryId: number | string, angle: string): string => {
+  if (!base64Str || typeof base64Str !== 'string') return '';
+  if (!base64Str.startsWith('data:image/')) return base64Str; // already URL
+
+  try {
+    const matches = base64Str.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64Str;
+
+    const ext = matches[1] === 'png' ? 'png' : 'jpg';
+    const buffer = Buffer.from(matches[2], 'base64');
+    const uploadDir = path.join(__dirname, '../../../uploads/recoveries');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const cleanAngle = (angle || 'photo').replace(/[^a-zA-Z0-9_-]/g, '');
+    const filename = `rec-${recoveryId}-${cleanAngle}-${Date.now()}.${ext}`;
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/recoveries/${filename}`;
+  } catch (err) {
+    console.warn('Error saving recovery photo to disk, using data URL fallback:', err);
+    return base64Str;
+  }
+};
 
 // Helper: Format duration
 export const formatDuration = (seconds: number): string => {
@@ -100,7 +128,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
         let params: any[] = [];
         let pIndex = 1;
 
-        // Role-based scoping: Hub Incharge only sees their Hub's recoveries
+        // Role-based scoping: Hub Incharge only sees their Hub's recoveries, Tech sees their jobs, Agent sees their tasks
         if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
           whereClauses.push(`r.hub_id = $${pIndex}`);
           params.push((req.user as any).hub_id);
@@ -109,6 +137,11 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
           whereClauses.push(`r.technician_id = $${pIndex}`);
           params.push(userId);
           pIndex++;
+        } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
+          whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(COALESCE(r.recovered_by, '')) = $${pIndex + 1} OR LOWER(COALESCE(r.recovery_agent_name, '')) = $${pIndex + 1})`);
+          params.push(userId);
+          params.push((req.user?.name || '').toLowerCase());
+          pIndex += 2;
         }
 
         if (searchTerm) {
@@ -117,8 +150,11 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
             LOWER(r.scooter_number) LIKE $${pIndex} OR
             LOWER(r.rider_name) LIKE $${pIndex} OR
             LOWER(r.rider_phone) LIKE $${pIndex} OR
-            LOWER(r.recovered_by) LIKE $${pIndex} OR
-            LOWER(r.hub_name) LIKE $${pIndex}
+            LOWER(COALESCE(r.recovered_by, '')) LIKE $${pIndex} OR
+            LOWER(COALESCE(r.recovery_agent_name, '')) LIKE $${pIndex} OR
+            LOWER(COALESCE(r.pickup_location, '')) LIKE $${pIndex} OR
+            LOWER(COALESCE(r.pickup_live_location, '')) LIKE $${pIndex} OR
+            LOWER(COALESCE(r.hub_name, '')) LIKE $${pIndex}
           )`);
           params.push(`%${searchTerm}%`);
           pIndex++;
@@ -168,19 +204,34 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
         const statsRes = await pool.query(`
           SELECT 
             COUNT(*) as total,
-            COUNT(CASE WHEN status = 'Pending Inspection' THEN 1 END) as pending_inspection,
-            COUNT(CASE WHEN status = 'Inspection in Progress' THEN 1 END) as in_progress,
-            COUNT(CASE WHEN status = 'Inspection Completed' THEN 1 END) as inspection_completed,
+            COUNT(CASE WHEN status IN ('ASSIGNED', 'Pending Inspection') THEN 1 END) as assigned,
+            COUNT(CASE WHEN status = 'ACCEPTED' THEN 1 END) as accepted,
+            COUNT(CASE WHEN status = 'PICKED_UP' THEN 1 END) as picked_up,
+            COUNT(CASE WHEN status = 'REACHED_HUB' THEN 1 END) as reached_hub,
+            COUNT(CASE WHEN status IN ('INSPECTION_IN_PROGRESS', 'Inspection in Progress') THEN 1 END) as in_progress,
+            COUNT(CASE WHEN status IN ('INSPECTION_COMPLETED', 'Inspection Completed') THEN 1 END) as inspection_completed,
             COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
             COALESCE(SUM(CASE WHEN status = 'Completed' THEN refund_amount_to_rider ELSE 0 END), 0) as total_refunded,
             COALESCE(SUM(CASE WHEN status = 'Completed' THEN due_amount_from_rider ELSE 0 END), 0) as total_due_collected
           FROM scooty_recoveries
         `);
 
+        // Fetch recovery agents / staff users for assignment dropdown
+        const agentsRes = await pool.query(`
+          SELECT u.id, u.name, u.phone, u.email, u.avatar_url, r.name as role_name, r.display_name as role_display_name
+          FROM users u
+          LEFT JOIN roles r ON u.role_id = r.id
+          WHERE u.deleted_at IS NULL
+          ORDER BY u.name ASC
+        `).catch(() => ({ rows: [] }));
+
         const st = statsRes.rows[0] || {};
         const stats = {
           total: Number(st.total || 0),
-          pendingInspection: Number(st.pending_inspection || 0),
+          assigned: Number(st.assigned || 0),
+          accepted: Number(st.accepted || 0),
+          pickedUp: Number(st.picked_up || 0),
+          reachedHub: Number(st.reached_hub || 0),
           inProgress: Number(st.in_progress || 0),
           inspectionCompleted: Number(st.inspection_completed || 0),
           completed: Number(st.completed || 0),
@@ -194,6 +245,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
           stats,
           hubs: memoryStore.repairHubs,
           technicians: memoryStore.technicians,
+          recoveryAgents: agentsRes.rows,
           inventoryParts: memoryStore.inventory
         });
       } catch (dbErr) {
@@ -282,12 +334,21 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
             [scootyRecovery.id]
           );
 
+          const agentsRes = await pool.query(`
+            SELECT u.id, u.name, u.phone, u.email, u.avatar_url, r.name as role_name, r.display_name as role_display_name
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.id
+            WHERE u.deleted_at IS NULL
+            ORDER BY u.name ASC
+          `).catch(() => ({ rows: [] }));
+
           return res.json({
             success: true,
             data: scootyRecovery,
             timeline: eventsRes.rows,
             hubs: memoryStore.repairHubs,
             technicians: memoryStore.technicians,
+            recoveryAgents: agentsRes.rows,
             inventoryParts: memoryStore.inventory
           });
         }
@@ -308,12 +369,15 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
       .filter(e => e.recovery_id === scootyRecovery.id)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
+    const fallbackAgents = (memoryStore.users || []).map(u => ({ id: u.id, name: u.name, phone: u.phone, email: u.email }));
+
     return res.json({
       success: true,
       data: scootyRecovery,
       timeline,
       hubs: memoryStore.repairHubs,
       technicians: memoryStore.technicians,
+      recoveryAgents: fallbackAgents,
       inventoryParts: memoryStore.inventory
     });
   } catch (error: any) {
@@ -330,6 +394,10 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
       rider_phone,
       scooter_number,
       scooter_id,
+      pickup_location,
+      recovery_agent_id,
+      recovery_agent_name,
+      recovery_agent_phone,
       hub_id,
       recovered_by,
       recovery_date,
@@ -351,11 +419,35 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
     const targetHub = (memoryStore.repairHubs || []).find(h => h.id === Number(hub_id)) || memoryStore.repairHubs[0];
     const assignedTech = technician_id ? (memoryStore.technicians || []).find(t => t.id === Number(technician_id)) : null;
 
+    // Resolve recovery agent details
+    let agentId = recovery_agent_id ? Number(recovery_agent_id) : null;
+    let agentName = recovery_agent_name?.trim() || null;
+    let agentPhone = recovery_agent_phone?.trim() || null;
+
+    if (agentId && (!agentName || !agentPhone)) {
+      if (getDbStatus()) {
+        try {
+          const userRes = await pool.query('SELECT name, phone FROM users WHERE id = $1', [agentId]);
+          if (userRes.rows.length > 0) {
+            agentName = agentName || userRes.rows[0].name;
+            agentPhone = agentPhone || userRes.rows[0].phone;
+          }
+        } catch (_) {}
+      }
+      if (!agentName) {
+        const memoryUser = (memoryStore.users || []).find(u => u.id === agentId);
+        if (memoryUser) {
+          agentName = agentName || memoryUser.name;
+          agentPhone = agentPhone || memoryUser.phone;
+        }
+      }
+    }
+
     const recoveryNumber = `DR-REC-${1000 + (memoryStore.scootyRecoveries?.length || 0) + 1}`;
     const now = new Date().toISOString();
     const secDeposit = Number(security_deposit_amount) >= 0 ? Number(security_deposit_amount) : 2000.00;
     const recFee = Number(recovery_charge) >= 0 ? Number(recovery_charge) : 1000.00;
-    const recoveredByName = recovered_by?.trim() || req.user?.name || targetHub.incharge_name || 'Hub Incharge';
+    const recoveredByName = recovered_by?.trim() || agentName || req.user?.name || targetHub.incharge_name || 'Recovery Agent';
 
     const calculation = computeRecoverySettlement(secDeposit, recFee, []);
 
@@ -366,6 +458,18 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
       rider_phone: rider_phone.trim(),
       scooter_number: scooter_number.toUpperCase().trim(),
       scooter_id: scooter_id ? Number(scooter_id) : null,
+      pickup_location: pickup_location?.trim() || 'Customer Location',
+      pickup_live_location: null,
+      pickup_latitude: null,
+      pickup_longitude: null,
+      pickup_photos: [],
+      recovery_agent_id: agentId,
+      recovery_agent_name: agentName,
+      recovery_agent_phone: agentPhone,
+      accepted_at: null,
+      picked_up_at: null,
+      reached_hub_at: null,
+      agent_notes: null,
       hub_id: targetHub.id,
       hub_name: targetHub.hub_name,
       hub_incharge_id: req.user?.id || 6,
@@ -379,7 +483,7 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
       technician_name: assignedTech ? assignedTech.name : null,
       technician_phone: assignedTech ? assignedTech.phone : null,
       technician_code: assignedTech ? assignedTech.technician_code : null,
-      status: 'Pending Inspection',
+      status: 'ASSIGNED',
       damage_items: [],
       gross_damage_total: 0.00,
       payable_damage_total: 0.00,
@@ -409,13 +513,14 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
         const insertRes = await pool.query(
           `INSERT INTO scooty_recoveries (
             recovery_number, rider_name, rider_phone, scooter_number, scooter_id,
+            pickup_location, recovery_agent_id, recovery_agent_name, recovery_agent_phone,
             hub_id, hub_name, hub_incharge_id, hub_incharge_name, recovered_by, recovery_date, recovery_time,
             recovery_charge, security_deposit_amount, technician_id, technician_name,
             technician_phone, technician_code, status, damage_items, gross_damage_total,
             payable_damage_total, waived_damage_total, total_charges, settlement_type, refund_amount_to_rider,
             due_amount_from_rider, rider_payment_status, recovery_reason, initial_remarks, created_by_id,
             created_by_name, created_by_role, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
           RETURNING id`,
           [
             newRecovery.recovery_number,
@@ -423,6 +528,10 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
             newRecovery.rider_phone,
             newRecovery.scooter_number,
             newRecovery.scooter_id,
+            newRecovery.pickup_location,
+            newRecovery.recovery_agent_id,
+            newRecovery.recovery_agent_name,
+            newRecovery.recovery_agent_phone,
             newRecovery.hub_id,
             newRecovery.hub_name,
             newRecovery.hub_incharge_id,
@@ -460,15 +569,19 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
           newRecovery.id = insertRes.rows[0].id;
         }
 
+        const assignDesc = agentName
+          ? `Vehicle ${newRecovery.scooter_number} assigned to Recovery Agent ${agentName} (${agentPhone || 'No Phone'}) for recovery at ${newRecovery.pickup_location}. Fixed recovery fee: ₹${newRecovery.recovery_charge}, Security deposit: ₹${newRecovery.security_deposit_amount}.`
+          : `Vehicle ${newRecovery.scooter_number} recovery initiated at ${newRecovery.pickup_location}. Fixed recovery fee: ₹${newRecovery.recovery_charge}, Security deposit: ₹${newRecovery.security_deposit_amount}.`;
+
         await pool.query(
           `INSERT INTO scooty_recovery_events (
             recovery_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, created_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             newRecovery.id,
-            'RECOVERY_INITIATED',
-            'Scooty Recovery Registered',
-            `Vehicle ${newRecovery.scooter_number} recovered by ${newRecovery.recovered_by} from rider ${newRecovery.rider_name}. Fixed recovery charge: ₹${newRecovery.recovery_charge}. Security deposit: ₹${newRecovery.security_deposit_amount}. Assigned for technician damage check.`,
+            'RECOVERY_ASSIGNED',
+            'Scooty Recovery Assigned',
+            assignDesc,
             newRecovery.status,
             newRecovery.created_by_id,
             newRecovery.created_by_name,
@@ -486,9 +599,11 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
     memoryStore.scootyRecoveryEvents.push({
       id: (memoryStore.scootyRecoveryEvents?.length || 0) + 1,
       recovery_id: newRecovery.id,
-      event_type: 'RECOVERY_INITIATED',
-      title: 'Scooty Recovery Registered',
-      description: `Vehicle ${newRecovery.scooter_number} recovered by ${newRecovery.recovered_by} from rider ${newRecovery.rider_name}. Fixed recovery charge: ₹${newRecovery.recovery_charge}. Security deposit: ₹${newRecovery.security_deposit_amount}. Assigned for technician damage check.`,
+      event_type: 'RECOVERY_ASSIGNED',
+      title: 'Scooty Recovery Assigned',
+      description: agentName
+        ? `Vehicle ${newRecovery.scooter_number} assigned to Recovery Agent ${agentName} for pickup at ${newRecovery.pickup_location}.`
+        : `Vehicle ${newRecovery.scooter_number} recovery initiated at ${newRecovery.pickup_location}.`,
       status: newRecovery.status,
       performed_by_id: newRecovery.created_by_id,
       performed_by_name: newRecovery.created_by_name,
@@ -505,12 +620,12 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
       module: 'Recoveries',
       recordId: newRecovery.id,
       newValues: newRecovery,
-      notes: `Logged recovery ticket ${newRecovery.recovery_number} for rider ${newRecovery.rider_name} (${newRecovery.scooter_number})`
+      notes: `Logged recovery ticket ${newRecovery.recovery_number} for rider ${newRecovery.rider_name} (${newRecovery.scooter_number}) assigned to ${agentName || 'Agent'}`
     });
 
     return res.status(201).json({
       success: true,
-      message: `Scooty recovery ticket ${newRecovery.recovery_number} created successfully.`,
+      message: `Scooty recovery ticket ${newRecovery.recovery_number} assigned successfully.`,
       data: newRecovery
     });
   } catch (error: any) {
@@ -519,7 +634,398 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// 4. ASSIGN TECHNICIAN FOR RECOVERY INSPECTION
+// 4. AGENT ACCEPTS RECOVERY REQUEST
+export const acceptRecovery = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const recoveryId = Number(id);
+    const now = new Date().toISOString();
+    const performerName = req.user?.name || 'Recovery Agent';
+    const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
+
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+      r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
+    );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
+
+    if (!scootyRecovery) {
+      return res.status(404).json({ success: false, message: 'Recovery ticket not found' });
+    }
+
+    scootyRecovery.status = 'ACCEPTED';
+    scootyRecovery.accepted_at = now;
+    scootyRecovery.updated_at = now;
+    if (!scootyRecovery.recovery_agent_id && req.user?.id) {
+      scootyRecovery.recovery_agent_id = req.user.id;
+      scootyRecovery.recovery_agent_name = req.user.name;
+      scootyRecovery.recovery_agent_phone = req.user.phone || scootyRecovery.recovery_agent_phone;
+    }
+
+    if (getDbStatus()) {
+      try {
+        await pool.query(
+          `UPDATE scooty_recoveries SET
+            status = 'ACCEPTED',
+            accepted_at = $1,
+            recovery_agent_id = COALESCE(recovery_agent_id, $2),
+            recovery_agent_name = COALESCE(recovery_agent_name, $3),
+            recovery_agent_phone = COALESCE(recovery_agent_phone, $4),
+            updated_at = $1
+           WHERE id = $5 OR recovery_number = $6`,
+          [now, req.user?.id || null, req.user?.name || null, req.user?.phone || null, scootyRecovery.id, id]
+        );
+
+        await pool.query(
+          `INSERT INTO scooty_recovery_events (
+            recovery_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            scootyRecovery.id,
+            'AGENT_ACCEPTED',
+            'Recovery Request Accepted',
+            `Recovery Agent ${performerName} accepted the recovery request and is proceeding to pickup location (${scootyRecovery.pickup_location || 'Customer location'}).`,
+            'ACCEPTED',
+            req.user?.id || null,
+            performerName,
+            performerRole,
+            now
+          ]
+        );
+      } catch (dbErr) {
+        console.warn('[acceptRecovery] DB update error:', dbErr);
+      }
+    }
+
+    memoryStore.scootyRecoveryEvents.push({
+      id: (memoryStore.scootyRecoveryEvents?.length || 0) + 1,
+      recovery_id: scootyRecovery.id,
+      event_type: 'AGENT_ACCEPTED',
+      title: 'Recovery Request Accepted',
+      description: `Recovery Agent ${performerName} accepted the recovery request for vehicle ${scootyRecovery.scooter_number}.`,
+      status: 'ACCEPTED',
+      performed_by_id: req.user?.id || null,
+      performed_by_name: performerName,
+      performed_by_role: performerRole,
+      metadata: null,
+      created_at: now
+    });
+
+    return res.json({
+      success: true,
+      message: 'Recovery request accepted successfully. Proceed to pickup location.',
+      data: scootyRecovery
+    });
+  } catch (error: any) {
+    console.error('Error accepting recovery:', error);
+    return res.status(500).json({ success: false, message: 'Failed to accept recovery request' });
+  }
+};
+
+// 5. AGENT PICKS UP SCOOTY (PHOTOS UPLOAD WITH 4 MANDATORY + UP TO 4 OPTIONAL, GPS LOCATION)
+export const pickupScooty = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      photos, // can be array [{ angle: 'Front', data: 'data:image...' }] or object { front, back, right, left, additional: [] }
+      pickup_live_location,
+      pickup_latitude,
+      pickup_longitude,
+      agent_notes
+    } = req.body;
+
+    const recoveryId = Number(id);
+    const now = new Date().toISOString();
+    const performerName = req.user?.name || 'Recovery Agent';
+    const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
+
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+      r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
+    );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
+
+    if (!scootyRecovery) {
+      return res.status(404).json({ success: false, message: 'Recovery record not found' });
+    }
+
+    // Process & validate photos
+    // Expected 4 mandatory angles: Front, Back, Right, Left
+    let processedPhotos: Array<{ id: string; angle: string; url: string; uploaded_at: string }> = [];
+
+    if (Array.isArray(photos)) {
+      processedPhotos = photos.map((p: any, idx: number) => {
+        const angle = p.angle || `photo_${idx + 1}`;
+        const rawData = p.data || p.url || p;
+        const savedUrl = saveRecoveryPhoto(rawData, scootyRecovery.id, angle);
+        return {
+          id: `p-${idx + 1}-${Date.now()}`,
+          angle,
+          url: savedUrl,
+          uploaded_at: now
+        };
+      });
+    } else if (photos && typeof photos === 'object') {
+      const angles = ['front', 'back', 'right', 'left'];
+      angles.forEach((ang) => {
+        if (photos[ang]) {
+          const savedUrl = saveRecoveryPhoto(photos[ang], scootyRecovery.id, ang);
+          processedPhotos.push({
+            id: `p-${ang}-${Date.now()}`,
+            angle: ang.charAt(0).toUpperCase() + ang.slice(1),
+            url: savedUrl,
+            uploaded_at: now
+          });
+        }
+      });
+      if (Array.isArray(photos.additional)) {
+        photos.additional.slice(0, 4).forEach((addP: any, i: number) => {
+          const raw = typeof addP === 'string' ? addP : addP.data || addP.url;
+          if (raw) {
+            const savedUrl = saveRecoveryPhoto(raw, scootyRecovery.id, `additional_${i + 1}`);
+            processedPhotos.push({
+              id: `p-add-${i + 1}-${Date.now()}`,
+              angle: `Additional Photo ${i + 1}`,
+              url: savedUrl,
+              uploaded_at: now
+            });
+          }
+        });
+      }
+    }
+
+    // Check mandatory angles (Front, Back, Right, Left)
+    const normalizedAngles = processedPhotos.map(p => p.angle.toLowerCase());
+    const hasFront = normalizedAngles.some(a => a.includes('front'));
+    const hasBack = normalizedAngles.some(a => a.includes('back') || a.includes('rear'));
+    const hasRight = normalizedAngles.some(a => a.includes('right'));
+    const hasLeft = normalizedAngles.some(a => a.includes('left'));
+
+    if (processedPhotos.length < 4 || !hasFront || !hasBack || !hasRight || !hasLeft) {
+      return res.status(400).json({
+        success: false,
+        message: '4 Mandatory vehicle photos are required: Front, Back, Right, and Left angle pictures before pickup.'
+      });
+    }
+
+    scootyRecovery.pickup_photos = processedPhotos;
+    scootyRecovery.pickup_live_location = pickup_live_location?.trim() || scootyRecovery.pickup_location;
+    scootyRecovery.pickup_latitude = pickup_latitude ? Number(pickup_latitude) : null;
+    scootyRecovery.pickup_longitude = pickup_longitude ? Number(pickup_longitude) : null;
+    scootyRecovery.agent_notes = agent_notes?.trim() || null;
+    scootyRecovery.status = 'PICKED_UP';
+    scootyRecovery.picked_up_at = now;
+    scootyRecovery.updated_at = now;
+
+    const locDesc = scootyRecovery.pickup_live_location || scootyRecovery.pickup_location || 'Pickup Spot';
+
+    if (getDbStatus()) {
+      try {
+        await pool.query(
+          `UPDATE scooty_recoveries SET
+            pickup_photos = $1,
+            pickup_live_location = $2,
+            pickup_latitude = $3,
+            pickup_longitude = $4,
+            agent_notes = $5,
+            status = 'PICKED_UP',
+            picked_up_at = $6,
+            updated_at = $6
+           WHERE id = $7 OR recovery_number = $8`,
+          [
+            JSON.stringify(processedPhotos),
+            scootyRecovery.pickup_live_location,
+            scootyRecovery.pickup_latitude,
+            scootyRecovery.pickup_longitude,
+            scootyRecovery.agent_notes,
+            now,
+            scootyRecovery.id,
+            id
+          ]
+        );
+
+        await pool.query(
+          `INSERT INTO scooty_recovery_events (
+            recovery_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, metadata, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            scootyRecovery.id,
+            'SCOOTY_PICKED_UP',
+            'Scooty Picked Up by Agent',
+            `Recovery Agent secured vehicle ${scootyRecovery.scooter_number} at ${locDesc}. Uploaded ${processedPhotos.length} vehicle inspection pictures (Front, Back, Right, Left). En route to hub.`,
+            'PICKED_UP',
+            req.user?.id || null,
+            performerName,
+            performerRole,
+            JSON.stringify({ photo_count: processedPhotos.length, live_location: locDesc }),
+            now
+          ]
+        );
+      } catch (dbErr) {
+        console.warn('[pickupScooty] DB update error:', dbErr);
+      }
+    }
+
+    memoryStore.scootyRecoveryEvents.push({
+      id: (memoryStore.scootyRecoveryEvents?.length || 0) + 1,
+      recovery_id: scootyRecovery.id,
+      event_type: 'SCOOTY_PICKED_UP',
+      title: 'Scooty Picked Up by Agent',
+      description: `Recovery Agent secured vehicle ${scootyRecovery.scooter_number} at ${locDesc} with ${processedPhotos.length} photos.`,
+      status: 'PICKED_UP',
+      performed_by_id: req.user?.id || null,
+      performed_by_name: performerName,
+      performed_by_role: performerRole,
+      metadata: { photo_count: processedPhotos.length },
+      created_at: now
+    });
+
+    await logAuditEvent({
+      userId: req.user?.id,
+      userName: req.user?.name,
+      userRole: req.user?.roleName,
+      action: 'PICKUP_SCOOTY_RECOVERY',
+      module: 'Recoveries',
+      recordId: scootyRecovery.id,
+      newValues: { status: 'PICKED_UP', photo_count: processedPhotos.length, location: locDesc },
+      notes: `Agent picked up scooty ${scootyRecovery.scooter_number} at ${locDesc}`
+    });
+
+    return res.json({
+      success: true,
+      message: 'Scooty picked up successfully with verified inspection photos. In transit to Hub.',
+      data: scootyRecovery
+    });
+  } catch (error: any) {
+    console.error('Error during scooty pickup:', error);
+    return res.status(500).json({ success: false, message: 'Failed to record scooty pickup' });
+  }
+};
+
+// 6. AGENT REACHED HUB (NOTIFIES HUB INCHARGE)
+export const agentReachedHub = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { hub_id, remarks } = req.body;
+    const recoveryId = Number(id);
+    const now = new Date().toISOString();
+    const performerName = req.user?.name || 'Recovery Agent';
+    const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
+
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+      r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
+    );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
+
+    if (!scootyRecovery) {
+      return res.status(404).json({ success: false, message: 'Recovery record not found' });
+    }
+
+    if (hub_id) {
+      const hub = (memoryStore.repairHubs || []).find(h => h.id === Number(hub_id));
+      if (hub) {
+        scootyRecovery.hub_id = hub.id;
+        scootyRecovery.hub_name = hub.hub_name;
+      }
+    }
+
+    scootyRecovery.status = 'REACHED_HUB';
+    scootyRecovery.reached_hub_at = now;
+    scootyRecovery.updated_at = now;
+
+    if (getDbStatus()) {
+      try {
+        await pool.query(
+          `UPDATE scooty_recoveries SET
+            hub_id = $1,
+            hub_name = $2,
+            status = 'REACHED_HUB',
+            reached_hub_at = $3,
+            updated_at = $3
+           WHERE id = $4 OR recovery_number = $5`,
+          [scootyRecovery.hub_id, scootyRecovery.hub_name, now, scootyRecovery.id, id]
+        );
+
+        await pool.query(
+          `INSERT INTO scooty_recovery_events (
+            recovery_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            scootyRecovery.id,
+            'AGENT_REACHED_HUB',
+            'Scooty Reached Hub',
+            `Recovery Agent arrived with vehicle ${scootyRecovery.scooter_number} at ${scootyRecovery.hub_name}. Hub Incharge notified for technician damage inspection. Standard recovery fee: ₹${scootyRecovery.recovery_charge || 1000}, Security: ₹${scootyRecovery.security_deposit_amount || 2000}. ${remarks || ''}`.trim(),
+            'REACHED_HUB',
+            req.user?.id || null,
+            performerName,
+            performerRole,
+            now
+          ]
+        );
+      } catch (dbErr) {
+        console.warn('[agentReachedHub] DB update error:', dbErr);
+      }
+    }
+
+    memoryStore.scootyRecoveryEvents.push({
+      id: (memoryStore.scootyRecoveryEvents?.length || 0) + 1,
+      recovery_id: scootyRecovery.id,
+      event_type: 'AGENT_REACHED_HUB',
+      title: 'Scooty Reached Hub',
+      description: `Recovery Agent arrived with vehicle ${scootyRecovery.scooter_number} at ${scootyRecovery.hub_name}. Hub Incharge notified.`,
+      status: 'REACHED_HUB',
+      performed_by_id: req.user?.id || null,
+      performed_by_name: performerName,
+      performed_by_role: performerRole,
+      metadata: null,
+      created_at: now
+    });
+
+    await logAuditEvent({
+      userId: req.user?.id,
+      userName: req.user?.name,
+      userRole: req.user?.roleName,
+      action: 'AGENT_REACHED_HUB',
+      module: 'Recoveries',
+      recordId: scootyRecovery.id,
+      newValues: { status: 'REACHED_HUB', reached_hub_at: now },
+      notes: `Agent reached hub with vehicle ${scootyRecovery.scooter_number}`
+    });
+
+    return res.json({
+      success: true,
+      message: `Scooty safely arrived at ${scootyRecovery.hub_name}. Hub Incharge notified for technician assignment.`,
+      data: scootyRecovery
+    });
+  } catch (error: any) {
+    console.error('Error recording agent reached hub:', error);
+    return res.status(500).json({ success: false, message: 'Failed to record hub arrival' });
+  }
+};
+
+// 7. ASSIGN TECHNICIAN FOR RECOVERY INSPECTION (HUB INCHARGE WORKFLOW)
 export const assignTechnicianForRecovery = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -551,6 +1057,8 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
     scootyRecovery.technician_name = tech.name;
     scootyRecovery.technician_phone = tech.phone;
     scootyRecovery.technician_code = tech.technician_code;
+    scootyRecovery.status = 'INSPECTION_IN_PROGRESS';
+    scootyRecovery.inspection_started_at = now;
     scootyRecovery.updated_at = now;
 
     if (getDbStatus()) {
@@ -561,6 +1069,8 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
             technician_name = $2,
             technician_phone = $3,
             technician_code = $4,
+            status = 'INSPECTION_IN_PROGRESS',
+            inspection_started_at = $5,
             updated_at = $5
            WHERE id = $6 OR recovery_number = $7`,
           [tech.id, tech.name, tech.phone, tech.technician_code, now, scootyRecovery.id, id]
@@ -574,8 +1084,8 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
             scootyRecovery.id,
             'TECHNICIAN_ASSIGNED',
             'Technician Assigned for Inspection',
-            `Hub Incharge assigned technician ${tech.name} to inspect physical damages on recovered scooty.`,
-            scootyRecovery.status,
+            `Hub Incharge assigned technician ${tech.name} to inspect physical damages and replace damaged parts on recovered scooty.`,
+            'INSPECTION_IN_PROGRESS',
             req.user?.id || 6,
             performerName,
             performerRole,
@@ -593,7 +1103,7 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
       event_type: 'TECHNICIAN_ASSIGNED',
       title: 'Technician Assigned for Inspection',
       description: `Hub Incharge assigned technician ${tech.name} to inspect physical damages on recovered scooty.`,
-      status: scootyRecovery.status,
+      status: 'INSPECTION_IN_PROGRESS',
       performed_by_id: req.user?.id || 6,
       performed_by_name: performerName,
       performed_by_role: performerRole,
@@ -608,13 +1118,13 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
       action: 'ASSIGN_RECOVERY_INSPECTION',
       module: 'Recoveries',
       recordId: scootyRecovery.id,
-      newValues: { technician_id: tech.id, technician_name: tech.name },
+      newValues: { technician_id: tech.id, technician_name: tech.name, status: 'INSPECTION_IN_PROGRESS' },
       notes: `Assigned technician ${tech.name} to recovery ticket ${scootyRecovery.recovery_number}`
     });
 
     return res.json({
       success: true,
-      message: `Technician ${tech.name} assigned for recovery damage inspection.`,
+      message: `Technician ${tech.name} assigned. Inspection is now in progress.`,
       data: scootyRecovery
     });
   } catch (error: any) {

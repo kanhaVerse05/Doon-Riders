@@ -10,24 +10,27 @@ import {
   ShieldAlert,
   ArrowLeft,
   Phone,
-  User,
   Clock,
   CheckCircle2,
   AlertTriangle,
   RotateCw,
   Wrench,
-  ShieldCheck,
   Printer,
   DollarSign,
   FileText,
   Building,
   Check,
-  Ban,
-  Tag,
   Share2,
-  Calendar,
-  AlertCircle,
-  Truck
+  Truck,
+  MapPin,
+  Camera,
+  Upload,
+  Trash2,
+  Navigation,
+  UserCheck,
+  Plus,
+  Eye,
+  X
 } from 'lucide-react';
 
 interface DamageItem {
@@ -44,6 +47,13 @@ interface DamageItem {
   is_payable?: boolean;
 }
 
+interface PhotoEntry {
+  id: string;
+  angle: string;
+  url: string;
+  uploaded_at?: string;
+}
+
 interface ScootyRecovery {
   id: number;
   recovery_number: string;
@@ -51,6 +61,18 @@ interface ScootyRecovery {
   rider_phone: string;
   scooter_number: string;
   scooter_id?: number | null;
+  pickup_location?: string;
+  pickup_live_location?: string;
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
+  pickup_photos?: PhotoEntry[];
+  recovery_agent_id?: number | null;
+  recovery_agent_name?: string | null;
+  recovery_agent_phone?: string | null;
+  accepted_at?: string | null;
+  picked_up_at?: string | null;
+  reached_hub_at?: string | null;
+  agent_notes?: string | null;
   hub_id: number;
   hub_name: string;
   hub_incharge_id?: number | null;
@@ -65,10 +87,16 @@ interface ScootyRecovery {
   technician_phone?: string | null;
   technician_code?: string | null;
   status:
+    | 'ASSIGNED'
+    | 'ACCEPTED'
+    | 'PICKED_UP'
+    | 'REACHED_HUB'
+    | 'INSPECTION_IN_PROGRESS'
+    | 'INSPECTION_COMPLETED'
+    | 'Completed'
     | 'Pending Inspection'
     | 'Inspection in Progress'
     | 'Inspection Completed'
-    | 'Completed'
     | 'Cancelled';
   damage_items?: DamageItem[];
   gross_damage_total: number;
@@ -91,6 +119,64 @@ interface ScootyRecovery {
   updated_at: string;
 }
 
+// Client-side Image Compression (Reduces 5-10MB mobile photos to ~70-100KB JPEG)
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1280;
+        const MAX_HEIGHT = 1280;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+          resolve(dataUrl);
+        } else {
+          resolve(event.target?.result as string);
+        }
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
+const COMMON_PARTS = [
+  { name: 'Side Mirror (Right)', price: 250 },
+  { name: 'Side Mirror (Left)', price: 250 },
+  { name: 'Brake Lever (Right)', price: 350 },
+  { name: 'Brake Lever (Left)', price: 350 },
+  { name: 'Headlight Assembly', price: 1200 },
+  { name: 'Taillight Cover', price: 600 },
+  { name: 'Front Mudguard', price: 850 },
+  { name: 'Side Panel Scratch/Dent', price: 950 },
+  { name: 'Throttle Grip', price: 400 },
+  { name: 'Footrest Assembly', price: 450 },
+  { name: 'Battery Compartment Lock', price: 500 }
+];
+
 export default function ScootyRecoveryDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -103,7 +189,39 @@ export default function ScootyRecoveryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Hub Incharge Settlement State
+  // Agent Pickup State (Step 2)
+  const [pickupLiveLocation, setPickupLiveLocation] = useState('');
+  const [pickupLat, setPickupLat] = useState<number | null>(null);
+  const [pickupLng, setPickupLng] = useState<number | null>(null);
+  const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [agentNotesInput, setAgentNotesInput] = useState('');
+  const [mandatoryPhotos, setMandatoryPhotos] = useState<{
+    front: string;
+    back: string;
+    right: string;
+    left: string;
+  }>({ front: '', back: '', right: '', left: '' });
+  const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
+  const [isPickingUp, setIsPickingUp] = useState(false);
+
+  // Agent Step Actions
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isMarkingReachedHub, setIsMarkingReachedHub] = useState(false);
+
+  // Hub Incharge Assign Tech State (Step 4)
+  const [selectedTechId, setSelectedTechId] = useState<string>('');
+  const [assigningTech, setAssigningTech] = useState(false);
+
+  // Technician Damage Items State (Step 5)
+  const [techDamageItems, setTechDamageItems] = useState<
+    Array<{ part_name: string; quantity: number; unit_price: number; technician_remark: string }>
+  >([
+    { part_name: '', quantity: 1, unit_price: 0, technician_remark: '' }
+  ]);
+  const [techRemarksInput, setTechRemarksInput] = useState('');
+  const [isSubmittingInspection, setIsSubmittingInspection] = useState(false);
+
+  // Hub Incharge Settlement State (Step 6)
   const [damageItemsState, setDamageItemsState] = useState<DamageItem[]>([]);
   const [recoveryChargeInput, setRecoveryChargeInput] = useState<number>(1000);
   const [securityDepositInput, setSecurityDepositInput] = useState<number>(2000);
@@ -112,11 +230,10 @@ export default function ScootyRecoveryDetailPage() {
   const [paymentRefInput, setPaymentRefInput] = useState<string>('');
   const [isSettling, setIsSettling] = useState(false);
 
-  // Assign Technician state
-  const [selectedTechId, setSelectedTechId] = useState<string>('');
-  const [assigningTech, setAssigningTech] = useState(false);
+  // Lightbox preview for photos
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB') || user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'ADMIN';
+  const printSlipRef = useRef<HTMLDivElement>(null);
 
   const fetchRecoveryDetails = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -124,18 +241,23 @@ export default function ScootyRecoveryDetailPage() {
     try {
       const res = await adminApi.get(`/recoveries/${recoveryId}`);
       if (res.success && res.data) {
-        setRecoveryRecord(res.data);
+        const data: ScootyRecovery = res.data;
+        setRecoveryRecord(data);
         setTimeline(res.timeline || []);
         if (res.technicians) setTechnicians(res.technicians);
 
-        setRecoveryChargeInput(Number(res.data.recovery_charge) || 1000);
-        setSecurityDepositInput(Number(res.data.security_deposit_amount) || 2000);
-        setSettlementNotesInput(res.data.settlement_notes || '');
-        setPaymentModeInput(res.data.rider_payment_mode || 'UPI');
-        setPaymentRefInput(res.data.rider_payment_reference || '');
+        setPickupLiveLocation(data.pickup_live_location || data.pickup_location || '');
+        setRecoveryChargeInput(Number(data.recovery_charge) || 1000);
+        setSecurityDepositInput(Number(data.security_deposit_amount) || 2000);
+        setSettlementNotesInput(data.settlement_notes || '');
+        setPaymentModeInput(data.rider_payment_mode || 'UPI');
+        setPaymentRefInput(data.rider_payment_reference || '');
 
-        // Format damage items state with Hub remark controls
-        const items = (res.data.damage_items || []).map((d: any, idx: number) => ({
+        if (data.technician_id) {
+          setSelectedTechId(String(data.technician_id));
+        }
+
+        const items = (data.damage_items || []).map((d: any, idx: number) => ({
           id: d.id || `item-${idx + 1}`,
           part_name: d.part_name || 'Damage Repair',
           category: d.category || 'General',
@@ -149,6 +271,17 @@ export default function ScootyRecoveryDetailPage() {
           is_payable: d.hub_remark_type === 'No Payment' ? false : true
         }));
         setDamageItemsState(items);
+
+        if (items.length > 0) {
+          setTechDamageItems(
+            items.map(it => ({
+              part_name: it.part_name,
+              quantity: it.quantity,
+              unit_price: it.unit_price,
+              technician_remark: it.technician_remark || ''
+            }))
+          );
+        }
       }
     } catch (err) {
       console.error('Failed to load recovery details', err);
@@ -165,7 +298,7 @@ export default function ScootyRecoveryDetailPage() {
   }, [recoveryId]);
 
   // Real-time calculation helper
-  // Formula: (Payable Damage Total + Fixed Recovery Charge (1000)) - Security Deposit
+  // Formula: (Payable Damage Total + Fixed Recovery Charge (1000)) - Security Deposit (2000)
   const calculateLiveSettlement = () => {
     let grossDamage = 0;
     let payableDamage = 0;
@@ -221,36 +354,153 @@ export default function ScootyRecoveryDetailPage() {
 
   const liveCalc = calculateLiveSettlement();
 
-  // Update a single damage item's Hub Incharge remark
-  const handleItemRemarkTypeChange = (id: string, newType: 'Charge Customer' | 'No Payment' | 'Custom Remark') => {
-    setDamageItemsState(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          return {
-            ...item,
-            hub_remark_type: newType,
-            is_payable: newType === 'No Payment' ? false : true,
-            hub_remark_text: newType === 'No Payment' ? (item.hub_remark_text || 'Waived off (Normal wear & tear)') : item.hub_remark_text
-          };
+  // Step 1: Agent Accept Request
+  const handleAgentAccept = async () => {
+    setIsAccepting(true);
+    try {
+      const res = await adminApi.post(`/recoveries/${recoveryId}/accept`, {});
+      if (res.success) {
+        fetchRecoveryDetails(true);
+      } else {
+        alert(res.message || 'Failed to accept recovery request.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Server error accepting request.');
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  // Step 2: Auto-fetch GPS Location
+  const handleFetchGPSLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setFetchingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setPickupLat(lat);
+        setPickupLng(lng);
+        try {
+          const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const geo = await resp.json();
+          if (geo && geo.display_name) {
+            setPickupLiveLocation(geo.display_name);
+          } else {
+            setPickupLiveLocation(`GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          }
+        } catch (_) {
+          setPickupLiveLocation(`GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        } finally {
+          setFetchingLocation(false);
         }
-        return item;
-      })
+      },
+      (err) => {
+        console.warn('GPS fetch failed:', err);
+        alert('Could not fetch GPS automatically. Please type the location manually.');
+        setFetchingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
-  const handleItemRemarkTextChange = (id: string, text: string) => {
-    setDamageItemsState(prev =>
-      prev.map(item => (item.id === id ? { ...item, hub_remark_text: text } : item))
-    );
+  // Step 2: Photo Upload Handlers with compression
+  const handleMandatoryPhotoChange = async (angle: 'front' | 'back' | 'right' | 'left', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setMandatoryPhotos(prev => ({ ...prev, [angle]: compressed }));
+    } catch (err) {
+      console.error('Compression error:', err);
+      alert('Failed to process image.');
+    }
   };
 
-  // Assign Technician
+  const handleAdditionalPhotoAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (additionalPhotos.length >= 4) {
+      alert('Maximum 4 additional photos allowed.');
+      return;
+    }
+    try {
+      const compressed = await compressImage(file);
+      setAdditionalPhotos(prev => [...prev, compressed]);
+    } catch (err) {
+      console.error('Compression error:', err);
+      alert('Failed to process image.');
+    }
+  };
+
+  // Step 2 Submit: Confirm Scooty Picked Up
+  const handleConfirmPickup = async () => {
+    if (!mandatoryPhotos.front || !mandatoryPhotos.back || !mandatoryPhotos.right || !mandatoryPhotos.left) {
+      alert('All 4 mandatory pictures (Front, Back, Right, Left) are required before pickup.');
+      return;
+    }
+    if (!pickupLiveLocation.trim()) {
+      alert('Please provide the pickup location.');
+      return;
+    }
+
+    setIsPickingUp(true);
+    try {
+      const payload = {
+        photos: {
+          front: mandatoryPhotos.front,
+          back: mandatoryPhotos.back,
+          right: mandatoryPhotos.right,
+          left: mandatoryPhotos.left,
+          additional: additionalPhotos
+        },
+        pickup_live_location: pickupLiveLocation.trim(),
+        pickup_latitude: pickupLat,
+        pickup_longitude: pickupLng,
+        agent_notes: agentNotesInput.trim()
+      };
+
+      const res = await adminApi.post(`/recoveries/${recoveryId}/pickup`, payload);
+      if (res.success) {
+        fetchRecoveryDetails(true);
+      } else {
+        alert(res.message || 'Failed to record pickup.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Server error recording pickup.');
+    } finally {
+      setIsPickingUp(false);
+    }
+  };
+
+  // Step 3: Agent Reached Hub
+  const handleAgentReachedHub = async () => {
+    setIsMarkingReachedHub(true);
+    try {
+      const res = await adminApi.post(`/recoveries/${recoveryId}/reached-hub`, {
+        hub_id: recoveryRecord?.hub_id
+      });
+      if (res.success) {
+        fetchRecoveryDetails(true);
+      } else {
+        alert(res.message || 'Failed to record hub arrival.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Server error.');
+    } finally {
+      setIsMarkingReachedHub(false);
+    }
+  };
+
+  // Step 4: Hub Incharge Assigns Technician
   const handleAssignTechnician = async () => {
     if (!selectedTechId) {
       alert('Please select a technician.');
       return;
     }
-
     setAssigningTech(true);
     try {
       const res = await adminApi.post(`/recoveries/${recoveryId}/assign`, {
@@ -259,22 +509,75 @@ export default function ScootyRecoveryDetailPage() {
       if (res.success) {
         fetchRecoveryDetails(true);
       } else {
-        alert(res.message || 'Failed to assign technician');
+        alert(res.message || 'Failed to assign technician.');
       }
     } catch (err: any) {
-      console.error('Error assigning technician:', err);
-      alert(err.message || 'Error assigning technician');
+      alert(err.message || 'Server error assigning technician.');
     } finally {
       setAssigningTech(false);
     }
   };
 
-  // Settle Recovery & Finalize Payment
+  // Step 5: Technician Adds Damage Item
+  const handleAddTechDamageRow = () => {
+    setTechDamageItems(prev => [
+      ...prev,
+      { part_name: '', quantity: 1, unit_price: 0, technician_remark: '' }
+    ]);
+  };
+
+  const handleRemoveTechDamageRow = (idx: number) => {
+    setTechDamageItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleTechItemChange = (idx: number, field: string, value: any) => {
+    setTechDamageItems(prev =>
+      prev.map((item, i) => {
+        if (i === idx) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleSelectCommonPart = (idx: number, partName: string, price: number) => {
+    setTechDamageItems(prev =>
+      prev.map((item, i) => {
+        if (i === idx) {
+          return { ...item, part_name: partName, unit_price: price };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Step 5 Submit: Technician Inspection
+  const handleSubmitTechInspection = async () => {
+    const validItems = techDamageItems.filter(i => i.part_name.trim() !== '');
+    setIsSubmittingInspection(true);
+    try {
+      const res = await adminApi.post(`/recoveries/${recoveryId}/inspection`, {
+        damage_items: validItems,
+        technician_remarks: techRemarksInput
+      });
+      if (res.success) {
+        fetchRecoveryDetails(true);
+      } else {
+        alert(res.message || 'Failed to submit inspection report.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Server error submitting inspection.');
+    } finally {
+      setIsSubmittingInspection(false);
+    }
+  };
+
+  // Step 6: Hub Incharge Settle
   const handleSettleRecovery = async () => {
-    if (!confirm('Are you sure you want to approve and finalize this Scooty Recovery settlement? This will update the ledger and return the scooty to available fleet.')) {
+    if (!confirm('Finalize recovery settlement? Vehicle will be marked Available in fleet.')) {
       return;
     }
-
     setIsSettling(true);
     try {
       const payload = {
@@ -286,7 +589,6 @@ export default function ScootyRecoveryDetailPage() {
         rider_payment_reference: paymentRefInput,
         rider_payment_status: 'Paid'
       };
-
       const res = await adminApi.post(`/recoveries/${recoveryId}/settle`, payload);
       if (res.success) {
         fetchRecoveryDetails(true);
@@ -294,15 +596,34 @@ export default function ScootyRecoveryDetailPage() {
         alert(res.message || 'Failed to settle recovery.');
       }
     } catch (err: any) {
-      console.error('Error settling recovery:', err);
       alert(err.message || 'Server error settling recovery.');
     } finally {
       setIsSettling(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  // WhatsApp share
+  const handleShareWhatsApp = () => {
+    if (!recoveryRecord) return;
+    const phone = recoveryRecord.rider_phone.replace(/\D/g, '');
+    const cleanPhone = phone.startsWith('91') && phone.length === 12 ? phone : `91${phone}`;
+    const text = encodeURIComponent(
+      `*DOON RIDERS - SCOOTY RECOVERY SLIP*\n\n` +
+      `Ticket: ${recoveryRecord.recovery_number}\n` +
+      `Vehicle: ${recoveryRecord.scooter_number}\n` +
+      `Rider: ${recoveryRecord.rider_name}\n` +
+      `Recovery Fee: ₹${liveCalc.recoveryCharge}\n` +
+      `Damage Charges: ₹${liveCalc.payableDamageTotal}\n` +
+      `Total Charges: ₹${liveCalc.totalCharges}\n` +
+      `Security Deposit: ₹${securityDepositInput}\n\n` +
+      `${liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+        ? `Refund Amount: ₹${liveCalc.refundAmount}`
+        : liveCalc.settlementType === 'ZERO_BALANCE'
+        ? `Balance: ₹0 (Fully Settled)`
+        : `Due Payable by Rider: ₹${liveCalc.dueAmount}`}\n\n` +
+      `Thank you!`
+    );
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
   };
 
   if (loading) {
@@ -310,7 +631,7 @@ export default function ScootyRecoveryDetailPage() {
       <AdminLayout>
         <div className="py-24 text-center space-y-3">
           <div className="w-8 h-8 rounded-full border-2 border-[#00D96B] border-t-transparent animate-spin mx-auto" />
-          <p className="text-xs text-slate-500 font-bold">Loading Recovery Ticket Details...</p>
+          <p className="text-xs text-slate-500 font-bold">Loading recovery details...</p>
         </div>
       </AdminLayout>
     );
@@ -319,55 +640,52 @@ export default function ScootyRecoveryDetailPage() {
   if (!recoveryRecord) {
     return (
       <AdminLayout>
-        <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 max-w-md mx-auto space-y-4 my-12">
-          <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
-          <h2 className="text-base font-black text-slate-900">Recovery Record Not Found</h2>
-          <p className="text-xs text-slate-500">The requested recovery ticket does not exist or was removed.</p>
-          <Link
-            href="/admin/recoveries"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Recoveries List</span>
+        <div className="py-20 text-center space-y-4">
+          <p className="text-sm font-bold text-slate-800">Recovery Record Not Found</p>
+          <Link href="/admin/recoveries" className="text-xs text-[#00D96B] font-bold underline">
+            &larr; Back to Recoveries
           </Link>
         </div>
       </AdminLayout>
     );
   }
 
-  const isCompleted = recoveryRecord.status === 'Completed';
+  const status = recoveryRecord.status;
+  const isAssigned = status === 'ASSIGNED' || status === 'Pending Inspection';
+  const isAccepted = status === 'ACCEPTED';
+  const isPickedUp = status === 'PICKED_UP';
+  const isReachedHub = status === 'REACHED_HUB';
+  const isUnderInspection = status === 'INSPECTION_IN_PROGRESS' || status === 'Inspection in Progress';
+  const isInspected = status === 'INSPECTION_COMPLETED' || status === 'Inspection Completed';
+  const isCompleted = status === 'Completed';
+
+  // Step Tracker indices
+  const stepIdx = isAssigned ? 1 : isAccepted ? 2 : isPickedUp ? 3 : isReachedHub ? 4 : (isUnderInspection || isInspected) ? 5 : 6;
 
   return (
     <AdminLayout>
-      <div className="space-y-6 pb-16 font-sans">
-        {/* Navigation & Header Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-3xl border border-[#E5E7EB] shadow-sm">
+      <div className="space-y-5 pb-16">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <div className="flex items-center gap-3">
             <Link
               href="/admin/recoveries"
-              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
               title="Back to Recoveries"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
-
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-black text-slate-900 font-mono">
                   {recoveryRecord.recovery_number}
                 </h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${
-                  isCompleted
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : recoveryRecord.status === 'Inspection Completed'
-                    ? 'bg-purple-50 text-purple-800 border-purple-200'
-                    : 'bg-amber-50 text-amber-800 border-amber-200'
-                }`}>
-                  {recoveryRecord.status}
+                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                  {recoveryRecord.scooter_number}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">
-                Created on {new Date(recoveryRecord.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+              <p className="text-[11px] text-slate-500 font-medium">
+                Customer: <b>{recoveryRecord.rider_name}</b> ({recoveryRecord.rider_phone}) &bull; Hub: {recoveryRecord.hub_name}
               </p>
             </div>
           </div>
@@ -376,558 +694,890 @@ export default function ScootyRecoveryDetailPage() {
             <button
               onClick={() => fetchRecoveryDetails(false)}
               disabled={refreshing}
-              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
               title="Refresh"
             >
               <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00A854]' : ''}`} />
             </button>
-
-            <button
-              onClick={handlePrint}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Settlement Slip</span>
-            </button>
+            {isCompleted && (
+              <>
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Slip</span>
+                </button>
+                <button
+                  onClick={handleShareWhatsApp}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>WhatsApp Slip</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Two Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column (2 Cols): Details, Damage Sheet & Financials */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* 1. Recovery Intake & Vehicle Profile Card */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
-                    <Truck className="w-4 h-4" />
+        {/* Multi-Step Visual Progress Bar */}
+        <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+            {[
+              { num: 1, label: '1. Assigned' },
+              { num: 2, label: '2. Accepted' },
+              { num: 3, label: '3. Picked Up' },
+              { num: 4, label: '4. At Hub' },
+              { num: 5, label: '5. Inspection' },
+              { num: 6, label: '6. Settled' }
+            ].map((step) => {
+              const isPast = stepIdx > step.num;
+              const isCurrent = stepIdx === step.num;
+              return (
+                <div
+                  key={step.num}
+                  className={`p-2.5 rounded-2xl border transition-all ${
+                    isPast
+                      ? 'bg-emerald-50/60 border-emerald-200 text-emerald-800'
+                      : isCurrent
+                      ? 'bg-slate-900 border-slate-900 text-white font-black shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold flex items-center justify-center gap-1">
+                    {isPast && <Check className="w-3 h-3 stroke-[3] text-emerald-600" />}
+                    <span>{step.label}</span>
                   </div>
-                  <div>
-                    <h2 className="text-sm font-black text-slate-900">Recovery Vehicle &amp; Rider Profile</h2>
-                    <p className="text-[11px] text-slate-500">Intake information logged at Hub</p>
-                  </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
 
-                <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-xl">
-                  {recoveryRecord.hub_name}
-                </span>
+        {/* STEP 1: ASSIGNED (Agent Acceptance View) */}
+        {isAssigned && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                <Clock className="w-4 h-4" />
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Scooty Number</span>
-                  <p className="font-mono font-black text-slate-900 text-sm">{recoveryRecord.scooter_number}</p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Recovered By</span>
-                  <p className="font-black text-slate-900 truncate">{recoveryRecord.recovered_by}</p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Rider Name</span>
-                  <p className="font-extrabold text-slate-900 truncate">{recoveryRecord.rider_name}</p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Rider Contact</span>
-                  <a
-                    href={`tel:${recoveryRecord.rider_phone}`}
-                    className="font-mono font-bold text-blue-600 flex items-center gap-1 hover:underline"
-                  >
-                    <Phone className="w-3 h-3" />
-                    <span>{recoveryRecord.rider_phone}</span>
-                  </a>
-                </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-900">Step 1: Recovery Request Pending Acceptance</h2>
+                <p className="text-[11px] text-slate-500">Assigned agent must accept the request before pickup</p>
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Recovery Date</span>
-                  <p className="font-mono font-bold text-slate-800">
-                    {new Date(recoveryRecord.recovery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Recovery Time</span>
-                  <p className="font-mono font-bold text-slate-800">{recoveryRecord.recovery_time}</p>
-                </div>
-
-                <div className="p-3 bg-red-50/60 rounded-2xl border border-red-200 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-red-700 uppercase">Fixed Recovery Fee</span>
-                  <p className="font-mono font-black text-red-900 text-sm">₹{recoveryRecord.recovery_charge}</p>
-                </div>
-
-                <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-0.5">
-                  <span className="text-[10px] font-extrabold text-emerald-800 uppercase">Security Deposit</span>
-                  <p className="font-mono font-black text-emerald-900 text-sm">₹{recoveryRecord.security_deposit_amount}</p>
-                </div>
-              </div>
-
-              {recoveryRecord.recovery_reason && (
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase block mb-0.5">
-                    Reason for Recovery / Notes
-                  </span>
-                  <p className="text-slate-700">{recoveryRecord.recovery_reason}</p>
-                </div>
-              )}
             </div>
 
-            {/* 2. Technician Damage Inspection Sheet & Hub Incharge Remark Waiver Control */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-                    <Wrench className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                      Damage Inspection Sheet
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                        {damageItemsState.length} Item(s)
-                      </span>
-                    </h2>
-                    <p className="text-[11px] text-slate-500">
-                      Logged by Technician &bull; Reviewed by Hub Incharge for payment remarks
-                    </p>
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Recovery Location</span>
+                <p className="font-bold text-slate-800 flex items-start gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                  <span>{recoveryRecord.pickup_location || 'Customer Location'}</span>
+                </p>
+              </div>
 
-                {recoveryRecord.technician_name && (
-                  <div className="text-xs text-slate-600 flex items-center gap-1.5 self-end sm:self-auto bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Inspector: <b>{recoveryRecord.technician_name}</b></span>
-                  </div>
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Assigned Recovery Agent</span>
+                <p className="font-bold text-slate-800 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{recoveryRecord.recovery_agent_name || recoveryRecord.recovered_by || 'Recovery Team'}</span>
+                  {recoveryRecord.recovery_agent_phone && ` (${recoveryRecord.recovery_agent_phone})`}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-xs text-emerald-900 font-medium">
+                <span className="font-bold block">Standard Recovery Terms:</span>
+                Fixed Recovery Charge: ₹1,000 &bull; Security Deposit: ₹2,000
+              </div>
+
+              <button
+                onClick={handleAgentAccept}
+                disabled={isAccepting}
+                className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isAccepting ? (
+                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[3]" />
                 )}
-              </div>
-
-              {damageItemsState.length === 0 ? (
-                <div className="py-10 text-center space-y-2 bg-emerald-50/50 rounded-2xl border border-emerald-200 p-4">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                  <h3 className="text-xs font-black text-emerald-900">Zero Physical or Mechanical Damages</h3>
-                  <p className="text-[11px] text-emerald-700 max-w-sm mx-auto">
-                    The recovered vehicle was inspected with zero broken or missing parts. Only the fixed recovery charge (₹{recoveryRecord.recovery_charge}) applies.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3.5">
-                  {damageItemsState.map((item, index) => {
-                    const isNoPayment = item.hub_remark_type === 'No Payment';
-                    const itemTotal = Number(item.total_price) || (item.quantity * item.unit_price);
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-4 rounded-2xl border transition-all space-y-3 ${
-                          isNoPayment
-                            ? 'bg-amber-50/40 border-amber-300/80 opacity-90'
-                            : 'bg-white border-slate-200 shadow-xs'
-                        }`}
-                      >
-                        {/* Damage Item Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0">
-                              {index + 1}
-                            </span>
-                            <div>
-                              <h4 className={`text-xs font-black ${isNoPayment ? 'line-through text-slate-500' : 'text-slate-900'}`}>
-                                {item.part_name}
-                              </h4>
-                              {item.category && (
-                                <span className="text-[10px] text-slate-400 font-semibold">{item.category}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 self-end sm:self-auto font-mono">
-                            <span className="text-xs text-slate-500">
-                              Qty: <b>{item.quantity}</b> &times; ₹{item.unit_price}
-                            </span>
-                            <span className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
-                              isNoPayment
-                                ? 'bg-amber-100 text-amber-800 border-amber-300 line-through'
-                                : 'bg-slate-100 text-slate-900 border-slate-200'
-                            }`}>
-                              ₹{itemTotal}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Technician Remarks */}
-                        {item.technician_remark && (
-                          <div className="text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-700">
-                            <span className="font-extrabold text-slate-500 block text-[10px] uppercase">
-                              Technician Diagnostic Remark:
-                            </span>
-                            {item.technician_remark}
-                          </div>
-                        )}
-
-                        {/* Hub Incharge Remark & Payment Waiver Control */}
-                        <div className="p-3 bg-slate-100/70 rounded-xl border border-slate-200 space-y-2 text-xs">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <label className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Hub Incharge Payment Decision:</span>
-                            </label>
-
-                            {!isCompleted ? (
-                              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemRemarkTypeChange(item.id, 'Charge Customer')}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                                    item.hub_remark_type === 'Charge Customer'
-                                      ? 'bg-slate-900 text-white shadow-xs'
-                                      : 'text-slate-600 hover:bg-slate-100'
-                                  }`}
-                                >
-                                  Charge Customer
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemRemarkTypeChange(item.id, 'No Payment')}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                                    item.hub_remark_type === 'No Payment'
-                                      ? 'bg-amber-600 text-white shadow-xs'
-                                      : 'text-amber-700 hover:bg-amber-50'
-                                  }`}
-                                >
-                                  <Ban className="w-3 h-3" />
-                                  <span>No Payment (Waive)</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemRemarkTypeChange(item.id, 'Custom Remark')}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                                    item.hub_remark_type === 'Custom Remark'
-                                      ? 'bg-blue-600 text-white shadow-xs'
-                                      : 'text-blue-700 hover:bg-blue-50'
-                                  }`}
-                                >
-                                  Custom Remark
-                                </button>
-                              </div>
-                            ) : (
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                                isNoPayment
-                                  ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                  : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              }`}>
-                                {item.hub_remark_type}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Custom Text input for Hub Incharge */}
-                          {!isCompleted ? (
-                            <input
-                              type="text"
-                              value={item.hub_remark_text || ''}
-                              onChange={e => handleItemRemarkTextChange(item.id, e.target.value)}
-                              placeholder={
-                                isNoPayment
-                                  ? 'Reason for waiver (e.g. Normal wear & tear / pre-existing scratch)'
-                                  : 'Hub incharge note (e.g. Damaged during recovery repossession)'
-                              }
-                              className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-[#00D96B]"
-                            />
-                          ) : (
-                            item.hub_remark_text && (
-                              <p className="text-[11px] text-slate-600 italic">
-                                Note: "{item.hub_remark_text}"
-                              </p>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* 3. Interactive Smart Financial Calculation & Settlement Box (White & Green Theme) */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-[#00A854] flex items-center justify-center font-bold">
-                    <DollarSign className="w-4 h-4 stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900">Smart Recovery &amp; Damage Settlement</h3>
-                    <p className="text-[11px] text-slate-500">
-                      Formula: (Payable Damage + Fixed ₹1,000 Recovery Fee) - Security Deposit
-                    </p>
-                  </div>
-                </div>
-
-                <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-50 text-[#00A854] border border-emerald-200 font-bold">
-                  Auto-Balanced
-                </span>
-              </div>
-
-              {/* Math Summary Line */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs font-mono">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Security Paid</span>
-                  <p className="text-base font-black text-slate-900">₹{securityDepositInput}</p>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Damage Inspected</span>
-                  <p className="text-base font-black text-slate-800">₹{liveCalc.grossDamageTotal}</p>
-                </div>
-
-                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Waived (₹0)</span>
-                  <p className="text-base font-black text-amber-700">- ₹{liveCalc.waivedDamageTotal}</p>
-                </div>
-
-                <div className="p-3 bg-red-50 rounded-2xl border border-red-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Payable Damage</span>
-                  <p className="text-base font-black text-red-600">₹{liveCalc.payableDamageTotal}</p>
-                </div>
-
-                <div className="p-3 bg-red-50 rounded-2xl border border-red-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Recovery Fee</span>
-                  <p className="text-base font-black text-red-600">+ ₹{recoveryChargeInput}</p>
-                </div>
-
-                <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-0.5">
-                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Total Charges</span>
-                  <p className="text-base font-black text-emerald-700">₹{liveCalc.totalCharges}</p>
-                </div>
-              </div>
-
-              {/* Final Settlement Result Banner */}
-              <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                liveCalc.settlementType === 'DUE_FROM_RIDER'
-                  ? 'bg-red-50 border-red-200 text-red-950'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
-              }`}>
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest font-black block text-slate-500">
-                    Final Net Recovery Settlement Outcome:
-                  </span>
-                  <h4 className="text-lg sm:text-xl font-black mt-0.5 text-slate-900 font-mono">
-                    {liveCalc.settlementType === 'FULL_REFUND' && `Full Security Refund: ₹${liveCalc.refundAmount}`}
-                    {liveCalc.settlementType === 'PARTIAL_REFUND' && `Net Balance Refund to Rider: ₹${liveCalc.refundAmount}`}
-                    {liveCalc.settlementType === 'ZERO_BALANCE' && `Zero Balance (Security Exactly Covered Charges)`}
-                    {liveCalc.settlementType === 'DUE_FROM_RIDER' && `Extra Amount Due from Rider: ₹${liveCalc.dueAmount}`}
-                  </h4>
-                  <p className="text-[11px] text-slate-600 mt-0.5 font-medium">
-                    {liveCalc.settlementType === 'DUE_FROM_RIDER'
-                      ? `Total charges of ₹${liveCalc.totalCharges} (Damages: ₹${liveCalc.payableDamageTotal} + Recovery: ₹${recoveryChargeInput}) exceeded ₹${securityDepositInput} security. Rider must pay remaining ₹${liveCalc.dueAmount}.`
-                      : `Total charges of ₹${liveCalc.totalCharges} (Damages: ₹${liveCalc.payableDamageTotal} + Recovery: ₹${recoveryChargeInput}) deducted from ₹${securityDepositInput} security deposit. Rider receives ₹${liveCalc.refundAmount} refund.`}
-                  </p>
-                </div>
-
-                <div className="font-mono text-right flex-shrink-0">
-                  <span className="text-[10px] text-slate-500 uppercase font-bold block">
-                    {liveCalc.settlementType === 'DUE_FROM_RIDER' ? 'Payable By Rider' : 'Refund to Rider'}
-                  </span>
-                  <span className={`text-2xl sm:text-3xl font-black ${
-                    liveCalc.settlementType === 'DUE_FROM_RIDER' ? 'text-red-600' : 'text-emerald-600'
-                  }`}>
-                    ₹{liveCalc.settlementType === 'DUE_FROM_RIDER' ? liveCalc.dueAmount : liveCalc.refundAmount}
-                  </span>
-                </div>
-              </div>
-
-              {/* Hub Incharge Settle & Payment Form */}
-              {!isCompleted ? (
-                <div className="space-y-4 pt-2 border-t border-slate-100 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-700 font-extrabold mb-1">
-                        Settlement Payment / Refund Mode
-                      </label>
-                      <select
-                        value={paymentModeInput}
-                        onChange={e => setPaymentModeInput(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#00D96B] cursor-pointer"
-                      >
-                        <option value="UPI">UPI / QR Code Transfer</option>
-                        <option value="Cash">Cash Handover</option>
-                        <option value="Bank Transfer">NEFT / IMPS Bank Transfer</option>
-                        <option value="Card">Debit / Credit Card</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 font-extrabold mb-1">
-                        UTR / Transaction Reference (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={paymentRefInput}
-                        onChange={e => setPaymentRefInput(e.target.value)}
-                        placeholder="e.g. UPI/129381203912 or Cash Voucher"
-                        className="w-full px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-mono font-medium text-slate-900 focus:outline-none focus:border-[#00D96B]"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-extrabold mb-1">
-                      Final Recovery Settlement Remarks
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={settlementNotesInput}
-                      onChange={e => setSettlementNotesInput(e.target.value)}
-                      placeholder="e.g. Recovery fee and damage deductions settled with rider. Vehicle cleared and restored to fleet."
-                      className="w-full px-3.5 py-2 rounded-2xl bg-white border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:border-[#00D96B]"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSettleRecovery}
-                      disabled={isSettling}
-                      className="px-6 py-3 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 disabled:opacity-50 cursor-pointer active:scale-95 transition"
-                    >
-                      {isSettling ? (
-                        <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                      )}
-                      <span>Approve &amp; Close Recovery Settlement</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
-                  <div className="flex items-center gap-2 text-emerald-800 font-extrabold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Settled &amp; Closed by Hub Incharge</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Payment Mode</span>
-                      <p className="font-bold text-slate-800">{recoveryRecord.rider_payment_mode || 'UPI'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Transaction Ref</span>
-                      <p className="font-mono text-slate-800">{recoveryRecord.rider_payment_reference || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Settled Date</span>
-                      <p className="font-mono text-slate-800">
-                        {recoveryRecord.settled_at ? new Date(recoveryRecord.settled_at).toLocaleDateString('en-IN') : 'Completed'}
-                      </p>
-                    </div>
-                  </div>
-                  {recoveryRecord.settlement_notes && (
-                    <p className="text-[11px] text-slate-600 italic pt-1 border-t border-slate-200">
-                      "{recoveryRecord.settlement_notes}"
-                    </p>
-                  )}
-                </div>
-              )}
+                <span>Accept Recovery Request</span>
+              </button>
             </div>
           </div>
+        )}
 
-          {/* Right Column (1 Col): Technician Assignment & Audit Activity Timeline */}
-          <div className="space-y-6">
-            {/* Technician Assignment Card */}
-            <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-3.5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Assigned Inspector</span>
-                </h3>
+        {/* STEP 2: ACCEPTED (Agent At Location - GPS & 4 Mandatory Photos Upload) */}
+        {isAccepted && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Step 2: Scooty Pickup &amp; Vehicle Photos</h2>
+                  <p className="text-[11px] text-slate-500">Live GPS address + 4 mandatory photos (Front, Back, Right, Left)</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full">
+                Auto 30-Day Purge
+              </span>
+            </div>
+
+            {/* GPS Live Location Picker */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <label className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-red-500" />
+                  <span>Pickup Location (Auto-fetch or edit manually)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleFetchGPSLocation}
+                  disabled={fetchingLocation}
+                  className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Navigation className={`w-3 h-3 ${fetchingLocation ? 'animate-spin text-emerald-600' : ''}`} />
+                  <span>{fetchingLocation ? 'Fetching GPS...' : '📍 Auto-Fetch GPS'}</span>
+                </button>
               </div>
 
-              {recoveryRecord.technician_name ? (
-                <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900">{recoveryRecord.technician_name}</h4>
-                      <span className="text-[10px] text-slate-500 block font-mono">{recoveryRecord.technician_code || 'TECH'}</span>
-                    </div>
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                      Active
-                    </span>
-                  </div>
+              <input
+                type="text"
+                value={pickupLiveLocation}
+                onChange={e => setPickupLiveLocation(e.target.value)}
+                placeholder="Live pickup address / landmark..."
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+              />
+            </div>
 
-                  {recoveryRecord.technician_phone && (
-                    <a
-                      href={`tel:${recoveryRecord.technician_phone}`}
-                      className="flex items-center gap-1.5 text-xs text-blue-600 font-mono font-bold hover:underline"
+            {/* 4 Mandatory Photos Grid */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-800">
+                  4 Mandatory Inspection Photos <span className="text-red-500">*</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Compressed automatically &bull; Server light
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { key: 'front', label: '1. Front View' },
+                  { key: 'back', label: '2. Back View' },
+                  { key: 'right', label: '3. Right Side' },
+                  { key: 'left', label: '4. Left Side' }
+                ].map(slot => {
+                  const hasPhoto = !!(mandatoryPhotos as any)[slot.key];
+                  return (
+                    <div
+                      key={slot.key}
+                      className={`relative p-3 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center transition min-h-[140px] ${
+                        hasPhoto ? 'border-emerald-500 bg-emerald-50/20' : 'border-slate-200 bg-slate-50/60 hover:bg-slate-50'
+                      }`}
                     >
-                      <Phone className="w-3 h-3" />
-                      <span>{recoveryRecord.technician_phone}</span>
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 space-y-2">
-                  <p className="font-medium text-[11px]">No technician assigned yet for damage check.</p>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={selectedTechId}
-                      onChange={e => setSelectedTechId(e.target.value)}
-                      className="flex-1 px-2.5 py-1.5 rounded-xl bg-white border border-amber-300 text-xs font-bold text-slate-800 focus:outline-none"
-                    >
-                      <option value="">Select Tech...</option>
-                      {technicians.map(t => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
+                      {hasPhoto ? (
+                        <>
+                          <img
+                            src={(mandatoryPhotos as any)[slot.key]}
+                            alt={slot.label}
+                            className="w-full h-24 object-cover rounded-xl cursor-pointer"
+                            onClick={() => setPreviewImage((mandatoryPhotos as any)[slot.key])}
+                          />
+                          <div className="flex items-center justify-between w-full mt-1.5 px-1">
+                            <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
+                              <Check className="w-3 h-3" /> {slot.label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setMandatoryPhotos(prev => ({ ...prev, [slot.key]: '' }))}
+                              className="text-red-500 hover:text-red-700 cursor-pointer"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full p-2">
+                          <Camera className="w-6 h-6 text-slate-400 mb-1" />
+                          <span className="text-[11px] font-bold text-slate-700">{slot.label}</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5">Click / Upload</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={e => handleMandatoryPhotoChange(slot.key as any, e)}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Up to 4 Additional Photos */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-800">
+                  Additional Photos (Optional, max 4)
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {additionalPhotos.length} / 4 added
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                {additionalPhotos.map((img, i) => (
+                  <div key={i} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-slate-200 flex-shrink-0 group">
+                    <img
+                      src={img}
+                      alt={`Additional ${i + 1}`}
+                      className="w-full h-full object-cover cursor-pointer"
+                      onClick={() => setPreviewImage(img)}
+                    />
                     <button
                       type="button"
-                      onClick={handleAssignTechnician}
-                      disabled={assigningTech}
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 cursor-pointer disabled:opacity-50"
+                      onClick={() => setAdditionalPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-600 transition cursor-pointer"
                     >
-                      Assign
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
+                ))}
+
+                {additionalPhotos.length < 4 && (
+                  <label className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer flex-shrink-0">
+                    <Plus className="w-5 h-5 mb-0.5" />
+                    <span className="text-[10px] font-bold">Add Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleAdditionalPhotoAdd}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Agent Notes */}
+            <div className="space-y-1 text-xs">
+              <label className="font-bold text-slate-700">Agent Pickup Notes (Optional)</label>
+              <input
+                type="text"
+                value={agentNotesInput}
+                onChange={e => setAgentNotesInput(e.target.value)}
+                placeholder="e.g. Scooter found unlocked near mall entrance, keys retrieved"
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-[#00D96B]"
+              />
+            </div>
+
+            {/* Submit Pickup Button */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleConfirmPickup}
+                disabled={isPickingUp}
+                className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isPickingUp ? (
+                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[3]" />
+                )}
+                <span>Confirm Scooty Picked Up</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: PICKED UP (In Transit - Agent Reached Hub View) */}
+        {isPickedUp && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                  <Truck className="w-4 h-4" />
                 </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Step 3: Scooty In Transit to Hub</h2>
+                  <p className="text-[11px] text-slate-500">Agent is bringing vehicle back to {recoveryRecord.hub_name}</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                In Transit
+              </span>
+            </div>
+
+            {/* Picked up info */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Picked Up Location</span>
+                <span className="font-bold text-slate-800">{recoveryRecord.pickup_live_location || recoveryRecord.pickup_location}</span>
+              </div>
+              {recoveryRecord.picked_up_at && (
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {new Date(recoveryRecord.picked_up_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               )}
             </div>
 
-            {/* Audit & Activity Timeline Card */}
-            <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Recovery Timeline</span>
-                </h3>
-                <span className="text-[10px] font-mono text-slate-400 font-bold">{timeline.length} Events</span>
-              </div>
-
-              <div className="space-y-4 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 pl-7">
-                {timeline.map((event, idx) => (
-                  <div key={event.id || idx} className="relative text-xs space-y-0.5">
-                    <div className="absolute -left-7 top-1 w-3 h-3 rounded-full bg-[#00D96B] ring-4 ring-emerald-50" />
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-extrabold text-slate-900 text-[11px]">{event.title}</h4>
-                      <span className="text-[9px] font-mono text-slate-400">
-                        {new Date(event.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            {/* Photo gallery preview */}
+            {recoveryRecord.pickup_photos && recoveryRecord.pickup_photos.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700">Inspection Photos ({recoveryRecord.pickup_photos.length}):</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {recoveryRecord.pickup_photos.map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => setPreviewImage(p.url)}
+                      className="relative h-24 rounded-2xl overflow-hidden border border-slate-200 cursor-pointer group"
+                    >
+                      <img src={p.url} alt={p.angle} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[9px] font-bold">
+                        {p.angle}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">{event.description}</p>
-                    {event.performed_by_name && (
-                      <span className="text-[9px] text-slate-400 block">
-                        By {event.performed_by_name} ({event.performed_by_role || 'Staff'})
-                      </span>
-                    )}
-                  </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reached Hub Button */}
+            <div className="p-4 bg-slate-900 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-black">Reached Service Hub?</h4>
+                <p className="text-[11px] text-slate-400">Click to notify Hub Incharge that scooty has safely arrived at hub.</p>
+              </div>
+
+              <button
+                onClick={handleAgentReachedHub}
+                disabled={isMarkingReachedHub}
+                className="px-5 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isMarkingReachedHub ? (
+                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[3]" />
+                )}
+                <span>Agent Reached Hub</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: AT HUB (Hub Incharge Assigns Technician) */}
+        {isReachedHub && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center font-bold">
+                <Wrench className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-900">Step 4: Scooty Arrived at Hub</h2>
+                <p className="text-[11px] text-slate-500">Hub Incharge assigns technician to check damaged parts</p>
+              </div>
+            </div>
+
+            {/* Standard Charges Banner */}
+            <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 flex items-center justify-between text-xs">
+              <span className="font-bold text-emerald-900">Fixed Recovery Charges: ₹1,000</span>
+              <span className="font-bold text-emerald-900">Security Deposit: ₹2,000</span>
+            </div>
+
+            {/* Assign Technician Form */}
+            <div className="space-y-2 text-xs">
+              <label className="font-extrabold text-slate-800">
+                Select Technician for Damage Inspection <span className="text-red-500">*</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <select
+                  value={selectedTechId}
+                  onChange={e => setSelectedTechId(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-[#00D96B] cursor-pointer"
+                >
+                  <option value="">-- Choose Technician --</option>
+                  {technicians.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.specialization} - {t.hub_name})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleAssignTechnician}
+                  disabled={assigningTech}
+                  className="px-5 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {assigningTech ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Assign Technician</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: TECHNICIAN DAMAGE INSPECTION (Add parts changed & submit) */}
+        {isUnderInspection && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
+                  <Wrench className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Step 5: Technician Damage Inspection</h2>
+                  <p className="text-[11px] text-slate-500">Record parts replaced / repaired and damage costs</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
+                Technician: {recoveryRecord.technician_name}
+              </span>
+            </div>
+
+            {/* Quick Common Parts Buttons */}
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold text-slate-500">Quick Add Common Damaged Parts:</span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {COMMON_PARTS.slice(0, 6).map((cp, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setTechDamageItems(prev => [
+                        ...prev.filter(p => p.part_name !== ''),
+                        { part_name: cp.name, quantity: 1, unit_price: cp.price, technician_remark: '' }
+                      ]);
+                    }}
+                    className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold whitespace-nowrap transition cursor-pointer"
+                  >
+                    + {cp.name} (₹{cp.price})
+                  </button>
                 ))}
               </div>
             </div>
+
+            {/* Itemized Parts Table */}
+            <div className="space-y-2">
+              {techDamageItems.map((item, idx) => (
+                <div key={idx} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center text-xs">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Part name (e.g. Right Mirror)"
+                      value={item.part_name}
+                      onChange={e => handleTechItemChange(idx, 'part_name', e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#00D96B]"
+                    />
+                  </div>
+
+                  <div className="w-20">
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Qty"
+                      value={item.quantity}
+                      onChange={e => handleTechItemChange(idx, 'quantity', Number(e.target.value))}
+                      className="w-full px-2 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-center focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="w-28 relative flex items-center">
+                    <span className="absolute left-2 text-slate-400 font-mono text-xs">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Price"
+                      value={item.unit_price}
+                      onChange={e => handleTechItemChange(idx, 'unit_price', Number(e.target.value))}
+                      className="w-full pl-6 pr-2 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Remark / Condition"
+                      value={item.technician_remark}
+                      onChange={e => handleTechItemChange(idx, 'technician_remark', e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTechDamageRow(idx)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 transition cursor-pointer self-end sm:self-center"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={handleAddTechDamageRow}
+                className="px-3.5 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Damaged Part</span>
+              </button>
+            </div>
+
+            {/* Inspection Submission */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-xs font-bold text-slate-600 font-mono">
+                Total Parts Damage: ₹{techDamageItems.reduce((acc, it) => acc + (it.quantity * it.unit_price), 0)}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleSubmitTechInspection}
+                disabled={isSubmittingInspection}
+                className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isSubmittingInspection ? (
+                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[3]" />
+                )}
+                <span>Submit Damage Inspection</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 6: HUB INCHARGE SETTLEMENT & MATHEMATICS */}
+        {(isInspected || isCompleted) && (
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-slate-900">Step 6: Final Recovery Settlement</h2>
+                  <p className="text-[11px] text-slate-500">
+                    Formula: (Damage Charges + Fixed Recovery ₹1000) &minus; Security Deposit ₹2000 = Balance
+                  </p>
+                </div>
+              </div>
+
+              <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                isCompleted ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-purple-50 text-purple-800 border-purple-200 animate-pulse'
+              }`}>
+                {isCompleted ? 'Settled & Closed' : 'Ready for Settlement'}
+              </span>
+            </div>
+
+            {/* Damaged Parts Review */}
+            <div className="space-y-2 text-xs">
+              <span className="font-extrabold text-slate-800">Parts Damaged &amp; Replaced ({damageItemsState.length}):</span>
+              {damageItemsState.length === 0 ? (
+                <p className="text-slate-400 italic">No parts damaged. Scooty is in clean condition.</p>
+              ) : (
+                <div className="space-y-2">
+                  {damageItemsState.map(item => (
+                    <div key={item.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-black text-slate-900">{item.part_name}</span>
+                        <span className="text-slate-500 ml-2 font-mono">({item.quantity} &times; ₹{item.unit_price})</span>
+                        {item.technician_remark && (
+                          <span className="block text-[11px] text-slate-500 italic mt-0.5">{item.technician_remark}</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className={`font-mono font-bold ${item.is_payable ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
+                          ₹{item.total_price}
+                        </span>
+
+                        {!isCompleted && (
+                          <select
+                            value={item.hub_remark_type || 'Charge Customer'}
+                            onChange={e => {
+                              const val = e.target.value as any;
+                              setDamageItemsState(prev =>
+                                prev.map(it => it.id === item.id ? { ...it, hub_remark_type: val, is_payable: val !== 'No Payment' } : it)
+                              );
+                            }}
+                            className="px-2 py-1 rounded-xl bg-white border border-slate-200 text-[11px] font-bold cursor-pointer"
+                          >
+                            <option value="Charge Customer">Charge</option>
+                            <option value="No Payment">Waive (₹0)</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Smart Calculation Card */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 font-mono text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-slate-600">Payable Damage Charges:</span>
+                <span className="font-bold text-slate-900">₹{liveCalc.payableDamageTotal}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-slate-600">Fixed Recovery Charges:</span>
+                <span className="font-bold text-red-600">+ ₹{liveCalc.recoveryCharge}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 pt-2 font-bold">
+                <span className="font-sans text-slate-900">Total Charges:</span>
+                <span className="text-slate-900">₹{liveCalc.totalCharges}</span>
+              </div>
+              <div className="flex items-center justify-between text-emerald-700">
+                <span className="font-sans">Less Security Deposit:</span>
+                <span>&minus; ₹{securityDepositInput}</span>
+              </div>
+
+              {/* Settlement Outcome Result */}
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between font-sans ${
+                liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : liveCalc.settlementType === 'ZERO_BALANCE'
+                  ? 'bg-slate-100 border-slate-300 text-slate-800'
+                  : 'bg-red-50 border-red-200 text-red-900'
+              }`}>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block">
+                    {liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                      ? 'Refund to Customer'
+                      : liveCalc.settlementType === 'ZERO_BALANCE'
+                      ? 'Zero Balance'
+                      : 'Due from Customer'}
+                  </span>
+                  <span className="text-base font-black font-mono">
+                    {liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                      ? `₹${liveCalc.refundAmount}`
+                      : liveCalc.settlementType === 'ZERO_BALANCE'
+                      ? '₹0'
+                      : `₹${liveCalc.dueAmount}`}
+                  </span>
+                </div>
+
+                <span className="text-[11px] font-bold">
+                  {liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                    ? 'Eligible for Refund'
+                    : liveCalc.settlementType === 'ZERO_BALANCE'
+                    ? 'Security offsets charges'
+                    : 'Collect from Rider'}
+                </span>
+              </div>
+            </div>
+
+            {/* Settle Action / Closed Slip */}
+            {!isCompleted ? (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-700">Payment Mode:</span>
+                  <select
+                    value={paymentModeInput}
+                    onChange={e => setPaymentModeInput(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 font-bold cursor-pointer"
+                  >
+                    <option value="UPI">UPI</option>
+                    <option value="Cash">Cash</option>
+                    <option value="NetBanking">Net Banking</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSettleRecovery}
+                  disabled={isSettling}
+                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {isSettling ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Approve &amp; Settle Recovery</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-emerald-900 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Settlement Finalized on {recoveryRecord.settled_at ? new Date(recoveryRecord.settled_at).toLocaleDateString('en-IN') : 'Today'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1 rounded-xl bg-white border border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-100 transition cursor-pointer"
+                  >
+                    Print Slip
+                  </button>
+                  <button
+                    onClick={handleShareWhatsApp}
+                    className="px-3 py-1 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition cursor-pointer"
+                  >
+                    WhatsApp Slip
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Uploaded Inspection Photos Gallery (Always visible when photos exist) */}
+        {recoveryRecord.pickup_photos && recoveryRecord.pickup_photos.length > 0 && !isAccepted && !isAssigned && (
+          <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-emerald-600" />
+                <span>Scooty Condition Photos at Pickup ({recoveryRecord.pickup_photos.length})</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Auto-deletes after 30 days
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {recoveryRecord.pickup_photos.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => setPreviewImage(p.url)}
+                  className="relative h-28 rounded-2xl overflow-hidden border border-slate-200 cursor-pointer group"
+                >
+                  <img src={p.url} alt={p.angle} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                  <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-lg bg-black/70 text-white text-[10px] font-bold">
+                    {p.angle}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Timeline Log */}
+        {timeline.length > 0 && (
+          <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-3">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+              Recovery Audit Timeline
+            </h3>
+            <div className="space-y-2 text-xs">
+              {timeline.map((event, idx) => (
+                <div key={idx} className="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-2xl border border-slate-100">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800">{event.title}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {new Date(event.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5">{event.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Printable Slip (Hidden on screen, rendered on Print) */}
+        <div className="hidden print:block font-sans p-6 text-black" ref={printSlipRef}>
+          <div className="text-center border-b pb-3 mb-3">
+            <h1 className="text-xl font-black">DOON RIDERS</h1>
+            <p className="text-xs text-slate-600">Scooty Recovery &amp; Settlement Receipt</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+            <div>
+              <p><b>Recovery Ticket:</b> {recoveryRecord.recovery_number}</p>
+              <p><b>Vehicle:</b> {recoveryRecord.scooter_number}</p>
+              <p><b>Customer:</b> {recoveryRecord.rider_name}</p>
+            </div>
+            <div>
+              <p><b>Contact:</b> {recoveryRecord.rider_phone}</p>
+              <p><b>Location:</b> {recoveryRecord.pickup_live_location || recoveryRecord.pickup_location}</p>
+              <p><b>Date:</b> {recoveryRecord.recovery_date}</p>
+            </div>
+          </div>
+
+          <table className="w-full text-xs border-collapse mb-3">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-1">Description</th>
+                <th className="text-right py-1">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="py-1">Fixed Recovery Fee</td>
+                <td className="text-right py-1">₹{liveCalc.recoveryCharge}</td>
+              </tr>
+              {damageItemsState.filter(i => i.is_payable).map((item, idx) => (
+                <tr key={idx}>
+                  <td className="py-1">{item.part_name} ({item.quantity} &times; ₹{item.unit_price})</td>
+                  <td className="text-right py-1">₹{item.total_price}</td>
+                </tr>
+              ))}
+              <tr className="border-t font-bold">
+                <td className="py-1">Total Payable Charges</td>
+                <td className="text-right py-1">₹{liveCalc.totalCharges}</td>
+              </tr>
+              <tr>
+                <td className="py-1">Security Deposit Paid</td>
+                <td className="text-right py-1">&minus; ₹{securityDepositInput}</td>
+              </tr>
+              <tr className="border-t-2 font-black text-sm">
+                <td className="py-1">
+                  {liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                    ? 'Total Refund to Customer'
+                    : liveCalc.settlementType === 'ZERO_BALANCE'
+                    ? 'Final Balance'
+                    : 'Total Due from Customer'}
+                </td>
+                <td className="text-right py-1">
+                  {liveCalc.settlementType === 'FULL_REFUND' || liveCalc.settlementType === 'PARTIAL_REFUND'
+                    ? `₹${liveCalc.refundAmount}`
+                    : liveCalc.settlementType === 'ZERO_BALANCE'
+                    ? '₹0'
+                    : `₹${liveCalc.dueAmount}`}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="border-t pt-2 text-[10px] text-center text-slate-500">
+            Thank you for riding with DOON RIDERS &bull; Authorized Signature
           </div>
         </div>
+
+        {/* Modal: Lightbox Image Preview */}
+        {previewImage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div className="relative max-w-2xl max-h-[90vh]">
+              <img src={previewImage} alt="Preview" className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl" />
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="absolute top-3 right-3 p-2 rounded-full bg-black/70 text-white hover:bg-black transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

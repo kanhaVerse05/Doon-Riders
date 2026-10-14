@@ -3,6 +3,9 @@ import {
   getAllRecoveries,
   getRecoveryById,
   createRecovery,
+  acceptRecovery,
+  pickupScooty,
+  agentReachedHub,
   assignTechnicianForRecovery,
   submitTechnicianRecoveryInspection,
   settleRecovery,
@@ -15,6 +18,9 @@ const router = Router();
 router.get('/', getAllRecoveries);
 router.get('/:id', getRecoveryById);
 router.post('/', createRecovery);
+router.post('/:id/accept', acceptRecovery);
+router.post('/:id/pickup', pickupScooty);
+router.post('/:id/reached-hub', agentReachedHub);
 router.post('/:id/assign', assignTechnicianForRecovery);
 router.patch('/:id/assign', assignTechnicianForRecovery);
 router.post('/:id/inspection', submitTechnicianRecoveryInspection);
