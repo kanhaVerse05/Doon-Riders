@@ -2219,14 +2219,6 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                         </span>
                       </td>
                     </tr>
-                    {selectedReceipt.notes && (
-                      <tr style={{ borderTop: '1px solid #E2E8F0' }}>
-                        <td colSpan={2} style={{ padding: '6px 0 2px 0', textAlign: 'left' }}>
-                          <span style={{ color: '#64748B', fontSize: '9.5px', fontWeight: 600, display: 'block' }}>Notes:</span>
-                          <span style={{ color: '#0F172A', fontSize: '10.5px', fontStyle: 'italic', display: 'block', marginTop: '1px' }}>{selectedReceipt.notes}</span>
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
@@ -2262,6 +2254,18 @@ _Please present this receipt confirmation at the hub during vehicle handover._
                 </p>
               </div>
             </div>
+
+            {/* Internal Staff Notes (Visible ONLY to Admin & Staff in modal, NOT included on customer slip) */}
+            {selectedReceipt.notes && (
+              <div className="bg-[#FFFBEB] border border-[#FDE68A] p-2.5 rounded-xl text-left print:hidden">
+                <span className="text-[10px] font-black uppercase text-[#B45309] block tracking-wider">
+                  🔒 Internal Note (Admin & Staff Only)
+                </span>
+                <p className="text-xs text-[#92400E] font-medium italic mt-0.5 m-0">
+                  "{selectedReceipt.notes}"
+                </p>
+              </div>
+            )}
 
             {/* ACTIONS: WHATSAPP SHARE & DONE */}
             <div className="space-y-2 pt-1.5 print:hidden">
