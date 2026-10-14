@@ -48,9 +48,10 @@ const DEFAULT_ROLES: RoleItem[] = [
   { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', is_system: true },
   { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', is_system: false },
   { id: 6, name: 'TECHNICIAN', display_name: 'Technician', is_system: false },
-  { id: 7, name: 'PRE_BOOKING', display_name: 'Pre-Booking', is_system: false },
-  { id: 8, name: 'ACCOUNTANT', display_name: 'Accountant', is_system: false },
-  { id: 9, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', is_system: false }
+  { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', is_system: false },
+  { id: 8, name: 'PRE_BOOKING', display_name: 'Pre-Booking', is_system: false },
+  { id: 16, name: 'ACCOUNTANT', display_name: 'Accountant', is_system: false },
+  { id: 17, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', is_system: false }
 ];
 
 const POPULAR_ROLE_CHIPS = [

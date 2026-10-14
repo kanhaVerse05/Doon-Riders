@@ -53,7 +53,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 
 export const createUser = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, phone, roleId, custom_role_name, password } = req.body;
+    const { name, email, phone, roleId, role_name, roleName, custom_role_name, password } = req.body;
     const finalAvatar = req.body.avatar_url || req.body.avatarUrl || req.body.avatar || null;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
@@ -110,9 +110,27 @@ export const createUser = async (req: AuthRequest, res: Response) => {
           finalRoleName = cleanCode;
         }
       }
-    } else if (finalRoleId) {
+    } else if (finalRoleId || role_name || roleName) {
+      const roleNameHint = (role_name || roleName || '').trim().toUpperCase();
       if (getDbStatus()) {
-        const roleRes = await pool.query('SELECT id, name, display_name FROM roles WHERE id = $1', [finalRoleId]);
+        let roleRes = await pool.query('SELECT id, name, display_name FROM roles WHERE id = $1', [finalRoleId]);
+        if (roleRes.rows.length === 0 && roleNameHint) {
+          roleRes = await pool.query(
+            'SELECT id, name, display_name FROM roles WHERE UPPER(name) = $1 OR UPPER(display_name) = $1 LIMIT 1',
+            [roleNameHint]
+          );
+        }
+        // Match standard role aliases
+        if (roleRes.rows.length === 0 && (finalRoleId === 9 || finalRoleId === 17 || roleNameHint.includes('RECOVERY'))) {
+          roleRes = await pool.query("SELECT id, name, display_name FROM roles WHERE name = 'RECOVERY_AGENT' LIMIT 1");
+        }
+        if (roleRes.rows.length === 0 && (finalRoleId === 8 || finalRoleId === 16 || roleNameHint.includes('ACCOUNTANT'))) {
+          roleRes = await pool.query("SELECT id, name, display_name FROM roles WHERE name = 'ACCOUNTANT' LIMIT 1");
+        }
+        if (roleRes.rows.length === 0 && (finalRoleId === 7 || finalRoleId === 8 || roleNameHint.includes('PRE_BOOK') || roleNameHint.includes('PRE-BOOK'))) {
+          roleRes = await pool.query("SELECT id, name, display_name FROM roles WHERE name = 'PRE_BOOKING' LIMIT 1");
+        }
+
         if (roleRes.rows.length > 0) {
           finalRoleId = roleRes.rows[0].id;
           finalRoleName = roleRes.rows[0].name;
@@ -134,8 +152,9 @@ export const createUser = async (req: AuthRequest, res: Response) => {
           }
         }
       } else {
-        const memoryRole = memoryStore.roles.find(r => r.id === finalRoleId);
+        const memoryRole = memoryStore.roles.find(r => r.id === finalRoleId || (roleNameHint && (r.name === roleNameHint || r.display_name.toUpperCase() === roleNameHint)));
         if (memoryRole) {
+          finalRoleId = memoryRole.id;
           finalRoleName = memoryRole.name;
           finalRoleDisplayName = memoryRole.display_name;
         }
@@ -287,7 +306,9 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 export const updateUserStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { status, roleId } = req.body;
+    let { status, roleId, role_name, roleName } = req.body;
+    let targetRoleId = roleId ? Number(roleId) : null;
+    const roleNameHint = (role_name || roleName || '').trim().toUpperCase();
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
@@ -307,15 +328,34 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
         return res.status(403).json({ success: false, message: 'Forbidden: You cannot modify a Super Admin user.' });
       }
 
+      if (targetRoleId || roleNameHint) {
+        let rCheck = targetRoleId ? await pool.query('SELECT id FROM roles WHERE id = $1', [targetRoleId]) : { rows: [] };
+        if (rCheck.rows.length === 0 && roleNameHint) {
+          rCheck = await pool.query('SELECT id FROM roles WHERE UPPER(name) = $1 OR UPPER(display_name) = $1 LIMIT 1', [roleNameHint]);
+        }
+        if (rCheck.rows.length === 0 && (targetRoleId === 9 || targetRoleId === 17 || roleNameHint.includes('RECOVERY'))) {
+          rCheck = await pool.query("SELECT id FROM roles WHERE name = 'RECOVERY_AGENT' LIMIT 1");
+        }
+        if (rCheck.rows.length === 0 && (targetRoleId === 8 || targetRoleId === 16 || roleNameHint.includes('ACCOUNTANT'))) {
+          rCheck = await pool.query("SELECT id FROM roles WHERE name = 'ACCOUNTANT' LIMIT 1");
+        }
+        if (rCheck.rows.length === 0 && (targetRoleId === 7 || targetRoleId === 8 || roleNameHint.includes('PRE_BOOK') || roleNameHint.includes('PRE-BOOK'))) {
+          rCheck = await pool.query("SELECT id FROM roles WHERE name = 'PRE_BOOKING' LIMIT 1");
+        }
+        if (rCheck.rows.length > 0) {
+          targetRoleId = rCheck.rows[0].id;
+        }
+      }
+
       await pool.query(`
         UPDATE users 
         SET status = COALESCE($1, status),
             role_id = COALESCE($2, role_id),
             updated_at = NOW()
         WHERE id = $3
-      `, [status, roleId, id]);
+      `, [status, targetRoleId, id]);
 
-      appendOrUpdateUserBackup({ id: Number(id), status, role_id: roleId ? Number(roleId) : undefined });
+      appendOrUpdateUserBackup({ id: Number(id), status, role_id: targetRoleId ? Number(targetRoleId) : undefined });
 
       return res.json({ success: true, message: 'User updated successfully.' });
     }

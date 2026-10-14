@@ -26,8 +26,8 @@ export const memoryStore = {
     { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, job card execution & parts replacement', is_system: false },
     { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false },
     { id: 8, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false },
-    { id: 9, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Financial accounts and billing', is_system: false },
-    { id: 10, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false }
+    { id: 16, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Financial accounts and billing', is_system: false },
+    { id: 17, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false }
   ],
   rolePermissions: [] as any[],
   users: [

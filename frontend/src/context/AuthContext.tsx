@@ -138,6 +138,7 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
 
   if (norm === 'RECOVERY_AGENT' || norm.includes('RECOVERY')) {
     return [
+      { code: 'dashboard.view', scope: 'ASSIGNED' },
       { code: 'recoveries.view', scope: 'ASSIGNED' },
       { code: 'recoveries.accept', scope: 'ASSIGNED' },
       { code: 'recoveries.pickup', scope: 'ASSIGNED' },
@@ -368,6 +369,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permissionCode === 'pre_bookings.view_all' || 
       permissionCode === 'pre_bookings.create' || 
       permissionCode === 'pre_bookings.status_update'
+    )) {
+      return true;
+    }
+
+    const isRecoveryRole = normRole === 'RECOVERY_AGENT' || normRole.includes('RECOVERY') || (user.roleDisplayName && user.roleDisplayName.toUpperCase().includes('RECOVERY'));
+    if (isRecoveryRole && (
+      permissionCode === 'recoveries.view' || 
+      permissionCode === 'recoveries.accept' || 
+      permissionCode === 'recoveries.pickup' || 
+      permissionCode === 'recoveries.reached_hub'
     )) {
       return true;
     }

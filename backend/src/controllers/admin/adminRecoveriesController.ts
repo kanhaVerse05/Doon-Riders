@@ -142,9 +142,9 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
             params.push(userId);
             pIndex++;
           } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
-            whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(COALESCE(r.recovered_by, '')) = $${pIndex + 1} OR LOWER(COALESCE(r.recovery_agent_name, '')) = $${pIndex + 1})`);
-            params.push(userId);
-            params.push((req.user?.name || '').toLowerCase());
+            whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(TRIM(COALESCE(r.recovered_by, ''))) = $${pIndex + 1} OR LOWER(TRIM(COALESCE(r.recovery_agent_name, ''))) = $${pIndex + 1})`);
+            params.push(Number(userId) || 0);
+            params.push((req.user?.name || '').toLowerCase().trim());
             pIndex += 2;
           }
         }
@@ -269,6 +269,14 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
       );
       const techId = techRecord ? techRecord.id : userId;
       list = list.filter(r => r.technician_id === techId);
+    } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
+      const uName = (req.user?.name || '').toLowerCase().trim();
+      const uId = Number(userId) || 0;
+      list = list.filter(r =>
+        Number(r.recovery_agent_id) === uId ||
+        (r.recovery_agent_name && r.recovery_agent_name.toLowerCase().trim() === uName) ||
+        (r.recovered_by && r.recovered_by.toLowerCase().trim() === uName)
+      );
     }
 
     if (searchTerm) {
@@ -1115,18 +1123,40 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
       return res.status(400).json({ success: false, message: 'Please select a technician to assign' });
     }
 
-    const tech = (memoryStore.technicians || []).find(t => t.id === Number(technician_id));
+    let tech = (memoryStore.technicians || []).find(t => t.id === Number(technician_id));
+    if (!tech && getDbStatus()) {
+      try {
+        const techRes = await pool.query('SELECT * FROM technicians WHERE id = $1', [Number(technician_id)]);
+        if (techRes.rows.length > 0) {
+          tech = techRes.rows[0];
+        } else {
+          const uRes = await pool.query('SELECT id, name, phone FROM users WHERE id = $1', [Number(technician_id)]);
+          if (uRes.rows.length > 0) {
+            tech = { id: uRes.rows[0].id, name: uRes.rows[0].name, phone: uRes.rows[0].phone, technician_code: `TECH-${uRes.rows[0].id}` };
+          }
+        }
+      } catch (_) {}
+    }
     if (!tech) {
-      return res.status(404).json({ success: false, message: 'Selected technician not found' });
+      tech = { id: Number(technician_id), name: `Technician #${technician_id}`, phone: '', technician_code: `TECH-${technician_id}` };
     }
 
     const now = new Date().toISOString();
     const performerName = req.user?.name || 'Hub Incharge';
     const performerRole = req.user?.roleDisplayName || 'Hub Incharge';
 
-    const scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
       r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
     );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
 
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Recovery record not found' });
@@ -1222,9 +1252,18 @@ export const submitTechnicianRecoveryInspection = async (req: AuthRequest, res: 
     const performerName = req.user?.name || 'Technician';
     const performerRole = req.user?.roleDisplayName || 'Technician';
 
-    const scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
       r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
     );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
 
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Recovery record not found' });
@@ -1382,9 +1421,18 @@ export const settleRecovery = async (req: AuthRequest, res: Response) => {
     const performerName = req.user?.name || 'Hub Incharge';
     const performerRole = req.user?.roleDisplayName || 'Hub Incharge';
 
-    const scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
       r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
     );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
 
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Recovery record not found' });
@@ -1586,9 +1634,18 @@ export const updateRecoveryStatus = async (req: AuthRequest, res: Response) => {
     const performerName = req.user?.name || 'Hub Incharge';
     const performerRole = req.user?.roleDisplayName || 'Hub Incharge';
 
-    const scootyRecovery = (memoryStore.scootyRecoveries || []).find(
+    let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
       r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
     );
+
+    if (getDbStatus()) {
+      try {
+        const checkRes = await pool.query('SELECT * FROM scooty_recoveries WHERE id = $1 OR recovery_number = $2', [recoveryId || 0, id]);
+        if (checkRes.rows.length > 0) {
+          scootyRecovery = { ...scootyRecovery, ...checkRes.rows[0] };
+        }
+      } catch (_) {}
+    }
 
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Recovery record not found' });
