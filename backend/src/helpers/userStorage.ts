@@ -19,12 +19,12 @@ export const INITIAL_SEEDED_USERS = [
     created_at: '2026-09-01T00:00:00.000Z'
   },
   {
-    id: 7,
+    id: 3,
     name: 'Rishab Agnihotri',
     email: 'r8986257@gmail.com',
     password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
     phone: '8796271241',
-    role_id: 7,
+    role_id: 8,
     role_name: 'PRE_BOOKING',
     role_display_name: 'Pre-Booking',
     status: 'active',

@@ -6,12 +6,12 @@ import { loadPreBookingsBackup, syncPreBookingsWithDb } from '../helpers/preBook
 
 dotenv.config();
 
-const pgHost = process.env.PGHOST || 'localhost';
+const pgHost = process.env.PGHOST || '172.17.0.1';
 const pgPort = Number(process.env.PGPORT) || 5432;
 const pgUser = process.env.PGUSER || 'postgres';
-const pgPassword = process.env.PGPASSWORD || 'postgres';
-const pgDatabase = process.env.PGDATABASE || 'doon_riders_db';
-const databaseUrl = process.env.DATABASE_URL || `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDatabase}`;
+const pgPassword = process.env.PGPASSWORD || 'DoonRiders@Db2026S';
+const pgDatabase = process.env.PGDATABASE || 'postgres';
+const databaseUrl = process.env.DATABASE_URL || `postgresql://${pgUser}:${encodeURIComponent(pgPassword)}@${pgHost}:${pgPort}/${pgDatabase}`;
 
 let pgPool: Pool | null = null;
 let isPostgresConnected = false;
@@ -19,21 +19,21 @@ let isPostgresConnected = false;
 // Mock in-memory storage fallback for resilient development
 export const memoryStore = {
   roles: [
-    { id: 1, name: 'SUPER_ADMIN', display_name: 'Super Admin', description: 'Full root system control and configuration', is_system: true },
-    { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', description: 'Lead & fleet management', is_system: true },
-    { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Lead follow-up and sales', is_system: true },
+    { id: 1, name: 'SUPER_ADMIN', display_name: 'Super Admin', description: 'Full Root System Access', is_system: true },
+    { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', description: 'Sales overview & fleet dispatch', is_system: true },
+    { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Direct rider onboarding & lead CRM', is_system: true },
     { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet, repair dispatch & billing control', is_system: false },
-    { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, inspection & repairs', is_system: false },
-    { id: 7, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false },
-    { id: 8, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Financial accounts and billing', is_system: false },
-    { id: 9, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false },
-    { id: 10, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false }
+    { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, job card execution & parts replacement', is_system: false },
+    { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false },
+    { id: 8, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false },
+    { id: 9, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Financial accounts and billing', is_system: false },
+    { id: 10, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false }
   ],
   rolePermissions: [] as any[],
   users: [
     {
       id: 1,
-      name: 'Ankit Kumar',
+      name: 'Super Admin',
       email: 'doonridersmain@gmail.com',
       password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
       phone: '+91 8439431999',
@@ -45,12 +45,12 @@ export const memoryStore = {
       created_at: '2026-09-01T00:00:00.000Z'
     },
     {
-      id: 7,
+      id: 3,
       name: 'Rishab Agnihotri',
       email: 'r8986257@gmail.com',
       password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
       phone: '8796271241',
-      role_id: 7,
+      role_id: 8,
       status: 'active',
       avatar_url: '',
       role_name: 'PRE_BOOKING',
@@ -727,92 +727,37 @@ export const checkDbConnection = async (): Promise<boolean> => {
     probeResults = {};
 
     // Prioritized list of database connection candidates
-    const connectionCandidates: Array<{ name: string; hostDesc: string; config: PoolConfig }> = [
-      // 1. Supabase Cloud Pooler (Port 5432 - Standard PG Port, best firewall & network compatibility)
-      {
-        name: 'Supabase Pooler (Port 5432)',
-        hostDesc: 'aws-0-ap-south-1.pooler.supabase.com:5432',
-        config: {
-          host: 'aws-0-ap-south-1.pooler.supabase.com',
-          port: 5432,
-          user: 'postgres.wixelkxnvvwntgiptnqu',
-          password: 'Synbroly@8285',
-          database: 'postgres',
-          ssl: { rejectUnauthorized: false },
-          connectionTimeoutMillis: 7000,
-          max: 20
-        }
-      },
-      // 2. Supabase Cloud Pooler (Port 6543 - Transaction Mode)
-      {
-        name: 'Supabase Pooler (Port 6543)',
-        hostDesc: 'aws-0-ap-south-1.pooler.supabase.com:6543',
-        config: {
-          host: 'aws-0-ap-south-1.pooler.supabase.com',
-          port: 6543,
-          user: 'postgres.wixelkxnvvwntgiptnqu',
-          password: 'Synbroly@8285',
-          database: 'postgres',
-          ssl: { rejectUnauthorized: false },
-          connectionTimeoutMillis: 7000,
-          max: 20
-        }
-      },
-      // 3. Direct IPv4 with SNI (3.111.105.85:5432 - Bypasses Docker DNS)
-      {
-        name: 'Supabase Direct IP (3.111.105.85:5432)',
-        hostDesc: '3.111.105.85:5432',
-        config: {
-          host: '3.111.105.85',
-          port: 5432,
-          user: 'postgres.wixelkxnvvwntgiptnqu',
-          password: 'Synbroly@8285',
-          database: 'postgres',
-          ssl: { rejectUnauthorized: false, servername: 'aws-0-ap-south-1.pooler.supabase.com' },
-          connectionTimeoutMillis: 7000,
-          max: 20
-        }
-      },
-      // 4. Direct IPv4 with SNI (65.0.195.55:5432)
-      {
-        name: 'Supabase Direct IP (65.0.195.55:5432)',
-        hostDesc: '65.0.195.55:5432',
-        config: {
-          host: '65.0.195.55',
-          port: 5432,
-          user: 'postgres.wixelkxnvvwntgiptnqu',
-          password: 'Synbroly@8285',
-          database: 'postgres',
-          ssl: { rejectUnauthorized: false, servername: 'aws-0-ap-south-1.pooler.supabase.com' },
-          connectionTimeoutMillis: 7000,
-          max: 20
-        }
-      }
-    ];
+    const connectionCandidates: Array<{ name: string; hostDesc: string; config: PoolConfig }> = [];
 
-    // 5. Environment DATABASE_URL (if provided and valid)
-    if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('172.17.0.1') && !process.env.DATABASE_URL.includes('localhost')) {
-      connectionCandidates.unshift({
+    // 1. Environment DATABASE_URL (if provided)
+    if (process.env.DATABASE_URL) {
+      const isRemoteHost = process.env.DATABASE_URL.includes('sslmode=require') ||
+                           process.env.DATABASE_SSL === 'true' ||
+                           process.env.DATABASE_URL.includes('pooler') ||
+                           process.env.DATABASE_URL.includes('supabase.com');
+
+      connectionCandidates.push({
         name: 'Configured DATABASE_URL',
-        hostDesc: 'custom-env-url',
+        hostDesc: 'env-database-url',
         config: {
           connectionString: process.env.DATABASE_URL,
-          ssl: { rejectUnauthorized: false },
-          connectionTimeoutMillis: 6000,
+          ...(isRemoteHost ? { ssl: { rejectUnauthorized: false } } : {}),
+          connectionTimeoutMillis: 5000,
           max: 20
         }
       });
     }
 
-    // 6. Local / internal fallback hosts
-    for (const internalHost of ['supabase-db', 'db', '187.126.124.18', 'localhost']) {
+    // 2. Self-Hosted Supabase candidates (172.17.0.1 Docker host gateway, 187.126.124.18 public VPS IP, etc.)
+    const selfHostedHosts = ['172.17.0.1', '187.126.124.18', 'host.docker.internal', 'supabase-db', 'db', 'localhost'];
+    for (const h of selfHostedHosts) {
       connectionCandidates.push({
-        name: `Internal Host ${internalHost}:5432`,
-        hostDesc: `${internalHost}:5432`,
+        name: `Self-Hosted Supabase (${h}:${pgPort})`,
+        hostDesc: `${h}:${pgPort}`,
         config: {
-          connectionString: `postgresql://postgres:!Admin@8285@${internalHost}:5432/postgres`,
-          connectionTimeoutMillis: 2000,
-          max: 5
+          connectionString: `postgresql://postgres:DoonRiders%40Db2026S@${h}:${pgPort}/postgres`,
+          connectionTimeoutMillis: 3500,
+          max: 10
         }
       });
     }

@@ -10,7 +10,7 @@ services:
     environment:
       PORT: 5000
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres.wixelkxnvvwntgiptnqu:Synbroly%408285@aws-0-ap-south-1.pooler.supabase.com:5432/postgres}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:DoonRiders%40Db2026S@172.17.0.1:5432/postgres}
       JWT_SECRET: ${JWT_SECRET:-doon_riders_production_jwt_secret_2026}
       CLIENT_URL: ${CLIENT_URL:-*}
     ports:
