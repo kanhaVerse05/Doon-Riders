@@ -533,75 +533,56 @@ _Please present this receipt confirmation at the hub during vehicle handover._
     }
   };
 
-  // Share Receipt on WhatsApp (Sends Image + Text together on Mobile, Copies Image to Clipboard on Desktop)
-  const handleShareWhatsApp = async (b: PreBooking) => {
-    const cleanPhone = b.mobile_number.replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const msgText = generateWhatsAppMessage(b);
-    const waUrl = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msgText)}`;
-
-    if (!receiptCardRef.current) {
-      window.open(waUrl, '_blank');
-      return;
+  // Helper to ensure valid international format for Indian phone numbers (e.g. 919876543210)
+  const formatWhatsAppPhone = (phoneRaw: string): string => {
+    let cleaned = (phoneRaw || '').replace(/\D/g, '');
+    if (cleaned.startsWith('0') && cleaned.length === 11) {
+      cleaned = cleaned.substring(1);
     }
+    if (cleaned.length === 10) {
+      cleaned = `91${cleaned}`;
+    }
+    return cleaned;
+  };
 
-    try {
-      setGeneratingImage(true);
-      const canvas = await html2canvas(receiptCardRef.current, {
-        scale: 2.5,
+  // Share Receipt on WhatsApp (Directly opens customer 1-on-1 chat with prefilled phone and message)
+  const handleShareWhatsApp = (b: PreBooking) => {
+    const phoneWithCountry = formatWhatsAppPhone(b.mobile_number);
+    const msgText = generateWhatsAppMessage(b);
+    const waUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msgText)}`;
+
+    // 1. Immediately open WhatsApp direct chat (Android Intent / iOS Universal Link / Web)
+    const link = document.createElement('a');
+    link.href = waUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // 2. Desktop helper: asynchronously copy receipt image to clipboard if supported
+    if (receiptCardRef.current && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      html2canvas(receiptCardRef.current, {
+        scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true,
         allowTaint: true,
         logging: false
-      });
-
-      // 1. Mobile Web Share API: Attaches Image File + Text together directly to WhatsApp
-      if (typeof navigator !== 'undefined' && navigator.canShare) {
-        try {
-          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      }).then((canvas) => {
+        canvas.toBlob((blob) => {
           if (blob) {
-            const imageFile = new File([blob], `DOON_Riders_Receipt_${b.booking_code}.png`, { type: 'image/png' });
-            if (navigator.canShare({ files: [imageFile] })) {
-              await navigator.share({
-                files: [imageFile],
-                title: `DOON Riders Receipt - ${b.booking_code}`,
-                text: msgText
-              });
-              setGeneratingImage(false);
-              return;
-            }
-          }
-        } catch (shareErr) {
-          console.warn('Web share notice:', shareErr);
-        }
-      }
-
-      // 2. Desktop Browser: Copy image to Clipboard so user can press Ctrl+V in WhatsApp chat
-      try {
-        canvas.toBlob(async (blob) => {
-          if (blob && typeof ClipboardItem !== 'undefined') {
-            try {
-              await navigator.clipboard.write([
-                new ClipboardItem({ 'image/png': blob })
-              ]);
-              setToastMessage('📋 Receipt image copied to clipboard! Press Ctrl+V in WhatsApp to send Image + Text.');
-            } catch (clipErr) {
-              console.warn('Clipboard write notice:', clipErr);
-            }
+            navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]).then(() => {
+              setToastMessage('📋 Receipt image copied! You can paste (Ctrl+V) it in WhatsApp.');
+              setTimeout(() => setToastMessage(null), 4000);
+            }).catch(() => {});
           }
         }, 'image/png');
-      } catch (e) {}
-
-      // Open WhatsApp Web with text
-      window.open(waUrl, '_blank');
-    } catch (err) {
-      console.error('WhatsApp share error:', err);
-      window.open(waUrl, '_blank');
-    } finally {
-      setGeneratingImage(false);
-      setTimeout(() => setToastMessage(null), 4500);
+      }).catch(() => {});
     }
   };
+
 
   const handleCopyWhatsAppText = (b: PreBooking) => {
     navigator.clipboard.writeText(generateWhatsAppMessage(b));
@@ -2222,52 +2203,27 @@ _Please present this receipt confirmation at the hub during vehicle handover._
               </div>
             </div>
 
-            {/* WHATSAPP SHARE & IMAGE ACTIONS */}
-            <div className="space-y-2 pt-1 print:hidden">
-              
-              {/* PRIMARY WHATSAPP SHARE BUTTON WITH OFFICIAL WHATSAPP ICON */}
+            {/* ACTIONS: WHATSAPP SHARE & DONE */}
+            <div className="space-y-2 pt-1.5 print:hidden">
+              {/* PRIMARY WHATSAPP SHARE BUTTON */}
               <button
                 type="button"
                 onClick={() => handleShareWhatsApp(selectedReceipt)}
-                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-black text-xs uppercase tracking-wider py-2.5 rounded-xl shadow-[0_4px_14px_rgba(37,211,102,0.35)] transition transform hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.98] text-white font-black text-xs uppercase tracking-wider py-3 rounded-2xl shadow-[0_4px_14px_rgba(37,211,102,0.35)] transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <WhatsAppIcon className="w-4 h-4 fill-white" />
                 <span>SEND RECEIPT ON WHATSAPP ({selectedReceipt.mobile_number})</span>
               </button>
 
-              <div className="grid grid-cols-3 gap-2">
-                {/* Download Receipt Image */}
-                <button
-                  type="button"
-                  onClick={() => handleDownloadReceiptImage(selectedReceipt)}
-                  disabled={generatingImage}
-                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <ImageIcon className="w-3.5 h-3.5 text-[#00A854]" />
-                  <span>{generatingImage ? 'Generating...' : 'Save Image'}</span>
-                </button>
-
-                {/* Copy Text Button */}
-                <button
-                  type="button"
-                  onClick={() => handleCopyWhatsAppText(selectedReceipt)}
-                  className="bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/40 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-[#00A854]" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedWhatsApp ? 'Copied!' : 'Copy Text'}</span>
-                </button>
-
-                {/* Print Button */}
-                <button
-                  type="button"
-                  onClick={handlePrintReceipt}
-                  className="bg-[#111827] hover:bg-[#070D18] text-white py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
-                >
-                  <Printer className="w-3.5 h-3.5 text-[#00D96B]" />
-                  <span>Print</span>
-                </button>
-              </div>
-
+              {/* DONE BUTTON */}
+              <button
+                type="button"
+                onClick={() => setSelectedReceipt(null)}
+                className="w-full bg-[#F3F4F6] hover:bg-[#E5E7EB] active:bg-[#D1D5DB] text-[#111827] font-black text-xs uppercase tracking-wider py-2.5 rounded-2xl border border-[#E5E7EB] transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Check className="w-4 h-4 text-[#00A854] stroke-[3]" />
+                <span>DONE</span>
+              </button>
             </div>
 
           </div>
