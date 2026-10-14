@@ -1,6 +1,8 @@
 import { Pool, PoolConfig } from 'pg';
 import dotenv from 'dotenv';
 import net from 'net';
+import { loadUsersBackup, syncUsersWithDb } from '../helpers/userStorage';
+import { loadPreBookingsBackup, syncPreBookingsWithDb } from '../helpers/preBookingStorage';
 
 dotenv.config();
 
@@ -22,9 +24,10 @@ export const memoryStore = {
     { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Lead follow-up and sales', is_system: true },
     { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet, repair dispatch & billing control', is_system: false },
     { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, inspection & repairs', is_system: false },
-    { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false },
-    { id: 8, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false },
-    { id: 9, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false }
+    { id: 7, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false },
+    { id: 8, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Financial accounts and billing', is_system: false },
+    { id: 9, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false },
+    { id: 10, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false }
   ],
   rolePermissions: [] as any[],
   users: [
@@ -36,7 +39,23 @@ export const memoryStore = {
       phone: '+91 8439431999',
       role_id: 1,
       status: 'active',
-      avatar_url: '/images/doon-riders-logo.png'
+      avatar_url: '/images/doon-riders-logo.png',
+      role_name: 'SUPER_ADMIN',
+      role_display_name: 'Super Admin',
+      created_at: '2026-09-01T00:00:00.000Z'
+    },
+    {
+      id: 7,
+      name: 'Rishab Agnihotri',
+      email: 'r8986257@gmail.com',
+      password_hash: '$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6',
+      phone: '8796271241',
+      role_id: 7,
+      status: 'active',
+      avatar_url: '',
+      role_name: 'PRE_BOOKING',
+      role_display_name: 'Pre-Booking',
+      created_at: '2026-10-14T00:00:00.000Z'
     }
   ],
   fleet: [
@@ -705,86 +724,104 @@ export const getDbErrorDetails = () => {
 
 export const checkDbConnection = async (): Promise<boolean> => {
   try {
-    const rawUrl = process.env.DATABASE_URL || `postgresql://${pgUser}:${pgPassword}@${pgHost}:${pgPort}/${pgDatabase}`;
-    
-    // Extract configured hostname and port from database URL
-    let configuredHost = 'supabase-db';
-    let targetPort = 5432;
-    try {
-      const parsed = new URL(rawUrl.replace(/^postgresql:\/\//, 'http://'));
-      configuredHost = parsed.hostname;
-      if (parsed.port) targetPort = Number(parsed.port);
-    } catch {}
-
-    const candidateHosts = [
-      configuredHost,
-      'db',
-      'supabase-db',
-      'doon-riders-supabase-db',
-      'doon-riders-supabase',
-      'doon-riders-supabase_db',
-      'doon-riders-supabase-db-1',
-      '3o7vdsl1qr8jcenwzb5vdoal-db',
-      'supabase-db-3o7vdsl1qr8jcenwzb5vdoal',
-      'host.docker.internal',
-      '172.17.0.1',
-      '187.126.124.18',
-      '172.18.0.1',
-      '172.19.0.1',
-      '172.20.0.1',
-      'localhost',
-    ].filter((v, i, a) => a.indexOf(v) === i);
-
-    // Fast parallel probe of all candidate hosts
-    const probeList = await Promise.all(candidateHosts.map(h => probeTcpPort(h, targetPort, 1200)));
     probeResults = {};
-    for (const p of probeList) {
-      probeResults[p.host] = p.message;
-    }
-    console.log('Probed DB candidate hosts:', probeResults);
 
-    const openHosts = probeList.filter(p => p.open).map(p => p.host);
-    const prioritizedHosts = [...openHosts];
-    if (!prioritizedHosts.includes(configuredHost)) {
-      prioritizedHosts.push(configuredHost);
+    // Prioritized list of database connection candidates
+    const connectionCandidates: Array<{ name: string; hostDesc: string; config: PoolConfig }> = [
+      // 1. Supabase Cloud Pooler (Port 5432 - Standard PG Port, best firewall & network compatibility)
+      {
+        name: 'Supabase Pooler (Port 5432)',
+        hostDesc: 'aws-0-ap-south-1.pooler.supabase.com:5432',
+        config: {
+          host: 'aws-0-ap-south-1.pooler.supabase.com',
+          port: 5432,
+          user: 'postgres.wixelkxnvvwntgiptnqu',
+          password: 'Synbroly@8285',
+          database: 'postgres',
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 7000,
+          max: 20
+        }
+      },
+      // 2. Supabase Cloud Pooler (Port 6543 - Transaction Mode)
+      {
+        name: 'Supabase Pooler (Port 6543)',
+        hostDesc: 'aws-0-ap-south-1.pooler.supabase.com:6543',
+        config: {
+          host: 'aws-0-ap-south-1.pooler.supabase.com',
+          port: 6543,
+          user: 'postgres.wixelkxnvvwntgiptnqu',
+          password: 'Synbroly@8285',
+          database: 'postgres',
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 7000,
+          max: 20
+        }
+      },
+      // 3. Direct IPv4 with SNI (3.111.105.85:5432 - Bypasses Docker DNS)
+      {
+        name: 'Supabase Direct IP (3.111.105.85:5432)',
+        hostDesc: '3.111.105.85:5432',
+        config: {
+          host: '3.111.105.85',
+          port: 5432,
+          user: 'postgres.wixelkxnvvwntgiptnqu',
+          password: 'Synbroly@8285',
+          database: 'postgres',
+          ssl: { rejectUnauthorized: false, servername: 'aws-0-ap-south-1.pooler.supabase.com' },
+          connectionTimeoutMillis: 7000,
+          max: 20
+        }
+      },
+      // 4. Direct IPv4 with SNI (65.0.195.55:5432)
+      {
+        name: 'Supabase Direct IP (65.0.195.55:5432)',
+        hostDesc: '65.0.195.55:5432',
+        config: {
+          host: '65.0.195.55',
+          port: 5432,
+          user: 'postgres.wixelkxnvvwntgiptnqu',
+          password: 'Synbroly@8285',
+          database: 'postgres',
+          ssl: { rejectUnauthorized: false, servername: 'aws-0-ap-south-1.pooler.supabase.com' },
+          connectionTimeoutMillis: 7000,
+          max: 20
+        }
+      }
+    ];
+
+    // 5. Environment DATABASE_URL (if provided and valid)
+    if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('172.17.0.1') && !process.env.DATABASE_URL.includes('localhost')) {
+      connectionCandidates.unshift({
+        name: 'Configured DATABASE_URL',
+        hostDesc: 'custom-env-url',
+        config: {
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 6000,
+          max: 20
+        }
+      });
+    }
+
+    // 6. Local / internal fallback hosts
+    for (const internalHost of ['supabase-db', 'db', '187.126.124.18', 'localhost']) {
+      connectionCandidates.push({
+        name: `Internal Host ${internalHost}:5432`,
+        hostDesc: `${internalHost}:5432`,
+        config: {
+          connectionString: `postgresql://postgres:!Admin@8285@${internalHost}:5432/postgres`,
+          connectionTimeoutMillis: 2000,
+          max: 5
+        }
+      });
     }
 
     let connected = false;
-
-    for (const host of prioritizedHosts) {
-      const candUrl = rawUrl.replace(/@([^:/]+)(:\d+)?\//, `@${host}:${targetPort}/`);
+    for (const cand of connectionCandidates) {
       try {
-        const isRemoteHost = host.includes('supabase.com') ||
-                             host.includes('supabase.co') ||
-                             host.includes('pooler') ||
-                             host.includes('neon.tech') ||
-                             host.includes('railway') ||
-                             host.includes('render') ||
-                             candUrl.includes('sslmode=require') ||
-                             process.env.DATABASE_SSL === 'true';
-
-        const isInternalDb = !isRemoteHost && (
-                             host === 'db' ||
-                             host === 'supabase-db' ||
-                             host === 'doon-riders-supabase-db' ||
-                             host === 'localhost' ||
-                             host === '127.0.0.1' ||
-                             host === 'host.docker.internal' ||
-                             host.startsWith('172.') ||
-                             candUrl.includes('sslmode=disable')
-                           );
-
-        const isRemoteDb = isRemoteHost || (!isInternalDb && !candUrl.includes('sslmode=disable'));
-
-        const config: PoolConfig = {
-          connectionString: candUrl,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 4000,
-          ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {})
-        };
-
-        const testPool = new Pool(config);
+        console.log(`🔄 Attempting DB connection to: ${cand.name}...`);
+        const testPool = new Pool(cand.config);
         const client = await testPool.connect();
         const testRes = await client.query('SELECT NOW() as current_time');
         client.release();
@@ -792,39 +829,14 @@ export const checkDbConnection = async (): Promise<boolean> => {
         pgPool = testPool;
         isPostgresConnected = true;
         connected = true;
-        activeDbHost = `${host}:${targetPort}`;
-
-        console.log(`✅ PostgreSQL Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
+        activeDbHost = cand.hostDesc;
+        probeResults[cand.name] = 'CONNECTED';
+        console.log(`✅ PostgreSQL Database connected successfully! [${cand.name}, Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
         break;
       } catch (candErr: any) {
         lastDbError = candErr?.message || String(candErr) || 'connection failed';
-        probeResults[`connect_${host}`] = String(lastDbError);
-      }
-    }
-
-    if (!connected || !pgPool) {
-      // Automatic resilient fallback to production Supabase cloud database pooler
-      const fallbackCloudUrl = 'postgresql://postgres.wixelkxnvvwntgiptnqu:Synbroly%408285@aws-0-ap-south-1.pooler.supabase.com:6543/postgres';
-      try {
-        console.log('🔄 Attempting fallback to cloud Supabase PostgreSQL pooler...');
-        const cloudPool = new Pool({
-          connectionString: fallbackCloudUrl,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 8000,
-          ssl: { rejectUnauthorized: false }
-        });
-        const client = await cloudPool.connect();
-        const testRes = await client.query('SELECT NOW() as current_time');
-        client.release();
-
-        pgPool = cloudPool;
-        isPostgresConnected = true;
-        connected = true;
-        activeDbHost = 'aws-0-ap-south-1.pooler.supabase.com:6543';
-        console.log(`✅ Cloud Supabase Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
-      } catch (cloudErr: any) {
-        console.warn('Fallback to cloud Supabase also failed:', cloudErr.message);
+        probeResults[cand.name] = String(lastDbError);
+        console.warn(`Database connection attempt failed (${cand.name}):`, lastDbError);
       }
     }
 
@@ -1372,14 +1384,16 @@ export const checkDbConnection = async (): Promise<boolean> => {
 
     // 1. Seed Roles idempotently
     await pgPool.query(`
-      INSERT INTO roles (id, name, display_name, description, is_system) VALUES
-        (1, 'SUPER_ADMIN', 'Super Admin', 'Full Root System Access', TRUE),
-        (3, 'MANAGER', 'Sales & Operations Manager', 'Sales overview & fleet dispatch', TRUE),
-        (4, 'SALES_EXECUTIVE', 'Sales Executive', 'Direct rider onboarding & lead CRM', TRUE),
-        (5, 'HUB_INCHARGE', 'Hub Incharge', 'Hub fleet, repair dispatch & billing control', FALSE),
-        (6, 'TECHNICIAN', 'Technician', 'Scooter diagnostics, job card execution & parts replacement', FALSE),
-        (7, 'CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE),
-        (8, 'RECOVERY_AGENT', 'Recovery Agent', 'Field scooty recovery & pickup execution', FALSE)
+      INSERT INTO roles (name, display_name, description, is_system) VALUES
+        ('SUPER_ADMIN', 'Super Admin', 'Full Root System Access', TRUE),
+        ('MANAGER', 'Sales & Operations Manager', 'Sales overview & fleet dispatch', TRUE),
+        ('SALES_EXECUTIVE', 'Sales Executive', 'Direct rider onboarding & lead CRM', TRUE),
+        ('HUB_INCHARGE', 'Hub Incharge', 'Hub fleet, repair dispatch & billing control', FALSE),
+        ('TECHNICIAN', 'Technician', 'Scooter diagnostics, job card execution & parts replacement', FALSE),
+        ('CUSTOMER_SUPPORT', 'Customer Support', 'Customer complaints, breakdown ticket logging & support', FALSE),
+        ('PRE_BOOKING', 'Pre-Booking', 'Pre-booking management and reservation vouchers', FALSE),
+        ('ACCOUNTANT', 'Accountant', 'Financial accounts and billing', FALSE),
+        ('RECOVERY_AGENT', 'Recovery Agent', 'Field scooty recovery & pickup execution', FALSE)
       ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
     `).catch(() => {});
 
@@ -1461,16 +1475,40 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ON CONFLICT (role_id, permission_id) DO NOTHING;
     `).catch(() => {});
 
-    // 2. Seed Users if empty
-    const userCount = await pgPool.query('SELECT COUNT(*) FROM users');
-    if (parseInt(userCount.rows[0].count, 10) === 0) {
-      for (const u of memoryStore.users) {
-        await pgPool.query(`
-          INSERT INTO users (id, name, email, password_hash, phone, role_id, status, avatar_url)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (email) DO NOTHING
-        `, [u.id, u.name, u.email, u.password_hash, u.phone, u.role_id, u.status, u.avatar_url]);
+    // 2. Synchronize Users with Supabase and disk backup
+    try {
+      const userCount = await pgPool.query('SELECT COUNT(*) FROM users');
+      if (parseInt(userCount.rows[0].count, 10) === 0) {
+        for (const u of memoryStore.users) {
+          await pgPool.query(`
+            INSERT INTO users (id, name, email, password_hash, phone, role_id, status, avatar_url)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (email) DO NOTHING
+          `, [u.id, u.name, u.email, u.password_hash, u.phone, u.role_id, u.status, u.avatar_url]);
+        }
       }
+
+      const usersRes = await pgPool.query(`
+        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.last_login, u.created_at,
+               r.id as role_id, r.name as role_name, r.display_name as role_display_name
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.deleted_at IS NULL
+        ORDER BY u.id ASC
+      `);
+      await syncUsersWithDb(usersRes.rows, pgPool);
+      console.log(`[db] Synchronized ${usersRes.rows.length} users with disk and memory store.`);
+    } catch (uSyncErr: any) {
+      console.warn('[db] User sync warning:', uSyncErr.message);
+    }
+
+    // Synchronize Pre-Bookings with Supabase and disk backup
+    try {
+      const pbRes = await pgPool.query('SELECT * FROM pre_bookings ORDER BY id DESC');
+      await syncPreBookingsWithDb(pbRes.rows, pgPool);
+      console.log(`[db] Synchronized ${pbRes.rows.length} pre-bookings with disk and memory store.`);
+    } catch (pbSyncErr: any) {
+      console.warn('[db] Pre-bookings sync warning:', pbSyncErr.message);
     }
 
     // 3. Seed Fleet if empty
@@ -1509,14 +1547,15 @@ export const checkDbConnection = async (): Promise<boolean> => {
       }
     }
 
-
-
-
     return true;
   } catch (err: any) {
     isPostgresConnected = false;
     lastDbError = err.message || String(err);
     console.warn(`⚠️ PostgreSQL connection Notice: ${err.message}. Using resilient in-memory database store.`);
+    try {
+      loadUsersBackup();
+      loadPreBookingsBackup();
+    } catch {}
     return false;
   }
 };

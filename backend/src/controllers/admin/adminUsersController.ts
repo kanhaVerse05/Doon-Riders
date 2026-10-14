@@ -4,6 +4,12 @@ import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { canModifyUser } from '../../helpers/antiEscalation';
 import { logAuditEvent } from '../../helpers/auditLogger';
+import {
+  loadUsersBackup,
+  appendOrUpdateUserBackup,
+  deleteUserBackup,
+  syncUsersWithDb
+} from '../../helpers/userStorage';
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -18,27 +24,30 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         ORDER BY u.id ASC
       `;
       const result = await pool.query(query);
+      await syncUsersWithDb(result.rows, pool);
       return res.json({ success: true, data: result.rows });
     }
 
-    // Memory store fallback
-    const usersWithRoles = memoryStore.users.map(u => {
+    // Disk backup & memory store fallback
+    const backupUsers = loadUsersBackup();
+    const usersWithRoles = backupUsers.map(u => {
       const role = memoryStore.roles.find(r => r.id === u.role_id) || {
         id: u.role_id,
-        name: 'CUSTOM_ROLE',
-        display_name: 'Custom Role'
+        name: u.role_name || 'CUSTOM_ROLE',
+        display_name: u.role_display_name || 'Custom Role'
       };
       return {
         ...u,
         role_id: role.id,
-        role_name: role.name,
-        role_display_name: role.display_name
+        role_name: u.role_name || role.name,
+        role_display_name: u.role_display_name || role.display_name
       };
     });
 
     return res.json({ success: true, data: usersWithRoles });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message });
+    const backupUsers = loadUsersBackup();
+    return res.json({ success: true, data: backupUsers });
   }
 };
 
@@ -164,6 +173,8 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         created_at: new Date().toISOString()
       };
 
+      appendOrUpdateUserBackup(createdUser);
+
       await logAuditEvent({
         userId: req.user?.id,
         userName: req.user?.name,
@@ -193,6 +204,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       created_at: new Date().toISOString()
     };
     memoryStore.users.push(createdUser);
+    appendOrUpdateUserBackup(createdUser);
 
     return res.status(201).json({ success: true, data: createdUser, message: 'User created successfully.' });
   } catch (err: any) {
@@ -239,6 +251,8 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
       // 4. Also clean up any technician entry matching email or name
       await pool.query('DELETE FROM technicians WHERE email = $1 OR name = $2', [target.email, target.name]).catch(() => {});
 
+      deleteUserBackup(userId);
+
       await logAuditEvent({
         userId: req.user?.id,
         userName: req.user?.name,
@@ -259,6 +273,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
         return res.status(403).json({ success: false, message: 'Super Admin cannot be deleted.' });
       }
       const deletedUser = memoryStore.users.splice(uIdx, 1)[0];
+      deleteUserBackup(userId);
       return res.json({ success: true, message: `User ${deletedUser.name} deleted successfully.` });
     }
 
@@ -300,6 +315,8 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
         WHERE id = $3
       `, [status, roleId, id]);
 
+      appendOrUpdateUserBackup({ id: Number(id), status, role_id: roleId ? Number(roleId) : undefined });
+
       return res.json({ success: true, message: 'User updated successfully.' });
     }
 
@@ -308,6 +325,7 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
     if (user) {
       if (status) user.status = status;
       if (roleId) user.role_id = Number(roleId);
+      appendOrUpdateUserBackup({ id: Number(id), status: user.status, role_id: user.role_id });
       return res.json({ success: true, message: 'User updated successfully.' });
     }
 

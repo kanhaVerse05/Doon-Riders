@@ -68,7 +68,9 @@ const DEFAULT_SYSTEM_ROLES: RoleItem[] = [
   { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Direct lead conversion and customer onboarding', is_system: true },
   { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet inventory and scooter repairs coordinator', is_system: false },
   { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, job card execution, and parts replacement', is_system: false },
-  { id: 8, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery, GPS pickup, and 4-angle photo uploads', is_system: false }
+  { id: 7, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and customer reservation vouchers', is_system: false },
+  { id: 8, name: 'ACCOUNTANT', display_name: 'Accountant', description: 'Pre-booking payments, rental security deposits, and invoicing', is_system: false },
+  { id: 9, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery, GPS pickup, and 4-angle photo uploads', is_system: false }
 ];
 
 const SUGGESTED_ROLES = [

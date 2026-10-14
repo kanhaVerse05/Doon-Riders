@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1,
+    "name": "Ankit Kumar",
+    "email": "doonridersmain@gmail.com",
+    "password_hash": "$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6",
+    "phone": "+91 8439431999",
+    "role_id": 1,
+    "role_name": "SUPER_ADMIN",
+    "role_display_name": "Super Admin",
+    "status": "active",
+    "avatar_url": "/images/doon-riders-logo.png",
+    "created_at": "2026-09-01T00:00:00.000Z"
+  },
+  {
+    "id": 7,
+    "name": "Rishab Agnihotri",
+    "email": "r8986257@gmail.com",
+    "password_hash": "$2b$10$w8FkVyqYqV.0N/x11xR5t.Wd6m5QOa6N.pE9qO2vO7k1o.M1cWqS6",
+    "phone": "8796271241",
+    "role_id": 7,
+    "role_name": "PRE_BOOKING",
+    "role_display_name": "Pre-Booking",
+    "status": "active",
+    "avatar_url": "",
+    "created_at": "2026-10-14T00:00:00.000Z"
+  }
+]
