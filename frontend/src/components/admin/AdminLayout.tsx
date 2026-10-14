@@ -62,7 +62,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       const isHub = user.roleName === 'HUB_INCHARGE' || user.roleName?.includes('HUB');
       const isRecovery = user.roleName === 'RECOVERY_AGENT' || user.roleName?.includes('RECOVERY');
 
-      if (isTech && !pathname?.startsWith('/admin/technician')) {
+      if (isTech && !pathname?.startsWith('/admin/technician') && !pathname?.startsWith('/admin/recoveries')) {
         router.replace('/admin/technician/jobs');
       } else if (isRecovery && !pathname?.startsWith('/admin/recoveries')) {
         router.replace('/admin/recoveries');

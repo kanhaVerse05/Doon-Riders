@@ -301,6 +301,20 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
       return res.json({ success: true, message: 'Permission updated successfully.' });
     }
 
+    if (permissions && typeof permissions === 'object') {
+      const targetRoleId = Number(roleId) || 1;
+      if (!memoryStore.rolePermissions) memoryStore.rolePermissions = [];
+      memoryStore.rolePermissions = memoryStore.rolePermissions.filter((rp: any) => rp.role_id !== targetRoleId);
+      for (const [code, val] of Object.entries(permissions as Record<string, any>)) {
+        if (val && val.enabled) {
+          memoryStore.rolePermissions.push({
+            role_id: targetRoleId,
+            code,
+            scope: val.scope || 'ALL'
+          });
+        }
+      }
+    }
     return res.json({ success: true, message: 'Permission updated successfully (Memory Store).' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });

@@ -22,8 +22,11 @@ export const memoryStore = {
     { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Lead follow-up and sales', is_system: true },
     { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet, repair dispatch & billing control', is_system: false },
     { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, inspection & repairs', is_system: false },
-    { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false }
+    { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', description: 'Customer complaints, breakdown ticket logging & support', is_system: false },
+    { id: 8, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery & pickup execution', is_system: false },
+    { id: 9, name: 'PRE_BOOKING', display_name: 'Pre-Booking', description: 'Pre-booking management and reservation vouchers', is_system: false }
   ],
+  rolePermissions: [] as any[],
   users: [
     {
       id: 1,
@@ -751,23 +754,27 @@ export const checkDbConnection = async (): Promise<boolean> => {
     for (const host of prioritizedHosts) {
       const candUrl = rawUrl.replace(/@([^:/]+)(:\d+)?\//, `@${host}:${targetPort}/`);
       try {
-        const isInternalDb = host.includes('db') ||
-                             host.includes('supabase') ||
-                             host.includes('localhost') ||
-                             host.includes('127.0.0.1') ||
-                             host.includes('host.docker.internal') ||
-                             host.startsWith('172.') ||
-                             candUrl.includes('sslmode=disable');
+        const isRemoteHost = host.includes('supabase.com') ||
+                             host.includes('supabase.co') ||
+                             host.includes('pooler') ||
+                             host.includes('neon.tech') ||
+                             host.includes('railway') ||
+                             host.includes('render') ||
+                             candUrl.includes('sslmode=require') ||
+                             process.env.DATABASE_SSL === 'true';
 
-        const isRemoteDb = !isInternalDb && (
-                             candUrl.includes('supabase.co') || 
-                             candUrl.includes('pooler') ||
-                             candUrl.includes('neon.tech') || 
-                             candUrl.includes('sslmode=require') || 
-                             candUrl.includes('railway') || 
-                             candUrl.includes('render') ||
-                             process.env.DATABASE_SSL === 'true'
+        const isInternalDb = !isRemoteHost && (
+                             host === 'db' ||
+                             host === 'supabase-db' ||
+                             host === 'doon-riders-supabase-db' ||
+                             host === 'localhost' ||
+                             host === '127.0.0.1' ||
+                             host === 'host.docker.internal' ||
+                             host.startsWith('172.') ||
+                             candUrl.includes('sslmode=disable')
                            );
+
+        const isRemoteDb = isRemoteHost || (!isInternalDb && !candUrl.includes('sslmode=disable'));
 
         const config: PoolConfig = {
           connectionString: candUrl,
@@ -1379,39 +1386,52 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ON CONFLICT (code) DO NOTHING;
     `).catch(() => {});
 
-    // Seed default role permissions for Recovery Agent (role_id: 8)
+    // Add missing columns to scooty_recoveries if not present
     await pgPool.query(`
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT 8, id, 'ASSIGNED'
-      FROM permissions
-      WHERE code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_id INT;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_name VARCHAR(150);
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS recovery_agent_phone VARCHAR(50);
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_location TEXT;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_live_location TEXT;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_latitude NUMERIC(10, 7);
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_longitude NUMERIC(10, 7);
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS pickup_photos JSONB DEFAULT '[]';
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS reached_hub_at TIMESTAMPTZ;
+      ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS agent_notes TEXT;
     `).catch(() => {});
 
-    // Seed default role permissions for Hub Incharge (role_id: 5)
+    // Seed default role permissions dynamically by role name
     await pgPool.query(`
       INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT 5, id, 'TEAM'
-      FROM permissions
-      WHERE code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
+      SELECT r.id, p.id, 'ASSIGNED'
+      FROM roles r, permissions p
+      WHERE r.name = 'RECOVERY_AGENT' AND p.code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
-    `).catch(() => {});
 
-    // Seed default role permissions for Super Admin (role_id: 1)
-    await pgPool.query(`
       INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT 1, id, 'ALL'
-      FROM permissions
-      WHERE code LIKE 'recoveries.%'
+      SELECT r.id, p.id, 'TEAM'
+      FROM roles r, permissions p
+      WHERE r.name = 'HUB_INCHARGE' AND p.code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
-    `).catch(() => {});
 
-    // Seed default role permissions for Manager (role_id: 3)
-    await pgPool.query(`
       INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT 3, id, 'ALL'
-      FROM permissions
-      WHERE code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
+      SELECT r.id, p.id, 'ALL'
+      FROM roles r, permissions p
+      WHERE r.name = 'SUPER_ADMIN' AND p.code LIKE 'recoveries.%'
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'ALL'
+      FROM roles r, permissions p
+      WHERE r.name = 'MANAGER' AND p.code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'ASSIGNED'
+      FROM roles r, permissions p
+      WHERE r.name = 'TECHNICIAN' AND p.code IN ('recoveries.view', 'recoveries.inspect')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
     `).catch(() => {});
 

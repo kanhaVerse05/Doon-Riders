@@ -57,7 +57,7 @@ export const login = async (req: Request, res: Response) => {
       if (permRes.rows.length > 0) {
         permissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
       } else {
-        const standardRoles = ['SUPER_ADMIN', 'MANAGER', 'SALES_EXECUTIVE', 'HUB_INCHARGE', 'TECHNICIAN', 'CUSTOMER_SUPPORT'];
+        const standardRoles = ['SUPER_ADMIN', 'MANAGER', 'SALES_EXECUTIVE', 'HUB_INCHARGE', 'TECHNICIAN', 'CUSTOMER_SUPPORT', 'RECOVERY_AGENT', 'PRE_BOOKING'];
         if (standardRoles.includes(u.role_name)) {
           permissions = getPermissionsForRole(u.role_name);
         } else {
@@ -147,6 +147,8 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
       SALES_EXECUTIVE: 'rahul.sales@doonriders.com',
       HUB_INCHARGE: 'hub.isbt@doonriders.com',
       TECHNICIAN: 'amit.tech@doonriders.com',
+      RECOVERY_AGENT: 'doonridersmain@gmail.com',
+      PRE_BOOKING: 'r8986257@gmail.com',
     };
 
     const targetEmail = emailMap[role] || 'doonridersmain@gmail.com';

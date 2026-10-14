@@ -69,6 +69,13 @@ export const Sidebar: React.FC = () => {
               href: '/admin/technician/jobs',
               icon: CheckCircle2,
               badge: 'My Tasks'
+            },
+            {
+              name: 'Scooty Recoveries',
+              href: '/admin/recoveries',
+              icon: ShieldAlert,
+              permission: 'recoveries.view',
+              badge: 'Inspection'
             }
           ]
         }
@@ -82,6 +89,7 @@ export const Sidebar: React.FC = () => {
               name: 'Scooty Recoveries',
               href: '/admin/recoveries',
               icon: ShieldAlert,
+              permission: 'recoveries.view',
               badge: 'Field Pickup'
             }
           ]
@@ -114,6 +122,7 @@ export const Sidebar: React.FC = () => {
               name: 'Scooty Recoveries',
               href: '/admin/recoveries',
               icon: ShieldAlert,
+              permission: 'recoveries.view',
               badge: '₹1000'
             },
             {
@@ -274,7 +283,8 @@ export const Sidebar: React.FC = () => {
             const visibleItems = grp.items.filter(item => {
               if (isSuperAdmin) return true;
               if (isPreBookingUser && item.href === '/admin/pre-bookings') return true;
-              return Boolean(item.permission) && hasPermission(item.permission!);
+              if (!item.permission) return true;
+              return hasPermission(item.permission);
             });
             if (visibleItems.length === 0) return null;
 

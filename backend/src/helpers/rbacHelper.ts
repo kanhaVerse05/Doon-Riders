@@ -44,6 +44,16 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
       { code: 'pre_bookings.delete', scope: 'ALL' },
       { code: 'pre_bookings.export', scope: 'ALL' },
       { code: 'pre_bookings.settings', scope: 'ALL' },
+      { code: 'recoveries.view', scope: 'ALL' },
+      { code: 'recoveries.view_all', scope: 'ALL' },
+      { code: 'recoveries.create', scope: 'ALL' },
+      { code: 'recoveries.accept', scope: 'ALL' },
+      { code: 'recoveries.pickup', scope: 'ALL' },
+      { code: 'recoveries.reached_hub', scope: 'ALL' },
+      { code: 'recoveries.assign_tech', scope: 'ALL' },
+      { code: 'recoveries.inspect', scope: 'ALL' },
+      { code: 'recoveries.settle', scope: 'ALL' },
+      { code: 'recoveries.delete', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' },
       { code: 'users.view', scope: 'ALL' },
       { code: 'roles.view', scope: 'ALL' },
@@ -77,6 +87,10 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
       { code: 'pre_bookings.create', scope: 'ALL' },
       { code: 'pre_bookings.status_update', scope: 'ALL' },
       { code: 'pre_bookings.export', scope: 'ALL' },
+      { code: 'recoveries.view', scope: 'ALL' },
+      { code: 'recoveries.view_all', scope: 'ALL' },
+      { code: 'recoveries.create', scope: 'ALL' },
+      { code: 'recoveries.settle', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' }
     ];
   }
@@ -90,7 +104,8 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
       { code: 'complaints.track', scope: 'ALL' },
       { code: 'customers.view', scope: 'ALL' },
       { code: 'fleet.view', scope: 'ALL' },
-      { code: 'pre_bookings.view', scope: 'ALL' }
+      { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'recoveries.view', scope: 'ALL' }
     ];
   }
 
@@ -103,7 +118,9 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
       { code: 'repairs.view', scope: 'ASSIGNED' },
       { code: 'repairs.update', scope: 'ASSIGNED' },
       { code: 'inventory.view', scope: 'ALL' },
-      { code: 'fleet.view', scope: 'ASSIGNED' }
+      { code: 'fleet.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.inspect', scope: 'ASSIGNED' }
     ];
   }
 
@@ -119,7 +136,21 @@ export const getPermissionsForRole = (roleName: string): UserRolePermission[] =>
       { code: 'repairs.update', scope: 'TEAM' },
       { code: 'inventory.view', scope: 'TEAM' },
       { code: 'fleet.view', scope: 'TEAM' },
-      { code: 'pre_bookings.view', scope: 'TEAM' }
+      { code: 'pre_bookings.view', scope: 'TEAM' },
+      { code: 'recoveries.view', scope: 'TEAM' },
+      { code: 'recoveries.create', scope: 'TEAM' },
+      { code: 'recoveries.assign_tech', scope: 'TEAM' },
+      { code: 'recoveries.settle', scope: 'TEAM' }
+    ];
+  }
+
+  if (norm === 'RECOVERY_AGENT' || norm.includes('RECOVERY')) {
+    return [
+      { code: 'dashboard.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.accept', scope: 'ASSIGNED' },
+      { code: 'recoveries.pickup', scope: 'ASSIGNED' },
+      { code: 'recoveries.reached_hub', scope: 'ASSIGNED' }
     ];
   }
 

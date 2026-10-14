@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authenticateJwt } from '../../middleware/authMiddleware';
 import {
   getAllRecoveries,
   getRecoveryById,
@@ -13,6 +14,8 @@ import {
 } from '../../controllers/admin/adminRecoveriesController';
 
 const router = Router();
+
+router.use(authenticateJwt);
 
 // Scooty Recoveries API Endpoints
 router.get('/', getAllRecoveries);

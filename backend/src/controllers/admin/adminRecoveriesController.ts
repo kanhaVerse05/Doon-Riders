@@ -129,19 +129,24 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
         let pIndex = 1;
 
         // Role-based scoping: Hub Incharge only sees their Hub's recoveries, Tech sees their jobs, Agent sees their tasks
-        if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
-          whereClauses.push(`r.hub_id = $${pIndex}`);
-          params.push((req.user as any).hub_id);
-          pIndex++;
-        } else if (userRole.includes('TECH')) {
-          whereClauses.push(`r.technician_id = $${pIndex}`);
-          params.push(userId);
-          pIndex++;
-        } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
-          whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(COALESCE(r.recovered_by, '')) = $${pIndex + 1} OR LOWER(COALESCE(r.recovery_agent_name, '')) = $${pIndex + 1})`);
-          params.push(userId);
-          params.push((req.user?.name || '').toLowerCase());
-          pIndex += 2;
+        const isSuperOrManager = userRole.includes('SUPER') || userRole.includes('MANAGER');
+        const hasExplicitViewAll = (req.user?.permissions || []).some((p: any) => p.code === 'recoveries.view_all');
+
+        if (!isSuperOrManager && !hasExplicitViewAll) {
+          if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
+            whereClauses.push(`r.hub_id = $${pIndex}`);
+            params.push((req.user as any).hub_id);
+            pIndex++;
+          } else if (userRole.includes('TECH')) {
+            whereClauses.push(`r.technician_id = $${pIndex}`);
+            params.push(userId);
+            pIndex++;
+          } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
+            whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(COALESCE(r.recovered_by, '')) = $${pIndex + 1} OR LOWER(COALESCE(r.recovery_agent_name, '')) = $${pIndex + 1})`);
+            params.push(userId);
+            params.push((req.user?.name || '').toLowerCase());
+            pIndex += 2;
+          }
         }
 
         if (searchTerm) {
@@ -443,7 +448,17 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const recoveryNumber = `DR-REC-${1000 + (memoryStore.scootyRecoveries?.length || 0) + 1}`;
+    let recoveryNumber = `DR-REC-${Date.now().toString().slice(-6)}`;
+    if (getDbStatus()) {
+      try {
+        const maxRes = await pool.query('SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM scooty_recoveries');
+        const nextId = Number(maxRes.rows[0]?.next_id || 1);
+        recoveryNumber = `DR-REC-${1000 + nextId}`;
+      } catch (_) {}
+    } else {
+      const nextId = (memoryStore.scootyRecoveries?.length || 0) + 1;
+      recoveryNumber = `DR-REC-${1000 + nextId}`;
+    }
     const now = new Date().toISOString();
     const secDeposit = Number(security_deposit_amount) >= 0 ? Number(security_deposit_amount) : 2000.00;
     const recFee = Number(recovery_charge) >= 0 ? Number(recovery_charge) : 1000.00;
@@ -589,8 +604,72 @@ export const createRecovery = async (req: AuthRequest, res: Response) => {
             now
           ]
         );
-      } catch (dbErr) {
-        console.warn('[createRecovery] DB insert error, falling back to memoryStore:', dbErr);
+      } catch (dbErr: any) {
+        console.error('[createRecovery] DB insert error:', dbErr);
+        if (dbErr?.code === '23505') {
+          try {
+            newRecovery.recovery_number = `DR-REC-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 90 + 10)}`;
+            const retryRes = await pool.query(
+              `INSERT INTO scooty_recoveries (
+                recovery_number, rider_name, rider_phone, scooter_number, scooter_id,
+                pickup_location, recovery_agent_id, recovery_agent_name, recovery_agent_phone,
+                hub_id, hub_name, hub_incharge_id, hub_incharge_name, recovered_by, recovery_date, recovery_time,
+                recovery_charge, security_deposit_amount, technician_id, technician_name,
+                technician_phone, technician_code, status, damage_items, gross_damage_total,
+                payable_damage_total, waived_damage_total, total_charges, settlement_type, refund_amount_to_rider,
+                due_amount_from_rider, rider_payment_status, recovery_reason, initial_remarks, created_by_id,
+                created_by_name, created_by_role, created_at, updated_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
+              RETURNING id`,
+              [
+                newRecovery.recovery_number,
+                newRecovery.rider_name,
+                newRecovery.rider_phone,
+                newRecovery.scooter_number,
+                newRecovery.scooter_id,
+                newRecovery.pickup_location,
+                newRecovery.recovery_agent_id,
+                newRecovery.recovery_agent_name,
+                newRecovery.recovery_agent_phone,
+                newRecovery.hub_id,
+                newRecovery.hub_name,
+                newRecovery.hub_incharge_id,
+                newRecovery.hub_incharge_name,
+                newRecovery.recovered_by,
+                newRecovery.recovery_date,
+                newRecovery.recovery_time,
+                newRecovery.recovery_charge,
+                newRecovery.security_deposit_amount,
+                newRecovery.technician_id,
+                newRecovery.technician_name,
+                newRecovery.technician_phone,
+                newRecovery.technician_code,
+                newRecovery.status,
+                JSON.stringify(newRecovery.damage_items),
+                newRecovery.gross_damage_total,
+                newRecovery.payable_damage_total,
+                newRecovery.waived_damage_total,
+                newRecovery.total_charges,
+                newRecovery.settlement_type,
+                newRecovery.refund_amount_to_rider,
+                newRecovery.due_amount_from_rider,
+                newRecovery.rider_payment_status,
+                newRecovery.recovery_reason,
+                newRecovery.initial_remarks,
+                newRecovery.created_by_id,
+                newRecovery.created_by_name,
+                newRecovery.created_by_role,
+                newRecovery.created_at,
+                newRecovery.updated_at
+              ]
+            );
+            if (retryRes.rows.length > 0) {
+              newRecovery.id = retryRes.rows[0].id;
+            }
+          } catch (retryErr) {
+            console.error('[createRecovery] Retry DB insert failed:', retryErr);
+          }
+        }
       }
     }
 
