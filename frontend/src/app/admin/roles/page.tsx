@@ -67,10 +67,12 @@ const DEFAULT_SYSTEM_ROLES: RoleItem[] = [
   { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', description: 'Operational overview, booking handling, and branch reports', is_system: true },
   { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', description: 'Direct lead conversion and customer onboarding', is_system: true },
   { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', description: 'Hub fleet inventory and scooter repairs coordinator', is_system: false },
-  { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, job card execution, and parts replacement', is_system: false }
+  { id: 6, name: 'TECHNICIAN', display_name: 'Technician', description: 'Scooter diagnostics, job card execution, and parts replacement', is_system: false },
+  { id: 8, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', description: 'Field scooty recovery, GPS pickup, and 4-angle photo uploads', is_system: false }
 ];
 
 const SUGGESTED_ROLES = [
+  { title: 'Recovery Agent', desc: 'Field scooty recovery, GPS pickup, and 4-angle photo uploads' },
   { title: 'Technician', desc: 'Scooter repairs, parts replacement, and workshop job cards' },
   { title: 'Hub Incharge', desc: 'Hub station operations, charging swaps, and fleet supervisor' },
   { title: 'Workshop Manager', desc: 'Workshop queue, parts inventory management, and technician lead' },
@@ -161,6 +163,18 @@ function RolesAndPermissionsContent() {
     { id: 37, code: 'reports.leads', module: 'Reports', description: 'View marketing campaign ROI and ad-set performance' },
     { id: 38, code: 'reports.export', module: 'Reports', description: 'Export analytical reports and financial summaries' },
 
+    // Scooty Recovery
+    { id: 50, code: 'recoveries.view', module: 'Scooty Recovery', description: 'View scooty recovery tickets and status tracking' },
+    { id: 51, code: 'recoveries.view_all', module: 'Scooty Recovery', description: 'View full company-wide vehicle recoveries across hubs' },
+    { id: 52, code: 'recoveries.create', module: 'Scooty Recovery', description: 'Assign / Log new scooty recovery request' },
+    { id: 53, code: 'recoveries.accept', module: 'Scooty Recovery', description: 'Accept assigned recovery request (Recovery Agent)' },
+    { id: 54, code: 'recoveries.pickup', module: 'Scooty Recovery', description: 'Record vehicle pickup with live GPS & 4 photos' },
+    { id: 55, code: 'recoveries.reached_hub', module: 'Scooty Recovery', description: 'Mark scooty safely arrived at service hub' },
+    { id: 56, code: 'recoveries.assign_tech', module: 'Scooty Recovery', description: 'Assign technician for damage inspection' },
+    { id: 57, code: 'recoveries.inspect', module: 'Scooty Recovery', description: 'Submit technician damage inspection & parts replaced' },
+    { id: 58, code: 'recoveries.settle', module: 'Scooty Recovery', description: 'Approve final settlement calculation & issue slip' },
+    { id: 59, code: 'recoveries.delete', module: 'Scooty Recovery', description: 'Delete or cancel scooty recovery record' },
+
     // Team Management
     { id: 39, code: 'users.view', module: 'Team Directory', description: 'View team member directory and employee details' },
     { id: 40, code: 'users.create', module: 'Team Directory', description: 'Create and invite new team user accounts' },
@@ -210,8 +224,11 @@ function RolesAndPermissionsContent() {
       } else if (norm === 'PRE_BOOKING' || norm.includes('PRE_BOOK') || norm.includes('BOOKING')) {
         enabled = ['pre_bookings.view', 'pre_bookings.create', 'pre_bookings.status_update'].includes(p.code);
         scope = 'ALL';
+      } else if (norm === 'RECOVERY_AGENT' || norm.includes('RECOVERY')) {
+        enabled = ['recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub'].includes(p.code);
+        scope = 'ASSIGNED';
       } else if (norm === 'MANAGER') {
-        enabled = ['Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports'].includes(p.module) && !p.code.includes('.delete');
+        enabled = ['Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports'].includes(p.module) && !p.code.includes('.delete');
         scope = 'ALL';
       } else if (norm === 'SALES_EXECUTIVE') {
         enabled = [
@@ -222,10 +239,13 @@ function RolesAndPermissionsContent() {
         ].includes(p.code);
         scope = 'ASSIGNED';
       } else if (norm === 'TECHNICIAN' || norm.includes('TECH')) {
-        enabled = ['repairs.view', 'repairs.update', 'inventory.view', 'fleet.view'].includes(p.code);
+        enabled = ['repairs.view', 'repairs.update', 'inventory.view', 'fleet.view', 'recoveries.view', 'recoveries.inspect'].includes(p.code);
         scope = 'ASSIGNED';
       } else if (norm === 'HUB_INCHARGE' || norm.includes('HUB')) {
-        enabled = ['repairs.view', 'repairs.create', 'repairs.update', 'inventory.view', 'fleet.view', 'fleet.assign', 'fleet.maintenance'].includes(p.code);
+        enabled = [
+          'repairs.view', 'repairs.create', 'repairs.update', 'inventory.view', 'fleet.view', 'fleet.assign', 'fleet.maintenance',
+          'recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle'
+        ].includes(p.code);
         scope = 'TEAM';
       } else {
         // Any custom role: starts with 0 rights (all disabled) until explicitly configured & saved by admin
@@ -519,7 +539,7 @@ function RolesAndPermissionsContent() {
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const modules = ['ALL', 'Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Reports', 'Team Directory'];
+  const modules = ['ALL', 'Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports', 'Team Directory'];
 
   const filteredPermissions = allPermissions.filter(p => {
     const matchesTab = activeModuleTab === 'ALL' || p.module === activeModuleTab;

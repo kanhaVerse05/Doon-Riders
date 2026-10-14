@@ -60,8 +60,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       const isSuper = user.roleName === 'SUPER_ADMIN' || user.roleName?.includes('SUPER');
       const isTech = user.roleName === 'TECHNICIAN' || user.roleName?.includes('TECH');
       const isHub = user.roleName === 'HUB_INCHARGE' || user.roleName?.includes('HUB');
+      const isRecovery = user.roleName === 'RECOVERY_AGENT' || user.roleName?.includes('RECOVERY');
+
       if (isTech && !pathname?.startsWith('/admin/technician')) {
         router.replace('/admin/technician/jobs');
+      } else if (isRecovery && !pathname?.startsWith('/admin/recoveries')) {
+        router.replace('/admin/recoveries');
       } else if (isHub && (pathname === '/admin' || pathname === '/admin/dashboard' || pathname?.startsWith('/admin/leads') || pathname?.startsWith('/admin/customers') || pathname?.startsWith('/admin/gallery') || pathname?.startsWith('/admin/pricing') || pathname?.startsWith('/admin/reports') || pathname?.startsWith('/admin/users') || pathname?.startsWith('/admin/roles') || pathname?.startsWith('/admin/pre-bookings'))) {
         router.replace('/admin/complaints');
       } else if (!isSuper) {
@@ -69,7 +73,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // 1. Redirect away from root admin or dashboard if no dashboard permission
         if ((pathname === '/admin' || pathname === '/admin/dashboard') && !hasPermission('dashboard.view')) {
-          if (isPreBooking || hasPermission('pre_bookings.view')) {
+          if (isRecovery || hasPermission('recoveries.view')) {
+            router.replace('/admin/recoveries');
+          } else if (isPreBooking || hasPermission('pre_bookings.view')) {
             router.replace('/admin/pre-bookings');
           } else if (hasPermission('leads.view')) {
             router.replace('/admin/leads');
@@ -86,6 +92,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // 2. Protect unauthorized specific routes
+        if (pathname?.startsWith('/admin/recoveries') && !hasPermission('recoveries.view') && !isRecovery && !isHub) {
+          router.replace('/admin/pre-bookings');
+          return;
+        }
         if (pathname?.startsWith('/admin/reports') && !hasPermission('reports.view')) {
           router.replace('/admin/pre-bookings');
           return;

@@ -37,13 +37,23 @@ export const getRolesAndPermissions = async (req: AuthRequest, res: Response) =>
           { id: 5, code: 'repair_jobs.view', module: 'Repair Jobs', description: 'View repair jobs' },
           { id: 6, code: 'repair_jobs.edit', module: 'Repair Jobs', description: 'Edit & update repair jobs' },
           { id: 7, code: 'inventory.view', module: 'Inventory', description: 'View inventory' },
-          { id: 8, code: 'inventory.edit', module: 'Inventory', description: 'Manage inventory stock' }
+          { id: 8, code: 'inventory.edit', module: 'Inventory', description: 'Manage inventory stock' },
+          { id: 9, code: 'recoveries.view', module: 'Scooty Recovery', description: 'View scooty recovery tickets and status' },
+          { id: 10, code: 'recoveries.accept', module: 'Scooty Recovery', description: 'Accept assigned recovery request' },
+          { id: 11, code: 'recoveries.pickup', module: 'Scooty Recovery', description: 'Record vehicle pickup with GPS & 4 photos' },
+          { id: 12, code: 'recoveries.reached_hub', module: 'Scooty Recovery', description: 'Mark scooty reached service hub' },
+          { id: 13, code: 'recoveries.assign_tech', module: 'Scooty Recovery', description: 'Assign technician for damage inspection' },
+          { id: 14, code: 'recoveries.settle', module: 'Scooty Recovery', description: 'Approve final settlement and generate slip' }
         ],
         rolePermissions: [
           { role_id: 1, permission_id: 1, scope: 'ALL', code: 'dashboard.view' },
           { role_id: 1, permission_id: 2, scope: 'ALL', code: 'leads.view' },
           { role_id: 1, permission_id: 3, scope: 'ALL', code: 'reports.view' },
-          { role_id: 1, permission_id: 4, scope: 'ALL', code: 'roles.view' }
+          { role_id: 1, permission_id: 4, scope: 'ALL', code: 'roles.view' },
+          { role_id: 8, permission_id: 9, scope: 'ASSIGNED', code: 'recoveries.view' },
+          { role_id: 8, permission_id: 10, scope: 'ASSIGNED', code: 'recoveries.accept' },
+          { role_id: 8, permission_id: 11, scope: 'ASSIGNED', code: 'recoveries.pickup' },
+          { role_id: 8, permission_id: 12, scope: 'ASSIGNED', code: 'recoveries.reached_hub' }
         ]
       }
     });

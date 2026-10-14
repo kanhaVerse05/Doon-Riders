@@ -53,6 +53,7 @@ export const Sidebar: React.FC = () => {
   const isSalesExec = user?.roleName === 'SALES_EXECUTIVE';
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
   const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
+  const isRecoveryAgent = user?.roleName === 'RECOVERY_AGENT' || user?.roleName?.includes('RECOVERY');
   const isPreBookingUser = 
     user?.roleName === 'PRE_BOOKING' || 
     user?.roleName?.includes('PRE_BOOK') || 
@@ -68,6 +69,20 @@ export const Sidebar: React.FC = () => {
               href: '/admin/technician/jobs',
               icon: CheckCircle2,
               badge: 'My Tasks'
+            }
+          ]
+        }
+      ]
+    : isRecoveryAgent
+    ? [
+        {
+          title: 'RECOVERY AGENT WORKSPACE',
+          items: [
+            {
+              name: 'Scooty Recoveries',
+              href: '/admin/recoveries',
+              icon: ShieldAlert,
+              badge: 'Field Pickup'
             }
           ]
         }
@@ -145,7 +160,7 @@ export const Sidebar: React.FC = () => {
               name: 'Scooty Recoveries',
               href: '/admin/recoveries',
               icon: ShieldAlert,
-              permission: 'fleet.view',
+              permission: 'recoveries.view',
               badge: 'Recovery'
             },
             {

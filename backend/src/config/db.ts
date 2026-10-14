@@ -1363,6 +1363,58 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ON CONFLICT (code) DO NOTHING;
     `).catch(() => {});
 
+    // Ensure Scooty Recovery permissions exist in permissions table
+    await pgPool.query(`
+      INSERT INTO permissions (code, module, description) VALUES
+        ('recoveries.view', 'Scooty Recovery', 'View scooty recovery tickets and status'),
+        ('recoveries.view_all', 'Scooty Recovery', 'View all company recoveries across hubs'),
+        ('recoveries.create', 'Scooty Recovery', 'Assign new scooty recovery request'),
+        ('recoveries.accept', 'Scooty Recovery', 'Accept assigned recovery request'),
+        ('recoveries.pickup', 'Scooty Recovery', 'Record vehicle pickup with GPS & 4 photos'),
+        ('recoveries.reached_hub', 'Scooty Recovery', 'Mark scooty reached service hub'),
+        ('recoveries.assign_tech', 'Scooty Recovery', 'Assign technician for damage inspection'),
+        ('recoveries.inspect', 'Scooty Recovery', 'Submit technician damage inspection report'),
+        ('recoveries.settle', 'Scooty Recovery', 'Approve final settlement and generate slip'),
+        ('recoveries.delete', 'Scooty Recovery', 'Delete or cancel recovery record')
+      ON CONFLICT (code) DO NOTHING;
+    `).catch(() => {});
+
+    // Seed default role permissions for Recovery Agent (role_id: 8)
+    await pgPool.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT 8, id, 'ASSIGNED'
+      FROM permissions
+      WHERE code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+    `).catch(() => {});
+
+    // Seed default role permissions for Hub Incharge (role_id: 5)
+    await pgPool.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT 5, id, 'TEAM'
+      FROM permissions
+      WHERE code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+    `).catch(() => {});
+
+    // Seed default role permissions for Super Admin (role_id: 1)
+    await pgPool.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT 1, id, 'ALL'
+      FROM permissions
+      WHERE code LIKE 'recoveries.%'
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+    `).catch(() => {});
+
+    // Seed default role permissions for Manager (role_id: 3)
+    await pgPool.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT 3, id, 'ALL'
+      FROM permissions
+      WHERE code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
+      ON CONFLICT (role_id, permission_id) DO NOTHING;
+    `).catch(() => {});
+
     // 2. Seed Users if empty
     const userCount = await pgPool.query('SELECT COUNT(*) FROM users');
     if (parseInt(userCount.rows[0].count, 10) === 0) {

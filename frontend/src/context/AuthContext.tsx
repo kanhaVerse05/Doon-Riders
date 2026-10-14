@@ -60,6 +60,15 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'inventory.manage', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'recoveries.view', scope: 'ALL' },
+      { code: 'recoveries.view_all', scope: 'ALL' },
+      { code: 'recoveries.create', scope: 'ALL' },
+      { code: 'recoveries.accept', scope: 'ALL' },
+      { code: 'recoveries.pickup', scope: 'ALL' },
+      { code: 'recoveries.reached_hub', scope: 'ALL' },
+      { code: 'recoveries.assign_tech', scope: 'ALL' },
+      { code: 'recoveries.inspect', scope: 'ALL' },
+      { code: 'recoveries.settle', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' },
       { code: 'users.view', scope: 'ALL' },
       { code: 'roles.view', scope: 'ALL' },
@@ -87,6 +96,10 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'complaints.assign', scope: 'ALL' },
       { code: 'inventory.view', scope: 'ALL' },
       { code: 'pre_bookings.view', scope: 'ALL' },
+      { code: 'recoveries.view', scope: 'ALL' },
+      { code: 'recoveries.view_all', scope: 'ALL' },
+      { code: 'recoveries.create', scope: 'ALL' },
+      { code: 'recoveries.settle', scope: 'ALL' },
       { code: 'reports.view', scope: 'ALL' }
     ];
   }
@@ -98,7 +111,9 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'complaints.view', scope: 'ASSIGNED' },
       { code: 'complaints.update', scope: 'ASSIGNED' },
       { code: 'inventory.view', scope: 'ALL' },
-      { code: 'fleet.view', scope: 'ASSIGNED' }
+      { code: 'fleet.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.inspect', scope: 'ASSIGNED' }
     ];
   }
 
@@ -113,7 +128,20 @@ const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
       { code: 'complaints.assign', scope: 'TEAM' },
       { code: 'inventory.view', scope: 'TEAM' },
       { code: 'fleet.view', scope: 'TEAM' },
-      { code: 'pre_bookings.view', scope: 'TEAM' }
+      { code: 'pre_bookings.view', scope: 'TEAM' },
+      { code: 'recoveries.view', scope: 'TEAM' },
+      { code: 'recoveries.create', scope: 'TEAM' },
+      { code: 'recoveries.assign_tech', scope: 'TEAM' },
+      { code: 'recoveries.settle', scope: 'TEAM' }
+    ];
+  }
+
+  if (norm === 'RECOVERY_AGENT' || norm.includes('RECOVERY')) {
+    return [
+      { code: 'recoveries.view', scope: 'ASSIGNED' },
+      { code: 'recoveries.accept', scope: 'ASSIGNED' },
+      { code: 'recoveries.pickup', scope: 'ASSIGNED' },
+      { code: 'recoveries.reached_hub', scope: 'ASSIGNED' }
     ];
   }
 
