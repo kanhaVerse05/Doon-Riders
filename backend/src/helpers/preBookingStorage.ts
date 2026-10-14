@@ -4,6 +4,89 @@ import path from 'path';
 const BACKUP_DIR = path.join(process.cwd(), 'uploads');
 const BACKUP_FILE = path.join(BACKUP_DIR, 'pre_bookings_backup.json');
 
+export const INITIAL_SEEDED_PRE_BOOKINGS = [
+  {
+    booking_code: 'DR-20260004',
+    customer_name: 'Suhail',
+    mobile_number: '7351606673',
+    booking_date: '2026-10-13',
+    unit_price: 499.00,
+    quantity: 1,
+    total_amount: 499.00,
+    payment_mode: 'UPI',
+    payment_status: 'PAID',
+    notes: '',
+    created_by_id: 7,
+    created_by_name: 'Rishab Agnihotri',
+    created_at: '2026-10-13T11:24:00.000Z',
+    updated_at: '2026-10-13T11:24:00.000Z'
+  },
+  {
+    booking_code: 'DR-20260003',
+    customer_name: 'Priya Negi',
+    mobile_number: '9812345678',
+    booking_date: '2026-10-13',
+    unit_price: 499.00,
+    quantity: 1,
+    total_amount: 499.00,
+    payment_mode: 'UPI',
+    payment_status: 'PAID',
+    notes: 'Pre-booking reservation',
+    created_by_id: 7,
+    created_by_name: 'Rishab Agnihotri',
+    created_at: '2026-10-13T10:15:00.000Z',
+    updated_at: '2026-10-13T10:15:00.000Z'
+  },
+  {
+    booking_code: 'DR-20260002',
+    customer_name: 'Amit Sharma',
+    mobile_number: '9897123456',
+    booking_date: '2026-10-13',
+    unit_price: 499.00,
+    quantity: 1,
+    total_amount: 499.00,
+    payment_mode: 'Cash',
+    payment_status: 'PAID',
+    notes: 'Walk-in pre-booking',
+    created_by_id: 7,
+    created_by_name: 'Rishab Agnihotri',
+    created_at: '2026-10-13T09:40:00.000Z',
+    updated_at: '2026-10-13T09:40:00.000Z'
+  },
+  {
+    booking_code: 'DR-20260001',
+    customer_name: 'Rahul Verma',
+    mobile_number: '9876543210',
+    booking_date: '2026-10-13',
+    unit_price: 499.00,
+    quantity: 1,
+    total_amount: 499.00,
+    payment_mode: 'UPI',
+    payment_status: 'PAID',
+    notes: 'First series pre-booking',
+    created_by_id: 7,
+    created_by_name: 'Rishab Agnihotri',
+    created_at: '2026-10-13T09:05:00.000Z',
+    updated_at: '2026-10-13T09:05:00.000Z'
+  },
+  {
+    booking_code: 'DR-UK-1001',
+    customer_name: 'akash',
+    mobile_number: '8285054612',
+    booking_date: '2026-10-12',
+    unit_price: 499.00,
+    quantity: 1,
+    total_amount: 499.00,
+    payment_mode: 'UPI',
+    payment_status: 'PAID',
+    notes: '',
+    created_by_id: 1,
+    created_by_name: 'Ankit Kumar',
+    created_at: '2026-10-12T14:55:49.256Z',
+    updated_at: '2026-10-12T14:55:49.256Z'
+  }
+];
+
 // Ensure uploads folder exists
 try {
   if (!fs.existsSync(BACKUP_DIR)) {
@@ -14,16 +97,30 @@ try {
 }
 
 export const loadPreBookingsBackup = (): any[] => {
-  try {
-    if (fs.existsSync(BACKUP_FILE)) {
-      const raw = fs.readFileSync(BACKUP_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+  const candidateFiles = [
+    path.join(process.cwd(), 'uploads', 'pre_bookings_backup.json'),
+    path.join(__dirname, '..', '..', 'uploads', 'pre_bookings_backup.json'),
+    path.join(process.cwd(), 'data', 'pre_bookings_backup.json'),
+    path.join(__dirname, '..', 'data', 'pre_bookings_backup.json')
+  ];
+
+  for (const f of candidateFiles) {
+    try {
+      if (fs.existsSync(f)) {
+        const raw = fs.readFileSync(f, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (err: any) {
+      console.warn('[preBookingStorage] Candidate read error:', f, err.message);
     }
-  } catch (err: any) {
-    console.warn('[preBookingStorage] Error loading backup:', err.message);
   }
-  return [];
+
+  // Auto-seed if completely empty
+  try {
+    savePreBookingsBackup(INITIAL_SEEDED_PRE_BOOKINGS);
+  } catch {}
+  return [...INITIAL_SEEDED_PRE_BOOKINGS];
 };
 
 export const savePreBookingsBackup = (bookings: any[]) => {

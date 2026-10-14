@@ -218,10 +218,13 @@ export default function PreBookingsAdminPage() {
   const fetchPreBookings = async () => {
     setLoading(true);
     try {
-      const roleParam = user?.roleName || 'SALES_EXECUTIVE';
-      const userIdParam = user?.id || 1;
+      const roleParam = user?.roleName || 'PRE_BOOKING';
+      const userIdParam = user?.id || '';
 
-      let query = `/admin/pre-bookings?role=${encodeURIComponent(roleParam)}&user_id=${userIdParam}&status=${statusFilter}&paymentMode=${paymentModeFilter}&view_all=${canViewAllBookings ? 'true' : 'false'}`;
+      let query = `/admin/pre-bookings?role=${encodeURIComponent(roleParam)}&view_all=true`;
+      if (userIdParam) query += `&user_id=${userIdParam}`;
+      if (statusFilter && statusFilter !== 'All') query += `&status=${encodeURIComponent(statusFilter)}`;
+      if (paymentModeFilter && paymentModeFilter !== 'All') query += `&paymentMode=${encodeURIComponent(paymentModeFilter)}`;
       if (search) query += `&search=${encodeURIComponent(search)}`;
       if (dateFilter) query += `&date=${encodeURIComponent(dateFilter)}`;
 

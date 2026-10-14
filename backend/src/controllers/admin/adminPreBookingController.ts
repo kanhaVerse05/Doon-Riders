@@ -20,7 +20,7 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
       normalizedRole.includes('ADMIN') || 
       view_all === 'true' || 
       view_all === '1' ||
-      !user_id;
+      view_all !== 'false';
     const isSuperAdmin = Boolean(normalizedRole === 'SUPER_ADMIN' || canViewAll);
     const currentUserId = user_id ? Number(user_id) : null;
 

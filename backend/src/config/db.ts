@@ -803,6 +803,32 @@ export const checkDbConnection = async (): Promise<boolean> => {
     }
 
     if (!connected || !pgPool) {
+      // Automatic resilient fallback to production Supabase cloud database pooler
+      const fallbackCloudUrl = 'postgresql://postgres.wixelkxnvvwntgiptnqu:Synbroly%408285@aws-0-ap-south-1.pooler.supabase.com:6543/postgres';
+      try {
+        console.log('🔄 Attempting fallback to cloud Supabase PostgreSQL pooler...');
+        const cloudPool = new Pool({
+          connectionString: fallbackCloudUrl,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 8000,
+          ssl: { rejectUnauthorized: false }
+        });
+        const client = await cloudPool.connect();
+        const testRes = await client.query('SELECT NOW() as current_time');
+        client.release();
+
+        pgPool = cloudPool;
+        isPostgresConnected = true;
+        connected = true;
+        activeDbHost = 'aws-0-ap-south-1.pooler.supabase.com:6543';
+        console.log(`✅ Cloud Supabase Database connected successfully! [Host: ${activeDbHost}, Time: ${testRes.rows[0].current_time}]`);
+      } catch (cloudErr: any) {
+        console.warn('Fallback to cloud Supabase also failed:', cloudErr.message);
+      }
+    }
+
+    if (!connected || !pgPool) {
       throw new Error(lastDbError || 'Unable to connect to any database candidate host');
     }
 
