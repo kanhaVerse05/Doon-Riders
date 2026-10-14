@@ -6,6 +6,7 @@ const BACKUP_FILE = path.join(BACKUP_DIR, 'pre_bookings_backup.json');
 
 export const INITIAL_SEEDED_PRE_BOOKINGS = [
   {
+    id: 4,
     booking_code: 'DR-20260004',
     customer_name: 'Suhail',
     mobile_number: '7351606673',
@@ -22,6 +23,7 @@ export const INITIAL_SEEDED_PRE_BOOKINGS = [
     updated_at: '2026-10-13T11:24:00.000Z'
   },
   {
+    id: 3,
     booking_code: 'DR-20260003',
     customer_name: 'Priya Negi',
     mobile_number: '9812345678',
@@ -38,6 +40,7 @@ export const INITIAL_SEEDED_PRE_BOOKINGS = [
     updated_at: '2026-10-13T10:15:00.000Z'
   },
   {
+    id: 2,
     booking_code: 'DR-20260002',
     customer_name: 'Amit Sharma',
     mobile_number: '9897123456',
@@ -54,6 +57,7 @@ export const INITIAL_SEEDED_PRE_BOOKINGS = [
     updated_at: '2026-10-13T09:40:00.000Z'
   },
   {
+    id: 1,
     booking_code: 'DR-20260001',
     customer_name: 'Rahul Verma',
     mobile_number: '9876543210',
@@ -70,6 +74,7 @@ export const INITIAL_SEEDED_PRE_BOOKINGS = [
     updated_at: '2026-10-13T09:05:00.000Z'
   },
   {
+    id: 1001,
     booking_code: 'DR-UK-1001',
     customer_name: 'akash',
     mobile_number: '8285054612',
@@ -146,6 +151,16 @@ export const appendPreBookingBackup = (booking: any) => {
     savePreBookingsBackup(current);
   } catch (err: any) {
     console.warn('[preBookingStorage] Error appending to backup:', err.message);
+  }
+};
+
+export const deletePreBookingBackup = (idOrCode: any) => {
+  try {
+    const current = loadPreBookingsBackup();
+    const filtered = current.filter(b => String(b.id) !== String(idOrCode) && String(b.booking_code) !== String(idOrCode));
+    savePreBookingsBackup(filtered);
+  } catch (err: any) {
+    console.warn('[preBookingStorage] Error deleting from backup:', err.message);
   }
 };
 

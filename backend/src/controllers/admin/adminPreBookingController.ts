@@ -4,6 +4,7 @@ import {
   loadPreBookingsBackup,
   savePreBookingsBackup,
   appendPreBookingBackup,
+  deletePreBookingBackup,
   syncPreBookingsWithDb
 } from '../../helpers/preBookingStorage';
 
@@ -363,14 +364,14 @@ export const deletePreBooking = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (getDbStatus()) {
-      await pool.query('DELETE FROM pre_bookings WHERE id = $1', [id]);
-      return res.json({ success: true, message: 'Pre-booking deleted' });
+      await pool.query('DELETE FROM pre_bookings WHERE id = $1', [id]).catch(() => {});
     }
 
-    // In-memory
     if (memoryStore.preBookings) {
       memoryStore.preBookings = memoryStore.preBookings.filter(b => String(b.id) !== String(id));
     }
+    deletePreBookingBackup(id);
+
     return res.json({ success: true, message: 'Pre-booking deleted' });
   } catch (error: any) {
     console.error('Error deleting pre-booking:', error);
