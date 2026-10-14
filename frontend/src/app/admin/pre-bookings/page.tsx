@@ -36,7 +36,8 @@ import {
   Hash,
   RotateCw,
   SlidersHorizontal,
-  Filter
+  Filter,
+  MessageSquare
 } from 'lucide-react';
 
 interface PreBooking {
@@ -545,13 +546,12 @@ _Please present this receipt confirmation at the hub during vehicle handover._
     return cleaned;
   };
 
-  // Share Receipt on WhatsApp (Directly opens customer 1-on-1 chat with prefilled phone and message)
-  const handleShareWhatsApp = (b: PreBooking) => {
+  // Direct WhatsApp 1-on-1 Chat with Number and Text prefilled
+  const handleDirectWhatsAppChat = (b: PreBooking) => {
     const phoneWithCountry = formatWhatsAppPhone(b.mobile_number);
     const msgText = generateWhatsAppMessage(b);
     const waUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msgText)}`;
 
-    // 1. Immediately open WhatsApp direct chat (Android Intent / iOS Universal Link / Web)
     const link = document.createElement('a');
     link.href = waUrl;
     link.target = '_blank';
@@ -559,27 +559,87 @@ _Please present this receipt confirmation at the hub during vehicle handover._
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
 
-    // 2. Desktop helper: asynchronously copy receipt image to clipboard if supported
-    if (receiptCardRef.current && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-      html2canvas(receiptCardRef.current, {
-        scale: 2,
+  // Share Slip on WhatsApp (Sends Image File + Caption together via Native Share on mobile, or Copies Image + Opens WhatsApp Web on Desktop)
+  const handleShareWhatsApp = async (b: PreBooking) => {
+    setSelectedReceipt(b);
+    setGeneratingImage(true);
+
+    const cleanPhone = b.mobile_number.replace(/\D/g, '');
+    const msgText = generateWhatsAppMessage(b);
+
+    // Auto-copy customer number to clipboard so user can simply paste into WhatsApp search
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cleanPhone);
+      }
+    } catch (e) {}
+
+    // Wait a tick for React to mount the receiptCardRef DOM node if opened from list
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    if (!receiptCardRef.current) {
+      setGeneratingImage(false);
+      handleDirectWhatsAppChat(b);
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(receiptCardRef.current, {
+        scale: 2.5,
         backgroundColor: '#ffffff',
         useCORS: true,
         allowTaint: true,
         logging: false
-      }).then((canvas) => {
-        canvas.toBlob((blob) => {
+      });
+
+      // 1. Mobile Web Share: Attaches Slip Image File + Message Text Caption together directly to WhatsApp!
+      if (typeof navigator !== 'undefined' && navigator.canShare) {
+        try {
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
           if (blob) {
-            navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': blob })
-            ]).then(() => {
-              setToastMessage('📋 Receipt image copied! You can paste (Ctrl+V) it in WhatsApp.');
-              setTimeout(() => setToastMessage(null), 4000);
-            }).catch(() => {});
+            const imageFile = new File([blob], `DOON_Riders_Slip_${b.booking_code}.png`, { type: 'image/png' });
+            if (navigator.canShare({ files: [imageFile] })) {
+              setToastMessage(`📋 Number (${cleanPhone}) copied! WhatsApp me select karein.`);
+              await navigator.share({
+                files: [imageFile],
+                title: `DOON Riders Slip - ${b.booking_code}`,
+                text: msgText
+              });
+              setGeneratingImage(false);
+              return;
+            }
+          }
+        } catch (shareErr) {
+          console.warn('Web share cancelled or unsupported:', shareErr);
+        }
+      }
+
+      // 2. Desktop Browser: Copy image to Clipboard so user can press Ctrl+V in WhatsApp chat
+      try {
+        canvas.toBlob(async (blob) => {
+          if (blob && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+            try {
+              await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob })
+              ]);
+              setToastMessage('📋 Slip image copied to clipboard! Press Ctrl+V in WhatsApp to send Slip + Text.');
+            } catch (clipErr) {
+              console.warn('Clipboard write notice:', clipErr);
+            }
           }
         }, 'image/png');
-      }).catch(() => {});
+      } catch (e) {}
+
+      // Open WhatsApp direct chat
+      handleDirectWhatsAppChat(b);
+    } catch (err) {
+      console.error('WhatsApp slip share error:', err);
+      handleDirectWhatsAppChat(b);
+    } finally {
+      setGeneratingImage(false);
+      setTimeout(() => setToastMessage(null), 4500);
     }
   };
 
@@ -2205,14 +2265,27 @@ _Please present this receipt confirmation at the hub during vehicle handover._
 
             {/* ACTIONS: WHATSAPP SHARE & DONE */}
             <div className="space-y-2 pt-1.5 print:hidden">
-              {/* PRIMARY WHATSAPP SHARE BUTTON */}
+              {/* PRIMARY WHATSAPP SHARE BUTTON (SENDS PHOTO SLIP + TEXT CAPTION) */}
               <button
                 type="button"
                 onClick={() => handleShareWhatsApp(selectedReceipt)}
-                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.98] text-white font-black text-xs uppercase tracking-wider py-3 rounded-2xl shadow-[0_4px_14px_rgba(37,211,102,0.35)] transition flex items-center justify-center gap-2 cursor-pointer"
+                disabled={generatingImage}
+                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.98] text-white font-black text-xs uppercase tracking-wider py-3 rounded-2xl shadow-[0_4px_14px_rgba(37,211,102,0.35)] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
               >
                 <WhatsAppIcon className="w-4 h-4 fill-white" />
-                <span>SEND RECEIPT ON WHATSAPP ({selectedReceipt.mobile_number})</span>
+                <span>
+                  {generatingImage ? 'GENERATING SLIP PHOTO...' : `SEND SLIP ON WHATSAPP (PHOTO + DETAILS)`}
+                </span>
+              </button>
+
+              {/* SECONDARY: DIRECT 1-TAP CHAT WITH NUMBER PRE-FILLED */}
+              <button
+                type="button"
+                onClick={() => handleDirectWhatsAppChat(selectedReceipt)}
+                className="w-full bg-[#EAFBF2] hover:bg-[#D4F7E3] active:bg-[#C2F2D4] text-[#008744] font-bold text-xs uppercase tracking-wider py-2.5 rounded-2xl border border-[#00D96B]/30 transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 text-[#00A854]" />
+                <span>DIRECT CHAT WITH NUMBER ({selectedReceipt.mobile_number})</span>
               </button>
 
               {/* DONE BUTTON */}
