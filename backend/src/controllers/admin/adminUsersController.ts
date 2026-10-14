@@ -15,7 +15,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
     if (getDbStatus()) {
       const query = `
-        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.last_login, u.created_at,
+        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.last_login, u.created_at, u.custom_permissions,
                r.id as role_id, r.name as role_name, r.display_name as role_display_name
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
@@ -306,9 +306,10 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 export const updateUserStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    let { status, roleId, role_name, roleName } = req.body;
+    let { status, roleId, role_name, roleName, custom_permissions, permissions } = req.body;
     let targetRoleId = roleId ? Number(roleId) : null;
     const roleNameHint = (role_name || roleName || '').trim().toUpperCase();
+    const customPermsPayload = custom_permissions || permissions ? JSON.stringify(custom_permissions || permissions) : null;
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
@@ -342,6 +343,12 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
         if (rCheck.rows.length === 0 && (targetRoleId === 7 || targetRoleId === 8 || roleNameHint.includes('PRE_BOOK') || roleNameHint.includes('PRE-BOOK'))) {
           rCheck = await pool.query("SELECT id FROM roles WHERE name = 'PRE_BOOKING' LIMIT 1");
         }
+        if (rCheck.rows.length === 0 && (targetRoleId === 6 || roleNameHint.includes('TECH'))) {
+          rCheck = await pool.query("SELECT id FROM roles WHERE name = 'TECHNICIAN' LIMIT 1");
+        }
+        if (rCheck.rows.length === 0 && (targetRoleId === 5 || roleNameHint.includes('HUB'))) {
+          rCheck = await pool.query("SELECT id FROM roles WHERE name = 'HUB_INCHARGE' LIMIT 1");
+        }
         if (rCheck.rows.length > 0) {
           targetRoleId = rCheck.rows[0].id;
         }
@@ -351,9 +358,10 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
         UPDATE users 
         SET status = COALESCE($1, status),
             role_id = COALESCE($2, role_id),
+            custom_permissions = COALESCE($3::jsonb, custom_permissions),
             updated_at = NOW()
-        WHERE id = $3
-      `, [status, targetRoleId, id]);
+        WHERE id = $4
+      `, [status, targetRoleId, customPermsPayload, id]);
 
       appendOrUpdateUserBackup({ id: Number(id), status, role_id: targetRoleId ? Number(targetRoleId) : undefined });
 
@@ -364,7 +372,8 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
     const user = memoryStore.users.find(u => u.id === Number(id));
     if (user) {
       if (status) user.status = status;
-      if (roleId) user.role_id = Number(roleId);
+      if (targetRoleId) user.role_id = Number(targetRoleId);
+      if (customPermsPayload) user.custom_permissions = JSON.parse(customPermsPayload);
       appendOrUpdateUserBackup({ id: Number(id), status: user.status, role_id: user.role_id });
       return res.json({ success: true, message: 'User updated successfully.' });
     }

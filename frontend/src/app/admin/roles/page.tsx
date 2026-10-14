@@ -479,12 +479,45 @@ function RolesAndPermissionsContent() {
     });
   };
 
-  const handleApplyPreset = (preset: 'FULL' | 'SALES' | 'OPS' | 'TECH' | 'VIEW_ONLY') => {
+  const handleUserRoleChange = (newRoleId: number) => {
     if (!selectedUser) return;
-    let presetRole = 'SALES_EXECUTIVE';
-    if (preset === 'FULL') presetRole = 'SUPER_ADMIN';
-    if (preset === 'OPS') presetRole = 'MANAGER';
-    if (preset === 'TECH') presetRole = 'TECHNICIAN';
+    const targetRole = roles.find(r => Number(r.id) === Number(newRoleId));
+    if (!targetRole) return;
+
+    // 1. Update selectedUser role in teamUsers immediately
+    setTeamUsers(prev => prev.map(u => {
+      if (u.id === selectedUser.id) {
+        return {
+          ...u,
+          role_id: Number(targetRole.id),
+          role: targetRole.name,
+          role_name: targetRole.name,
+          role_display_name: targetRole.display_name,
+          roleDisplayName: targetRole.display_name
+        };
+      }
+      return u;
+    }));
+
+    // 2. Set default permissions map for the newly selected role
+    const newMap = getInitialUserPermissions(targetRole.name);
+    setUserPermissions(prev => ({
+      ...prev,
+      [selectedUser.id]: newMap
+    }));
+  };
+
+  const handleApplyPreset = (preset: 'FULL' | 'SALES' | 'OPS' | 'TECH' | 'RECOVERY' | 'PRE_BOOKING' | 'VIEW_ONLY') => {
+    if (!selectedUser) return;
+    let presetRoleName = 'SALES_EXECUTIVE';
+    if (preset === 'FULL') presetRoleName = 'SUPER_ADMIN';
+    if (preset === 'OPS') presetRoleName = 'MANAGER';
+    if (preset === 'TECH') presetRoleName = 'TECHNICIAN';
+    if (preset === 'RECOVERY') presetRoleName = 'RECOVERY_AGENT';
+    if (preset === 'PRE_BOOKING') presetRoleName = 'PRE_BOOKING';
+
+    const matchedRole = roles.find(r => r.name === presetRoleName || r.name.includes(presetRoleName));
+
     if (preset === 'VIEW_ONLY') {
       const viewMap: any = {};
       allPermissions.forEach(p => {
@@ -500,7 +533,23 @@ function RolesAndPermissionsContent() {
       return;
     }
 
-    const newMap = getInitialUserPermissions(presetRole);
+    if (matchedRole) {
+      setTeamUsers(prev => prev.map(u => {
+        if (u.id === selectedUser.id) {
+          return {
+            ...u,
+            role_id: Number(matchedRole.id),
+            role: matchedRole.name,
+            role_name: matchedRole.name,
+            role_display_name: matchedRole.display_name,
+            roleDisplayName: matchedRole.display_name
+          };
+        }
+        return u;
+      }));
+    }
+
+    const newMap = getInitialUserPermissions(presetRoleName);
     setUserPermissions(prev => ({
       ...prev,
       [selectedUser.id]: newMap
@@ -534,6 +583,13 @@ function RolesAndPermissionsContent() {
         roleName: selectedUser.role_name || selectedUser.role,
         permissions: userPermissions[selectedUser.id]
       });
+
+      // Synchronize with user status/role endpoint to guarantee PostgreSQL users table has updated role_id and custom_permissions
+      await adminApi.put(`/admin/users/${selectedUser.id}/status`, {
+        roleId: selectedUser.role_id,
+        roleName: selectedUser.role_name || selectedUser.role,
+        custom_permissions: userPermissions[selectedUser.id]
+      }).catch(() => {});
     } catch (e) {
       console.warn('Backend sync notice:', e);
     }
@@ -753,7 +809,7 @@ function RolesAndPermissionsContent() {
                   {getInitials(selectedUser?.name || 'User')}
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-[#111827] flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-[#111827] flex items-center gap-2 flex-wrap">
                     <span>Customizing: {selectedUser?.name}</span>
                     <span className="text-[10px] bg-[#EAFBF2] text-[#00A854] px-2 py-0.5 rounded-full font-mono font-bold border border-[#00D96B]/30">
                       {selectedUser?.role_display_name || selectedUser?.roleDisplayName || 'Staff'}
@@ -762,9 +818,25 @@ function RolesAndPermissionsContent() {
                       ({selectedUser?.email})
                     </span>
                   </h3>
-                  <p className="text-xs text-[#667085] mt-0.5">
-                    Currently Granted: <strong>{grantedCount} of {allPermissions.length}</strong> system permissions
-                  </p>
+                  
+                  {/* Dynamic Role Selector */}
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-[#475467]">Assigned Role:</span>
+                    <select
+                      value={selectedUser?.role_id || ''}
+                      onChange={(e) => handleUserRoleChange(Number(e.target.value))}
+                      className="bg-[#F7F9FA] hover:bg-white border border-[#D0D5DD] hover:border-[#00D96B] rounded-lg px-2.5 py-1 text-xs font-bold text-[#111827] focus:outline-none focus:border-[#00D96B] focus:ring-1 focus:ring-[#00D96B] cursor-pointer shadow-sm"
+                    >
+                      {roles.map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.display_name} ({r.name})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[11px] text-[#667085]">
+                      • Granted: <strong>{grantedCount} of {allPermissions.length}</strong> permissions
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -788,6 +860,18 @@ function RolesAndPermissionsContent() {
                   className="px-2.5 py-1 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] border border-[#E5E7EB] rounded-lg text-xs font-bold transition"
                 >
                   Technician
+                </button>
+                <button
+                  onClick={() => handleApplyPreset('RECOVERY')}
+                  className="px-2.5 py-1 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] border border-[#E5E7EB] rounded-lg text-xs font-bold transition"
+                >
+                  Recovery Agent
+                </button>
+                <button
+                  onClick={() => handleApplyPreset('PRE_BOOKING')}
+                  className="px-2.5 py-1 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#475467] hover:text-[#00A854] border border-[#E5E7EB] rounded-lg text-xs font-bold transition"
+                >
+                  Pre-Booking
                 </button>
                 <button
                   onClick={() => handleApplyPreset('FULL')}

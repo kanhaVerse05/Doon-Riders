@@ -62,195 +62,128 @@ export const Sidebar: React.FC = () => {
     user?.roleName?.includes('PRE_BOOK') || 
     user?.roleDisplayName?.toLowerCase().includes('pre-booking');
 
-  const navGroups: NavGroup[] = isTechnician
-    ? [
+  const navGroups: NavGroup[] = [
+    {
+      title: 'OVERVIEW',
+      items: [
         {
-          title: 'TECHNICIAN WORKSPACE',
-          items: [
-            {
-              name: 'Job Work Summary',
-              href: '/admin/technician/jobs',
-              icon: CheckCircle2,
-              badge: 'My Tasks'
-            },
-            {
-              name: 'Scooty Recoveries',
-              href: '/admin/recoveries',
-              icon: ShieldAlert,
-              permission: 'recoveries.view',
-              badge: 'Inspection'
-            }
-          ]
-        }
-      ]
-    : isRecoveryAgent
-    ? [
-        {
-          title: 'RECOVERY AGENT WORKSPACE',
-          items: [
-            {
-              name: 'Scooty Recoveries',
-              href: '/admin/recoveries',
-              icon: ShieldAlert,
-              badge: 'Field Pickup'
-            }
-          ]
-        }
-      ]
-    : isHubIncharge
-    ? [
-        {
-          title: 'HUB INCHARGE WORKSPACE',
-          items: [
-            {
-              name: 'Complaints',
-              href: '/admin/complaints',
-              icon: AlertCircle,
-              badge: 'Field RSA'
-            },
-            {
-              name: 'Repair Jobs',
-              href: '/admin/repair-jobs',
-              icon: Wrench,
-              badge: 'Workshop'
-            },
-            {
-              name: 'Scooty Returns',
-              href: '/admin/returns',
-              icon: RotateCcw,
-              badge: 'Inspection'
-            },
-            {
-              name: 'Scooty Recoveries',
-              href: '/admin/recoveries',
-              icon: ShieldAlert,
-              permission: 'recoveries.view',
-              badge: '₹1000'
-            },
-            {
-              name: 'Inventory',
-              href: '/admin/inventory',
-              icon: Boxes,
-              badge: 'Stock'
-            }
-          ]
-        }
-      ]
-    : [
-        {
-          title: 'OVERVIEW',
-          items: [
-            {
-              name: 'Dashboard',
-              href: '/admin/dashboard',
-              icon: LayoutDashboard,
-              permission: 'dashboard.view'
-            },
-            {
-              name: 'Complaints',
-              href: '/admin/complaints',
-              icon: AlertCircle,
-              permission: 'complaints.view',
-              badge: 'Field RSA'
-            },
-            {
-              name: 'Repair Jobs',
-              href: '/admin/repair-jobs',
-              icon: Wrench,
-              permission: 'repairs.view',
-              badge: 'Hub'
-            },
-            {
-              name: 'Scooty Returns',
-              href: '/admin/returns',
-              icon: RotateCcw,
-              permission: 'returns.view',
-              badge: 'Settlement'
-            },
-            {
-              name: 'Scooty Recoveries',
-              href: '/admin/recoveries',
-              icon: ShieldAlert,
-              permission: 'recoveries.view',
-              badge: 'Recovery'
-            },
-            {
-              name: 'Pre-Bookings',
-              href: '/admin/pre-bookings',
-              icon: Ticket,
-              permission: 'pre_bookings.view'
-            },
-            {
-              name: 'Inventory',
-              href: '/admin/inventory',
-              icon: Boxes,
-              permission: 'inventory.view',
-              badge: 'Stock'
-            },
-            {
-              name: 'Vehicle Gallery',
-              href: '/admin/gallery',
-              icon: Camera,
-              permission: 'fleet.view',
-              badge: 'New'
-            },
-            {
-              name: 'Pricing Plans',
-              href: '/admin/pricing',
-              icon: Tag,
-              permission: 'settings.view',
-              badge: '₹1699'
-            }
-          ]
+          name: 'Dashboard',
+          href: '/admin/dashboard',
+          icon: LayoutDashboard,
+          permission: 'dashboard.view'
         },
         {
-          title: 'LEADS & CRM',
-          items: [
-            {
-              name: isSalesExec ? 'My Assigned Leads' : 'All Inbound Leads',
-              href: '/admin/leads',
-              icon: Users,
-              permission: 'leads.view',
-              badge: isSalesExec ? 'Mine' : undefined
-            },
-            {
-              name: 'Lead Assignment',
-              href: '/admin/leads/assign',
-              icon: UserCog,
-              permission: 'leads.assign'
-            },
-            {
-              name: 'Customers Directory',
-              href: '/admin/customers',
-              icon: Contact,
-              permission: 'customers.view'
-            }
-          ]
+          name: 'Complaints',
+          href: '/admin/complaints',
+          icon: AlertCircle,
+          permission: 'complaints.view',
+          badge: 'Field RSA'
         },
         {
-          title: 'ANALYTICS & ACCESS',
-          items: [
-            {
-              name: 'Reports & Attribution',
-              href: '/admin/reports',
-              icon: BarChart3,
-              permission: 'reports.view'
-            },
-            {
-              name: 'Team Directory',
-              href: '/admin/users',
-              icon: Users,
-              permission: 'users.view'
-            },
-            {
-              name: 'Roles & Permissions',
-              href: '/admin/roles',
-              icon: ShieldCheck,
-              permission: 'roles.view'
-            }
-          ]
+          name: 'Repair Jobs',
+          href: '/admin/repair-jobs',
+          icon: Wrench,
+          permission: 'repairs.view',
+          badge: 'Hub'
+        },
+        {
+          name: 'Technician Tasks',
+          href: '/admin/technician/jobs',
+          icon: CheckCircle2,
+          permission: 'repairs.update',
+          badge: 'Tasks'
+        },
+        {
+          name: 'Scooty Returns',
+          href: '/admin/returns',
+          icon: RotateCcw,
+          permission: 'returns.view',
+          badge: 'Settlement'
+        },
+        {
+          name: 'Scooty Recoveries',
+          href: '/admin/recoveries',
+          icon: ShieldAlert,
+          permission: 'recoveries.view',
+          badge: 'Recovery'
+        },
+        {
+          name: 'Pre-Bookings',
+          href: '/admin/pre-bookings',
+          icon: Ticket,
+          permission: 'pre_bookings.view'
+        },
+        {
+          name: 'Inventory',
+          href: '/admin/inventory',
+          icon: Boxes,
+          permission: 'inventory.view',
+          badge: 'Stock'
+        },
+        {
+          name: 'Vehicle Gallery',
+          href: '/admin/gallery',
+          icon: Camera,
+          permission: 'fleet.view',
+          badge: 'New'
+        },
+        {
+          name: 'Pricing Plans',
+          href: '/admin/pricing',
+          icon: Tag,
+          permission: 'settings.view',
+          badge: '₹1699'
         }
-      ];
+      ]
+    },
+    {
+      title: 'LEADS & CRM',
+      items: [
+        {
+          name: isSalesExec ? 'My Assigned Leads' : 'All Inbound Leads',
+          href: '/admin/leads',
+          icon: Users,
+          permission: 'leads.view',
+          badge: isSalesExec ? 'Mine' : undefined
+        },
+        {
+          name: 'Lead Assignment',
+          href: '/admin/leads/assign',
+          icon: UserCog,
+          permission: 'leads.assign'
+        },
+        {
+          name: 'Customers Directory',
+          href: '/admin/customers',
+          icon: Contact,
+          permission: 'customers.view'
+        }
+      ]
+    },
+    {
+      title: 'ANALYTICS & ACCESS',
+      items: [
+        {
+          name: 'Reports & Attribution',
+          href: '/admin/reports',
+          icon: BarChart3,
+          permission: 'reports.view'
+        },
+        {
+          name: 'Team Directory',
+          href: '/admin/users',
+          icon: Users,
+          permission: 'users.view'
+        },
+        {
+          name: 'Roles & Permissions',
+          href: '/admin/roles',
+          icon: ShieldCheck,
+          permission: 'roles.view'
+        }
+      ]
+    }
+  ];
 
   const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
 
@@ -284,15 +217,23 @@ export const Sidebar: React.FC = () => {
           {navGroups.map((grp, gIdx) => {
             const visibleItems = grp.items.filter(item => {
               if (isSuperAdmin) return true;
-              if (isPreBookingUser && item.href === '/admin/pre-bookings') return true;
               if (!item.permission) return true;
               return hasPermission(item.permission);
             });
             if (visibleItems.length === 0) return null;
 
-            const groupTitle = (grp.title === 'OVERVIEW' && visibleItems.length === 1 && visibleItems[0].href === '/admin/pre-bookings')
-              ? 'PRE-BOOKINGS'
-              : grp.title;
+            let groupTitle = grp.title;
+            if (grp.title === 'OVERVIEW') {
+              if (isRecoveryAgent || (visibleItems.length === 1 && visibleItems[0].href === '/admin/recoveries')) {
+                groupTitle = 'RECOVERY WORKSPACE';
+              } else if (isTechnician || (visibleItems.length > 0 && visibleItems.every(i => i.href.includes('technician') || i.href.includes('repair')))) {
+                groupTitle = 'TECHNICIAN WORKSPACE';
+              } else if (isHubIncharge) {
+                groupTitle = 'HUB WORKSPACE';
+              } else if (isPreBookingUser || (visibleItems.length === 1 && visibleItems[0].href === '/admin/pre-bookings')) {
+                groupTitle = 'PRE-BOOKINGS';
+              }
+            }
 
             return (
               <div key={gIdx} className="space-y-1">

@@ -219,52 +219,76 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
           }
         }
 
-        if (!targetRoleId) {
-          return res.status(404).json({ success: false, message: 'Target role not found for permissions update.' });
-        }
+        let targetUserId = userId ? Number(userId) : null;
 
-        if (targetRoleName === 'SUPER_ADMIN') {
-          return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be modified.' });
-        }
+        if (targetUserId) {
+          // If a role was selected or changed, resolve targetRoleId
+          if (!targetRoleId && targetRoleName) {
+            const rRes = await pool.query('SELECT id, name FROM roles WHERE name = $1 OR LOWER(display_name) = LOWER($1)', [targetRoleName]);
+            if (rRes.rows.length > 0) {
+              targetRoleId = rRes.rows[0].id;
+              targetRoleName = rRes.rows[0].name;
+            }
+          }
 
-        // Filter for enabled permissions
-        const enabledEntries = Object.entries(permissions as Record<string, any>).filter(([_, val]) => val && val.enabled);
+          // If role alias provided
+          if (!targetRoleId && targetRoleName) {
+            if (targetRoleName.includes('RECOVERY')) {
+              const r = await pool.query("SELECT id, name FROM roles WHERE name = 'RECOVERY_AGENT' LIMIT 1");
+              if (r.rows.length > 0) targetRoleId = r.rows[0].id;
+            } else if (targetRoleName.includes('TECH')) {
+              const r = await pool.query("SELECT id, name FROM roles WHERE name = 'TECHNICIAN' LIMIT 1");
+              if (r.rows.length > 0) targetRoleId = r.rows[0].id;
+            }
+          }
 
-        // Protect against accidental wiping of all permissions if an empty or all-disabled map was passed
-        if (enabledEntries.length === 0 && !req.body.forceClear) {
-          return res.status(400).json({
-            success: false,
-            message: 'Cannot save empty permissions: At least 1 permission must be enabled, or pass forceClear: true.'
+          // Update user's role and custom_permissions directly in PostgreSQL
+          await pool.query(`
+            UPDATE users 
+            SET role_id = COALESCE($1, role_id),
+                custom_permissions = $2::jsonb,
+                updated_at = NOW()
+            WHERE id = $3
+          `, [targetRoleId, JSON.stringify(permissions), targetUserId]);
+
+          // Update memoryStore user if present
+          const mUser = (memoryStore.users || []).find(u => u.id === targetUserId);
+          if (mUser) {
+            if (targetRoleId) mUser.role_id = targetRoleId;
+            mUser.custom_permissions = permissions;
+          }
+
+          await logAuditEvent({
+            userId: req.user?.id,
+            userName: req.user?.name,
+            userRole: req.user?.roleName,
+            action: 'UPDATE',
+            module: 'USERS',
+            notes: `Updated role and custom permissions for user ID ${targetUserId}`
           });
         }
 
-        // Clear existing role permissions
-        await pool.query('DELETE FROM role_permissions WHERE role_id = $1', [targetRoleId]);
+        // If targetRoleId is present, update role_permissions template as well
+        if (targetRoleId && targetRoleName !== 'SUPER_ADMIN') {
+          // Clear existing role permissions
+          await pool.query('DELETE FROM role_permissions WHERE role_id = $1', [targetRoleId]);
 
-        // Insert each enabled permission
-        for (const [code, val] of enabledEntries) {
-          const pRes = await pool.query('SELECT id FROM permissions WHERE code = $1', [code]);
-          if (pRes.rows.length > 0) {
-            const permId = pRes.rows[0].id;
-            const permScope = val.scope || 'ALL';
-            await pool.query(`
-              INSERT INTO role_permissions (role_id, permission_id, scope)
-              VALUES ($1, $2, $3)
-              ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
-            `, [targetRoleId, permId, permScope]);
+          // Insert each enabled permission
+          for (const [code, val] of enabledEntries) {
+            const pRes = await pool.query('SELECT id FROM permissions WHERE code = $1', [code]);
+            if (pRes.rows.length > 0) {
+              const permId = pRes.rows[0].id;
+              const permScope = val.scope || 'ALL';
+              await pool.query(`
+                INSERT INTO role_permissions (role_id, permission_id, scope)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+              `, [targetRoleId, permId, permScope]);
+            }
           }
         }
 
-        await logAuditEvent({
-          userId: req.user?.id,
-          userName: req.user?.name,
-          userRole: req.user?.roleName,
-          action: 'UPDATE',
-          module: 'ROLES',
-          notes: `Batch updated permissions for role ID ${targetRoleId}`
-        });
-
-        return res.json({ success: true, message: 'Role permissions saved successfully!' });
+        return res.json({ success: true, message: 'Role and permissions saved successfully!' });
       }
 
       // 2. Single permission update mode

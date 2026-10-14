@@ -9,6 +9,63 @@ import { loadUsersBackup } from '../../helpers/userStorage';
 import { getPermissionsForRole } from '../../helpers/rbacHelper';
 export { getPermissionsForRole };
 
+export async function computeUserPermissions(u: any): Promise<Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }>> {
+  let permissions: Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }> = [];
+  const roleName = (u.role_name || '').toUpperCase();
+
+  if (roleName === 'SUPER_ADMIN') {
+    return getPermissionsForRole('SUPER_ADMIN');
+  }
+
+  // 1. Fetch base role permissions from DB
+  if (getDbStatus() && u.role_id) {
+    try {
+      const permRes = await pool.query(`
+        SELECT p.code, rp.scope
+        FROM role_permissions rp
+        JOIN permissions p ON rp.permission_id = p.id
+        WHERE rp.role_id = $1
+      `, [u.role_id]);
+      if (permRes.rows.length > 0) {
+        permissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
+      }
+    } catch (_) {}
+  }
+
+  // Fallback to role standard defaults if role_permissions was not in DB
+  if (permissions.length === 0 && roleName) {
+    permissions = getPermissionsForRole(roleName);
+  }
+
+  // 2. Apply user-specific custom_permissions overrides if present
+  if (u.custom_permissions && typeof u.custom_permissions === 'object') {
+    const customMap = u.custom_permissions as Record<string, { enabled?: boolean; scope?: any }>;
+
+    // Remove permissions explicitly set to false/disabled
+    permissions = permissions.filter(p => {
+      const override = customMap[p.code];
+      if (override && override.enabled === false) {
+        return false;
+      }
+      return true;
+    });
+
+    // Add or update permissions explicitly set to true/enabled
+    Object.entries(customMap).forEach(([code, conf]) => {
+      if (conf && conf.enabled) {
+        const existingIdx = permissions.findIndex(p => p.code === code);
+        if (existingIdx !== -1) {
+          permissions[existingIdx].scope = conf.scope || permissions[existingIdx].scope || 'ALL';
+        } else {
+          permissions.push({ code, scope: conf.scope || 'ALL' });
+        }
+      }
+    });
+  }
+
+  return permissions;
+}
+
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -21,7 +78,7 @@ export const login = async (req: Request, res: Response) => {
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
-        SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url,
+        SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url, u.custom_permissions,
                r.id as role_id, r.name as role_name, r.display_name as role_display_name
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
@@ -46,25 +103,7 @@ export const login = async (req: Request, res: Response) => {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
 
-      // Fetch permissions from role_permissions or get defaults
-      let permissions: Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }> = [];
-      const permRes = await pool.query(`
-        SELECT p.code, rp.scope
-        FROM role_permissions rp
-        JOIN permissions p ON rp.permission_id = p.id
-        WHERE rp.role_id = $1
-      `, [u.role_id]);
-
-      if (permRes.rows.length > 0) {
-        permissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
-      } else {
-        const standardRoles = ['SUPER_ADMIN', 'MANAGER', 'SALES_EXECUTIVE', 'HUB_INCHARGE', 'TECHNICIAN', 'CUSTOMER_SUPPORT', 'RECOVERY_AGENT', 'PRE_BOOKING'];
-        if (standardRoles.includes(u.role_name)) {
-          permissions = getPermissionsForRole(u.role_name);
-        } else {
-          permissions = [];
-        }
-      }
+      const permissions = await computeUserPermissions(u);
 
       const authUser = {
         id: u.id,
@@ -75,6 +114,7 @@ export const login = async (req: Request, res: Response) => {
         roleName: u.role_name || 'SALES_EXECUTIVE',
         roleDisplayName: u.role_display_name || 'Team Member',
         avatarUrl: u.avatar_url,
+        customPermissions: u.custom_permissions,
         permissions
       };
 
@@ -231,8 +271,45 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
 };
 
 export const getMe = async (req: AuthRequest, res: Response) => {
-  return res.json({
-    success: true,
-    user: req.user
-  });
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+
+    if (getDbStatus()) {
+      const userRes = await pool.query(`
+        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.custom_permissions,
+               r.id as role_id, r.name as role_name, r.display_name as role_display_name
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `, [userId]);
+
+      if (userRes.rows.length > 0) {
+        const u = userRes.rows[0];
+        const permissions = await computeUserPermissions(u);
+        const authUser = {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone,
+          roleId: u.role_id,
+          roleName: u.role_name || 'SALES_EXECUTIVE',
+          roleDisplayName: u.role_display_name || 'Team Member',
+          avatarUrl: u.avatar_url,
+          customPermissions: u.custom_permissions,
+          permissions
+        };
+        return res.json({ success: true, user: authUser });
+      }
+    }
+
+    return res.json({
+      success: true,
+      user: req.user
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };

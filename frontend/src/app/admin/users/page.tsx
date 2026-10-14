@@ -422,6 +422,42 @@ export default function UsersPage() {
     fetchUsers();
   };
 
+  const handleQuickRoleChange = async (userId: number, newRoleId: number) => {
+    const targetRole = roles.find(r => Number(r.id) === Number(newRoleId));
+    if (!targetRole) return;
+
+    try {
+      const res = await adminApi.put(`/admin/users/${userId}/status`, {
+        roleId: targetRole.id,
+        roleName: targetRole.name
+      });
+
+      if (!res?.success) {
+        setErrorToast(res?.message || 'Failed to update user role');
+        setTimeout(() => setErrorToast(null), 3000);
+        return;
+      }
+
+      setUsers(prev => prev.map(u => {
+        if (u.id === userId) {
+          return {
+            ...u,
+            role_id: Number(targetRole.id),
+            role_name: targetRole.name,
+            role_display_name: targetRole.display_name
+          };
+        }
+        return u;
+      }));
+
+      setSuccessToast(`Role updated to "${targetRole.display_name}"!`);
+      setTimeout(() => setSuccessToast(null), 3000);
+    } catch (err: any) {
+      setErrorToast(err?.message || 'Failed to update user role');
+      setTimeout(() => setErrorToast(null), 3000);
+    }
+  };
+
   const dynamicFilterRoles = ['ALL', ...Array.from(new Set([
     'SUPER_ADMIN',
     'MANAGER',
@@ -571,13 +607,23 @@ export default function UsersPage() {
                         </td>
                         <td className="p-4 px-5 font-mono text-[#667085]">{u.email}</td>
                         <td className="p-4 px-5">
-                          <span className={`font-bold px-3 py-1 rounded-lg text-[10px] border ${
-                            isSuperAdmin
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : 'bg-[#EAFBF2] text-[#00A854] border-[#00D96B]/30'
-                          }`}>
-                            {u.role_display_name}
-                          </span>
+                          {isSuperAdmin ? (
+                            <span className="font-bold px-3 py-1 rounded-lg text-[10px] border bg-purple-50 text-purple-700 border-purple-200">
+                              {u.role_display_name}
+                            </span>
+                          ) : (
+                            <select
+                              value={u.role_id || ''}
+                              onChange={(e) => handleQuickRoleChange(u.id, Number(e.target.value))}
+                              className="bg-[#F7F9FA] hover:bg-white border border-[#D0D5DD] hover:border-[#00D96B] rounded-lg px-2 py-1 text-xs font-bold text-[#111827] focus:outline-none focus:border-[#00D96B] focus:ring-1 focus:ring-[#00D96B] cursor-pointer shadow-sm transition"
+                            >
+                              {roles.map(r => (
+                                <option key={r.id} value={r.id}>
+                                  {r.display_name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className="p-4 px-5">
                           <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
