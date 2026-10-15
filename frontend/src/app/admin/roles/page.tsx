@@ -585,11 +585,18 @@ function RolesAndPermissionsContent() {
       });
 
       // Synchronize with user status/role endpoint to guarantee PostgreSQL users table has updated role_id and custom_permissions
-      await adminApi.put(`/admin/users/${selectedUser.id}/status`, {
+      let statusRes = await adminApi.patch(`/admin/users/${selectedUser.id}/status`, {
         roleId: selectedUser.role_id,
         roleName: selectedUser.role_name || selectedUser.role,
         custom_permissions: userPermissions[selectedUser.id]
-      }).catch(() => {});
+      });
+      if (!statusRes?.success) {
+        await adminApi.put(`/admin/users/${selectedUser.id}/status`, {
+          roleId: selectedUser.role_id,
+          roleName: selectedUser.role_name || selectedUser.role,
+          custom_permissions: userPermissions[selectedUser.id]
+        }).catch(() => {});
+      }
     } catch (e) {
       console.warn('Backend sync notice:', e);
     }

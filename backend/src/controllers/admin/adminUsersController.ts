@@ -309,13 +309,16 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
     let { status, roleId, role_name, roleName, custom_permissions, permissions } = req.body;
     let targetRoleId = roleId ? Number(roleId) : null;
     const roleNameHint = (role_name || roleName || '').trim().toUpperCase();
-    const customPermsPayload = custom_permissions || permissions ? JSON.stringify(custom_permissions || permissions) : null;
+    const hasCustomPerms = custom_permissions !== undefined || permissions !== undefined;
+    const customPermsPayload = hasCustomPerms && (custom_permissions || permissions) 
+      ? JSON.stringify(custom_permissions || permissions) 
+      : null;
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
-        SELECT u.id, u.name, r.id as role_id, r.name as role_name
+        SELECT u.id, u.name, u.role_id, r.name as role_name
         FROM users u
-        JOIN roles r ON u.role_id = r.id
+        LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.id = $1
       `, [id]);
 
@@ -354,14 +357,24 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
         }
       }
 
-      await pool.query(`
-        UPDATE users 
-        SET status = COALESCE($1, status),
-            role_id = COALESCE($2, role_id),
-            custom_permissions = COALESCE($3::jsonb, custom_permissions),
-            updated_at = NOW()
-        WHERE id = $4
-      `, [status, targetRoleId, customPermsPayload, id]);
+      if (hasCustomPerms) {
+        await pool.query(`
+          UPDATE users 
+          SET status = COALESCE($1, status),
+              role_id = COALESCE($2, role_id),
+              custom_permissions = $3::jsonb,
+              updated_at = NOW()
+          WHERE id = $4
+        `, [status, targetRoleId, customPermsPayload, id]);
+      } else {
+        await pool.query(`
+          UPDATE users 
+          SET status = COALESCE($1, status),
+              role_id = COALESCE($2, role_id),
+              updated_at = NOW()
+          WHERE id = $3
+        `, [status, targetRoleId, id]);
+      }
 
       appendOrUpdateUserBackup({ id: Number(id), status, role_id: targetRoleId ? Number(targetRoleId) : undefined });
 

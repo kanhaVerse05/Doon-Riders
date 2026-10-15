@@ -427,10 +427,16 @@ export default function UsersPage() {
     if (!targetRole) return;
 
     try {
-      const res = await adminApi.put(`/admin/users/${userId}/status`, {
+      let res = await adminApi.patch(`/admin/users/${userId}/status`, {
         roleId: targetRole.id,
         roleName: targetRole.name
       });
+      if (!res?.success) {
+        res = await adminApi.put(`/admin/users/${userId}/status`, {
+          roleId: targetRole.id,
+          roleName: targetRole.name
+        });
+      }
 
       if (!res?.success) {
         setErrorToast(res?.message || 'Failed to update user role');
@@ -449,6 +455,20 @@ export default function UsersPage() {
         }
         return u;
       }));
+
+      const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
+      if (storedCustomUsers) {
+        try {
+          const list = JSON.parse(storedCustomUsers);
+          const uIdx = list.findIndex((u: any) => u.id === userId);
+          if (uIdx !== -1) {
+            list[uIdx].role_id = Number(targetRole.id);
+            list[uIdx].role_name = targetRole.name;
+            list[uIdx].role_display_name = targetRole.display_name;
+            localStorage.setItem('dr_custom_team_users', JSON.stringify(list));
+          }
+        } catch (e) {}
+      }
 
       setSuccessToast(`Role updated to "${targetRole.display_name}"!`);
       setTimeout(() => setSuccessToast(null), 3000);
