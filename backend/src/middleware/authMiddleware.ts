@@ -79,11 +79,15 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
         permissions
       };
     } else {
-      const memoryUser = memoryStore.users.find(candidate => Number(candidate.id) === Number(decoded.id));
+      const memoryUser = memoryStore.users.find(candidate => Number(candidate.id) === Number(decoded.id)) as
+        (typeof memoryStore.users[number] & {
+          custom_permissions?: Record<string, { enabled?: boolean; scope?: string }>;
+        }) | undefined;
       if (!memoryUser || memoryUser.status !== 'active') {
         return res.status(401).json({ success: false, message: 'User account is inactive, suspended, or not found.' });
       }
-      const memoryRole = memoryStore.roles.find(role => role.id === memoryUser.role_id);
+      const memoryRole = memoryStore.roles.find(role => role.id === memoryUser.role_id) as
+        (typeof memoryStore.roles[number] & { permissions_configured?: boolean }) | undefined;
       const roleName = memoryRole?.name || memoryUser.role_name || 'UNASSIGNED';
       const storedPermissions = (memoryStore.rolePermissions || [])
         .filter((permission: any) => Number(permission.role_id) === Number(memoryUser.role_id))
