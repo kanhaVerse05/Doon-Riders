@@ -1117,7 +1117,7 @@ export default function ScootyRecoveryDetailPage() {
                   ) : (
                     <Check className="w-4 h-4 stroke-[3]" />
                   )}
-                  <span>Agent Reached Hub</span>
+                  <span>Done</span>
                 </button>
               </div>
             ) : (
