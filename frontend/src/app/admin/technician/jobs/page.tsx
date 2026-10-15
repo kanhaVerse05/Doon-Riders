@@ -904,7 +904,11 @@ export default function TechnicianJobsSummaryPage() {
   const activeEnRouteCount = fieldComplaints.filter(c => c.status === 'En Route' || c.status === 'Reached' || c.status === 'Work In Progress').length;
   const pendingReturnsCount = returnInspections.filter(r => r.status === 'Pending Inspection' || r.status === 'Inspection in Progress').length;
   const totalReturnsCount = returnInspections.length;
-  const pendingRecoveriesCount = recoveryInspections.filter(r => r.status === 'Pending Inspection' || r.status === 'Inspection in Progress').length;
+  const normalizeRecoveryStatus = (status: unknown) => String(status || '').trim().toUpperCase().replace(/[\s_-]+/g, ' ');
+  const isRecoveryPending = (recovery: any) => ['PENDING INSPECTION', 'INSPECTION IN PROGRESS'].includes(normalizeRecoveryStatus(recovery.status));
+  const isRecoveryInspected = (recovery: any) => normalizeRecoveryStatus(recovery.status) === 'INSPECTION COMPLETED';
+  const isRecoveryCompleted = (recovery: any) => ['COMPLETED', 'SETTLED', 'CLOSED'].includes(normalizeRecoveryStatus(recovery.status));
+  const pendingRecoveriesCount = recoveryInspections.filter(isRecoveryPending).length;
   const totalRecoveriesCount = recoveryInspections.length;
 
   const [returnFilterTab, setReturnFilterTab] = useState<'ALL' | 'PENDING' | 'INSPECTED' | 'COMPLETED'>('ALL');
@@ -945,11 +949,11 @@ export default function TechnicianJobsSummaryPage() {
     }
 
     if (recoveryFilterTab === 'PENDING') {
-      if (rec.status !== 'Pending Inspection' && rec.status !== 'Inspection in Progress') return false;
+      if (!isRecoveryPending(rec)) return false;
     } else if (recoveryFilterTab === 'INSPECTED') {
-      if (rec.status !== 'Inspection Completed') return false;
+      if (!isRecoveryInspected(rec)) return false;
     } else if (recoveryFilterTab === 'COMPLETED') {
-      if (rec.status !== 'Completed') return false;
+      if (!isRecoveryCompleted(rec)) return false;
     }
 
     return true;
@@ -2031,8 +2035,8 @@ export default function TechnicianJobsSummaryPage() {
               {[
                 { key: 'ALL', label: 'All Recoveries', count: recoveryInspections.length },
                 { key: 'PENDING', label: 'Inspection Pending', count: pendingRecoveriesCount },
-                { key: 'INSPECTED', label: 'Inspected (Review)', count: recoveryInspections.filter(r => r.status === 'Inspection Completed').length },
-                { key: 'COMPLETED', label: 'Settled / Closed', count: recoveryInspections.filter(r => r.status === 'Completed').length }
+                { key: 'INSPECTED', label: 'Inspected (Review)', count: recoveryInspections.filter(isRecoveryInspected).length },
+                { key: 'COMPLETED', label: 'Settled / Closed', count: recoveryInspections.filter(isRecoveryCompleted).length }
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -2073,9 +2077,9 @@ export default function TechnicianJobsSummaryPage() {
             ) : (
               <div className="space-y-3.5">
                 {filteredRecoveries.map(rec => {
-                  const isPending = rec.status === 'Pending Inspection' || rec.status === 'Inspection in Progress';
-                  const isInspected = rec.status === 'Inspection Completed';
-                  const isCompleted = rec.status === 'Completed';
+                  const isPending = isRecoveryPending(rec);
+                  const isInspected = isRecoveryInspected(rec);
+                  const isCompleted = isRecoveryCompleted(rec);
                   const damageCount = rec.damage_items?.length || 0;
 
                   return (

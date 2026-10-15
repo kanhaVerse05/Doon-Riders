@@ -182,14 +182,16 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
         const isSuperOrManager = userRole.includes('SUPER') || userRole.includes('MANAGER');
         const hasExplicitViewAll = (req.user?.permissions || []).some((p: any) => p.code === 'recoveries.view_all');
 
-        if (!isSuperOrManager && !hasExplicitViewAll) {
+        // Technician accounts must only see records assigned to their linked
+        // technician profile, even if a broad view permission is present.
+        if (userRole.includes('TECH')) {
+          whereClauses.push(`r.technician_id = ANY($${pIndex}::int[])`);
+          params.push(technicianIds);
+          pIndex++;
+        } else if (!isSuperOrManager && !hasExplicitViewAll) {
           if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
             whereClauses.push(`r.hub_id = $${pIndex}`);
             params.push((req.user as any).hub_id);
-            pIndex++;
-          } else if (userRole.includes('TECH')) {
-            whereClauses.push(`r.technician_id = ANY($${pIndex}::int[])`);
-            params.push(technicianIds);
             pIndex++;
           } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
             whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(TRIM(COALESCE(r.recovered_by, ''))) = $${pIndex + 1} OR LOWER(TRIM(COALESCE(r.recovery_agent_name, ''))) = $${pIndex + 1})`);
