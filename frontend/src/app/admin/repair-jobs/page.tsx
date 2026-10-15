@@ -268,8 +268,6 @@ export default function RepairJobsPage() {
       if (res && res.success) {
         setJobs(res.data || []);
         if (res.stats) setStats(res.stats);
-        if (res.hubs) setHubs(res.hubs);
-        if (res.technicians) setTechnicians(res.technicians);
       }
     } catch (err: any) {
       console.error('Error fetching repair jobs:', err);
@@ -294,6 +292,23 @@ export default function RepairJobsPage() {
     fetchJobs();
     fetchInventory();
   }, [search, selectedHubFilter, selectedTechFilter, statusTab, priorityFilter, paymentFilter, sortBy, sortOrder]);
+
+  // Load assignable users from the dedicated database-backed directory endpoint.
+  useEffect(() => {
+    let active = true;
+    const fetchRepairDirectory = async () => {
+      try {
+        const res = await adminApi.get('/admin/repair-jobs/meta/hubs-and-technicians');
+        if (!active || !res?.success) return;
+        setHubs(res.hubs || []);
+        setTechnicians(res.technicians || []);
+      } catch (err) {
+        console.error('Error fetching repair job assignment options:', err);
+      }
+    };
+    void fetchRepairDirectory();
+    return () => { active = false; };
+  }, []);
 
   // Format Elapsed Live Time
   const getElapsedDuration = (startedAt: string | null | undefined): string => {

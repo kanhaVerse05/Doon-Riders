@@ -18,6 +18,38 @@ export const formatDuration = (seconds: number): string => {
   return `${secs}s`;
 };
 
+const getDatabaseRepairDirectories = async () => {
+  const [hubsResult, techniciansResult] = await Promise.all([
+    pool.query(`
+      SELECT id, hub_code, hub_name, location, incharge_name, incharge_phone
+      FROM repair_hubs
+      WHERE is_active IS DISTINCT FROM FALSE
+      ORDER BY hub_name
+    `),
+    pool.query(`
+      SELECT
+        tech.id, tech.technician_code, tech.name, tech.phone, tech.email,
+        tech.hub_id, COALESCE(tech.hub_name, hub.hub_name, '') AS hub_name,
+        tech.specialization, tech.status, tech.rating,
+        (SELECT COUNT(*)::int FROM repair_jobs job
+         WHERE job.technician_id = tech.id
+           AND job.status NOT IN ('Closed', 'Cancelled')) AS active_jobs_count
+      FROM technicians tech
+      JOIN users app_user
+        ON LOWER(app_user.email) = LOWER(tech.email)
+       AND app_user.deleted_at IS NULL
+       AND app_user.status = 'active'
+      JOIN roles app_role
+        ON app_role.id = app_user.role_id
+       AND UPPER(app_role.name) = 'TECHNICIAN'
+      LEFT JOIN repair_hubs hub ON hub.id = tech.hub_id
+      ORDER BY tech.name
+    `)
+  ]);
+
+  return { hubs: hubsResult.rows, technicians: techniciansResult.rows };
+};
+
 // 1. GET ALL REPAIR JOBS (WITH SEARCH, FILTERS, STATS & METRICS)
 export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
   try {
@@ -115,6 +147,7 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
         `;
 
         const result = await pool.query(sql, params);
+        const repairDirectories = await getDatabaseRepairDirectories();
 
         // Stats query
         const allJobsRes = await pool.query(`
@@ -153,8 +186,7 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
           success: true,
           data: result.rows,
           stats,
-          hubs: memoryStore.repairHubs,
-          technicians: memoryStore.technicians
+          ...repairDirectories
         });
       } catch (dbErr) {
         console.warn('DB query error, falling back to memoryStore:', dbErr);
@@ -355,6 +387,116 @@ export const createRepairJob = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    if (getDbStatus()) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const hubResult = await client.query(`
+          SELECT id, hub_name
+          FROM repair_hubs
+          WHERE id = $1 AND is_active IS DISTINCT FROM FALSE
+        `, [Number(hub_id)]);
+        if (!hubResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Selected service hub is unavailable.' });
+        }
+        const hub = hubResult.rows[0];
+
+        let technician: any = null;
+        if (technician_id) {
+          const technicianResult = await client.query(`
+            SELECT tech.id, tech.name, tech.technician_code
+            FROM technicians tech
+            JOIN users app_user
+              ON LOWER(app_user.email) = LOWER(tech.email)
+             AND app_user.deleted_at IS NULL
+             AND app_user.status = 'active'
+            JOIN roles app_role
+              ON app_role.id = app_user.role_id
+             AND UPPER(app_role.name) = 'TECHNICIAN'
+            WHERE tech.id = $1
+            FOR UPDATE OF tech
+          `, [Number(technician_id)]);
+          technician = technicianResult.rows[0] || null;
+          if (!technician) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: 'Selected technician is unavailable. Refresh the list and try again.' });
+          }
+        }
+
+        const requestedDate = job_date ? new Date(job_date) : new Date();
+        if (Number.isNaN(requestedDate.getTime())) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'The repair job date is invalid.' });
+        }
+        const status = technician ? 'Technician Assigned' : 'Pending Inspection';
+        const inserted = await client.query(`
+          WITH next_job AS (
+            SELECT nextval(pg_get_serial_sequence('repair_jobs', 'id'))::int AS id
+          )
+          INSERT INTO repair_jobs (
+            id, job_number, scooter_number, rider_name, rider_contact,
+            hub_id, hub_name, technician_id, technician_name, complaint,
+            priority, status, created_by_id, created_by_name, created_at, updated_at
+          )
+          SELECT
+            next_job.id,
+            'JOB-' || LPAD((next_job.id + 100)::text, 6, '0'),
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13
+          FROM next_job
+          RETURNING *
+        `, [
+          String(scooter_number).toUpperCase().trim(), String(rider_name).trim(), String(rider_contact).trim(),
+          hub.id, hub.hub_name, technician?.id || null, technician?.name || null, String(complaint).trim(),
+          priority === 'Urgent' ? 'Urgent' : 'Normal', status,
+          req.user?.id || null, req.user?.name || 'Staff User', requestedDate.toISOString()
+        ]);
+        const job = inserted.rows[0];
+
+        if (technician) {
+          await client.query(`
+            UPDATE technicians tech
+            SET active_jobs_count = workload.active_count,
+                status = CASE
+                  WHEN workload.active_count >= 3 THEN 'Busy'
+                  WHEN tech.status = 'On Leave' THEN tech.status
+                  ELSE 'Available'
+                END
+            FROM (
+              SELECT COUNT(*)::int AS active_count
+              FROM repair_jobs
+              WHERE technician_id = $1 AND status NOT IN ('Closed', 'Cancelled')
+            ) workload
+            WHERE tech.id = $1
+          `, [technician.id]);
+        }
+
+        await client.query(`
+          INSERT INTO repair_audit_logs (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'JOB_CREATED', $2, $3, $4, $5::jsonb)
+        `, [job.id, req.user?.id || null, req.user?.name || 'Staff User', req.user?.roleDisplayName || req.user?.roleName || null,
+          JSON.stringify({ job_number: job.job_number, technician_id: technician?.id || null })]);
+
+        await client.query('COMMIT');
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'CREATE',
+          module: 'REPAIR_JOBS',
+          recordId: job.id,
+          notes: `Created Repair Job ${job.job_number} for ${job.scooter_number}`
+        });
+        return res.status(201).json({ success: true, data: job, message: `Repair Job ${job.job_number} created successfully!` });
+      } catch (dbError) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw dbError;
+      } finally {
+        client.release();
+      }
+    }
+
     // Resolve Hub
     const hub = memoryStore.repairHubs.find(h => h.id === Number(hub_id)) || memoryStore.repairHubs[0];
 
@@ -473,6 +615,99 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { technician_id } = req.body;
     const jobId = Number(id);
+
+    if (getDbStatus()) {
+      const technicianId = Number(technician_id);
+      if (!Number.isInteger(technicianId) || technicianId <= 0) {
+        return res.status(400).json({ success: false, message: 'Select a valid technician.' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query('SELECT * FROM repair_jobs WHERE id = $1 FOR UPDATE', [jobId]);
+        const job = jobResult.rows[0];
+        if (!job) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        if (job.status === 'Closed' || job.status === 'Cancelled') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Cannot assign a technician to a closed or cancelled job.' });
+        }
+
+        const technicianResult = await client.query(`
+          SELECT tech.id, tech.name, tech.technician_code
+          FROM technicians tech
+          JOIN users app_user
+            ON LOWER(app_user.email) = LOWER(tech.email)
+           AND app_user.deleted_at IS NULL
+           AND app_user.status = 'active'
+          JOIN roles app_role
+            ON app_role.id = app_user.role_id
+           AND UPPER(app_role.name) = 'TECHNICIAN'
+          WHERE tech.id = $1
+          FOR UPDATE OF tech
+        `, [technicianId]);
+        const technician = technicianResult.rows[0];
+        if (!technician) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Technician not found or inactive. Refresh the list and try again.' });
+        }
+
+        const updated = await client.query(`
+          UPDATE repair_jobs
+          SET technician_id = $1,
+              technician_name = $2,
+              status = CASE WHEN status = 'Pending Inspection' THEN 'Technician Assigned' ELSE status END,
+              updated_at = NOW()
+          WHERE id = $3
+          RETURNING *
+        `, [technician.id, technician.name, jobId]);
+
+        const affectedTechnicianIds = [...new Set([job.technician_id, technician.id].filter(Boolean).map(Number))];
+        for (const affectedId of affectedTechnicianIds) {
+          await client.query(`
+            UPDATE technicians tech
+            SET active_jobs_count = workload.active_count,
+                status = CASE
+                  WHEN workload.active_count >= 3 THEN 'Busy'
+                  WHEN tech.status = 'On Leave' THEN tech.status
+                  ELSE 'Available'
+                END
+            FROM (
+              SELECT COUNT(*)::int AS active_count
+              FROM repair_jobs
+              WHERE technician_id = $1 AND status NOT IN ('Closed', 'Cancelled')
+            ) workload
+            WHERE tech.id = $1
+          `, [affectedId]);
+        }
+
+        await client.query(`
+          INSERT INTO repair_audit_logs (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'TECHNICIAN_ASSIGNED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || null, req.user?.name || 'Staff User', req.user?.roleDisplayName || req.user?.roleName || null,
+          JSON.stringify({ previous_technician_id: job.technician_id, technician_id: technician.id, technician_name: technician.name })]);
+
+        await client.query('COMMIT');
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'UPDATE',
+          module: 'REPAIR_JOBS',
+          recordId: jobId,
+          notes: `Assigned ${technician.name} to Repair Job ${job.job_number}`
+        });
+        return res.json({ success: true, data: updated.rows[0], message: `Technician ${technician.name} assigned successfully!` });
+      } catch (dbError) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw dbError;
+      } finally {
+        client.release();
+      }
+    }
 
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {
@@ -1352,6 +1587,18 @@ export const closeRepairJob = async (req: AuthRequest, res: Response) => {
 // 12. METADATA: HUBS, TECHNICIANS & INVENTORY
 export const getRepairMeta = async (req: AuthRequest, res: Response) => {
   try {
+    if (getDbStatus()) {
+      const [directories, inventoryResult] = await Promise.all([
+        getDatabaseRepairDirectories(),
+        pool.query('SELECT id, part_code, part_name, unit_price, quantity FROM inventory ORDER BY part_name')
+      ]);
+      return res.json({
+        success: true,
+        ...directories,
+        inventory: inventoryResult.rows
+      });
+    }
+
     return res.json({
       success: true,
       hubs: memoryStore.repairHubs,
