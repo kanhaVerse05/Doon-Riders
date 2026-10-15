@@ -13,10 +13,11 @@ import {
 } from '../../controllers/admin/adminAuthController';
 import { authenticateJwt } from '../../middleware/authMiddleware';
 import { requireSuperAdmin } from '../../middleware/rbacMiddleware';
+import { loginCredentialRateLimit, loginIpRateLimit } from '../../middleware/loginRateLimit';
 
 const router = Router();
 
-router.post('/login', login);
+router.post('/login', loginIpRateLimit, loginCredentialRateLimit, login);
 router.post('/login/mfa', verifyMfaLogin);
 router.post('/mfa/setup/first/start', beginInitialMfaSetup);
 router.post('/mfa/setup/first/confirm', confirmInitialMfaSetup);

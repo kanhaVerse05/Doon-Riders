@@ -31,6 +31,11 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0) {
+  throw new Error('TRUST_PROXY_HOPS must be a non-negative integer.');
+}
+app.set('trust proxy', trustProxyHops);
 
 app.use(cors({
   origin: process.env.CLIENT_URL || '*',
