@@ -600,7 +600,7 @@ _Please present this receipt confirmation at the hub during vehicle handover._
           if (blob) {
             const imageFile = new File([blob], `DOON_Riders_Slip_${b.booking_code}.png`, { type: 'image/png' });
             if (navigator.canShare({ files: [imageFile] })) {
-              setToastMessage(`📋 Number (${cleanPhone}) copied! WhatsApp me select karein.`);
+              setToastMessage(`📋 Number (${cleanPhone}) copied. Paste it into WhatsApp to continue.`);
               await navigator.share({
                 files: [imageFile],
                 title: `DOON Riders Slip - ${b.booking_code}`,

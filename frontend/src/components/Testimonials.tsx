@@ -9,19 +9,19 @@ export const Testimonials: React.FC = () => {
       name: 'Amit Sharma',
       role: 'Food Delivery Partner, Dehradun',
       avatar: '/images/avatars/rider-amit.jpg',
-      text: 'Pehle petrol me har mahine ₹5,000–₹6,000 lag jate the. DOON Riders ka weekly rental plan lene ke baad meri monthly savings double ho gayi hai. Battery swap bas 2 minute me ho jata hai, zero downtime!',
+      text: 'I used to spend ₹5,000–₹6,000 on petrol every month. Since switching to DOON Riders’ weekly rental plan, my monthly savings have doubled. Battery swaps take just two minutes, so there is no downtime.',
     },
     {
       name: 'Rahul Rawat',
       role: 'Quick Commerce Rider, Rajpur Road',
       avatar: '/images/avatars/rider-rahul.jpg',
-      text: 'Best EV rental service in Uttarakhand! Unlimited daily km and quick battery swaps have made daily delivery work completely hassle-free. Maintenance aur brake checkup sab free rehta hai.',
+      text: 'The best EV rental service in Uttarakhand. Unlimited daily mileage and quick battery swaps make delivery work hassle-free. Maintenance and brake inspections are included at no extra cost.',
     },
     {
       name: 'Pooja Negi',
       role: 'Daily Office Commuter, Jakhan',
       avatar: '/images/avatars/rider-pooja.jpg',
-      text: 'Switching to DOON Riders has cut my travel expense to almost nothing. Traffic me super smooth and silent ride hai, aur koi heavy security deposit ya licence ka tension nahi hai.',
+      text: 'Switching to DOON Riders has significantly reduced my travel costs. The scooter is smooth and quiet in traffic, and the affordable security deposit and simple requirements made getting started easy.',
     },
   ];
 

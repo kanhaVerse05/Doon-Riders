@@ -126,11 +126,11 @@ export default function SettingsPage() {
                 <span className="text-xs text-slate-500">Scan with Google Authenticator</span>
               </div>
               <div className="space-y-3">
-                <p className="text-sm text-slate-700">Google Authenticator mein <b>+</b> dabao aur QR scan karo. Scan na ho toh setup key manually enter karo:</p>
+                <p className="text-sm text-slate-700">In Google Authenticator, tap <b>+</b> and scan the QR code. If you cannot scan it, enter the setup key manually:</p>
                 <code className="block break-all rounded-lg bg-slate-100 p-3 text-sm font-bold tracking-wider">{mfaSetup.secret}</code>
                 <form onSubmit={confirmAuthenticatorSetup} className="flex flex-wrap items-end gap-3">
                   <label className="space-y-1 text-sm font-semibold text-slate-700">
-                    <span>App ka 6-digit code</span>
+                    <span>6-digit verification code</span>
                     <input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={setupCode} onChange={(event) => setSetupCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="block w-44 rounded-lg border px-3 py-2 text-center text-lg tracking-[0.3em]" />
                   </label>
                   <button disabled={mfaBusy} className="rounded-xl bg-[#00C968] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{mfaBusy ? 'Verifying…' : 'Verify and enable'}</button>

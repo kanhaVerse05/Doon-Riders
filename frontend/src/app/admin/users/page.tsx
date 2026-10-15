@@ -85,7 +85,7 @@ export default function UserManagementPage() {
     setLoadingUsers(true);
     const response = await adminApi.get('/admin/users');
     if (!response?.success || !Array.isArray(response.data)) {
-      setNotice({ type: 'error', text: response?.message || 'Staff accounts load nahi ho paaye.' });
+      setNotice({ type: 'error', text: response?.message || 'Unable to load staff accounts.' });
       setUsers([]);
     } else {
       setUsers(response.data);
@@ -98,7 +98,7 @@ export default function UserManagementPage() {
     setLoadingRoles(true);
     const response = await adminApi.get('/admin/roles');
     if (!response?.success || !response.data) {
-      setNotice({ type: 'error', text: response?.message || 'Roles aur permissions load nahi ho paaye.' });
+      setNotice({ type: 'error', text: response?.message || 'Unable to load roles and permissions.' });
       setLoadingRoles(false);
       return;
     }
@@ -171,7 +171,7 @@ export default function UserManagementPage() {
     event.preventDefault();
     if (!canCreateUsers) return;
     if (!userForm.name.trim() || !userForm.email.trim() || userForm.password.length < 8 || (isSuperAdmin && !userForm.roleId)) {
-      notifyError('Naam, email, role aur kam se kam 8 character ka password bharna zaroori hai.');
+      notifyError('Enter a name, email address, role, and a password with at least 8 characters.');
       return;
     }
     setCreatingUser(true);
@@ -185,12 +185,12 @@ export default function UserManagementPage() {
     });
     setCreatingUser(false);
     if (!response?.success) {
-      notifyError(response?.message || 'User create nahi ho paaya.');
+      notifyError(response?.message || 'Unable to create the user account.');
       return;
     }
     setCreateUserOpen(false);
     setUserForm({ name: '', email: '', phone: '', password: '', roleId: '' });
-    setNotice({ type: 'success', text: `${response.data?.name || 'User'} ka account create ho gaya.` });
+    setNotice({ type: 'success', text: `The account for ${response.data?.name || 'the user'} was created successfully.` });
     await loadUsers();
   };
 
@@ -199,7 +199,7 @@ export default function UserManagementPage() {
     if (!isSuperAdmin) return;
     const displayName = roleForm.displayName.trim();
     if (!displayName || !normalizeRoleCode(displayName)) {
-      notifyError('Role ka naam letters ya numbers ke saath likho.');
+      notifyError('Enter a role name using letters and numbers.');
       return;
     }
     setCreatingRole(true);
@@ -211,12 +211,12 @@ export default function UserManagementPage() {
     });
     setCreatingRole(false);
     if (!response?.success) {
-      notifyError(response?.message || 'Role create nahi ho paaya.');
+      notifyError(response?.message || 'Unable to create the role.');
       return;
     }
     setRoleForm({ displayName: '', description: '' });
     setCreateRoleOpen(false);
-    setNotice({ type: 'success', text: `${displayName} role create ho gaya. Iske rights abhi khaali hain.` });
+    setNotice({ type: 'success', text: `${displayName} was created successfully. No permissions have been assigned.` });
     await loadRoles();
     if (response.data?.id) setSelectedRoleId(Number(response.data.id));
   };
@@ -239,7 +239,7 @@ export default function UserManagementPage() {
     });
     setSavingRights(false);
     if (!response?.success) {
-      notifyError(response?.message || 'Rights save nahi ho paaye.');
+      notifyError(response?.message || 'Unable to save the permissions.');
       return;
     }
     setRolePermissions(current => [
@@ -253,18 +253,18 @@ export default function UserManagementPage() {
     setRoles(current => current.map(role => role.id === selectedRole.id
       ? { ...role, permissions_configured: true }
       : role));
-    setNotice({ type: 'success', text: `${selectedRole.display_name} ke ${selectedCount} alag rights save ho gaye.` });
+    setNotice({ type: 'success', text: `${selectedCount} permission${selectedCount === 1 ? '' : 's'} saved for ${selectedRole.display_name}.` });
   };
 
   const handleDeleteRole = async (role: Role) => {
     if (!isSuperAdmin || role.is_system || role.name === 'SUPER_ADMIN') return;
-    if (!window.confirm(`“${role.display_name}” role delete karna hai? Assigned users wale role ko API delete nahi hone degi.`)) return;
+    if (!window.confirm(`Delete the “${role.display_name}” role? Roles assigned to users cannot be deleted.`)) return;
     const response = await adminApi.delete(`/admin/roles/${role.id}`);
     if (!response?.success) {
-      notifyError(response?.message || 'Role delete nahi ho paaya.');
+      notifyError(response?.message || 'Unable to delete the role.');
       return;
     }
-    setNotice({ type: 'success', text: `${role.display_name} role delete ho gaya.` });
+    setNotice({ type: 'success', text: `${role.display_name} was deleted successfully.` });
     await loadRoles();
   };
 
@@ -274,22 +274,22 @@ export default function UserManagementPage() {
     if (!role) return;
     const response = await adminApi.patch(`/admin/users/${member.id}/status`, { roleId: role.id });
     if (!response?.success) {
-      notifyError(response?.message || 'User ka role update nahi ho paaya.');
+      notifyError(response?.message || 'Unable to update the user role.');
       return;
     }
-    setNotice({ type: 'success', text: `${member.name} ka role ${role.display_name} kar diya.` });
+    setNotice({ type: 'success', text: `${member.name} was assigned the ${role.display_name} role.` });
     await loadUsers();
   };
 
   const handleDeleteUser = async (member: StaffUser) => {
     if (!hasPermission('users.delete') || member.role_name === 'SUPER_ADMIN') return;
-    if (!window.confirm(`${member.name} ka staff account permanently delete karna hai?`)) return;
+    if (!window.confirm(`Permanently delete the staff account for ${member.name}?`)) return;
     const response = await adminApi.delete(`/admin/users/${member.id}`);
     if (!response?.success) {
-      notifyError(response?.message || 'User delete nahi ho paaya.');
+      notifyError(response?.message || 'Unable to delete the user account.');
       return;
     }
-    setNotice({ type: 'success', text: `${member.name} ka account delete ho gaya.` });
+    setNotice({ type: 'success', text: `The account for ${member.name} was deleted successfully.` });
     await loadUsers();
   };
 
@@ -302,7 +302,7 @@ export default function UserManagementPage() {
               <ShieldCheck className="h-4 w-4" /> Access Control
             </div>
             <h1 className="text-2xl font-black tracking-tight text-[#111827] sm:text-3xl">User Management</h1>
-            <p className="mt-1 text-sm text-[#667085]">Staff accounts, roles aur har module ke alag access rights yahan manage karo.</p>
+            <p className="mt-1 text-sm text-[#667085]">Manage staff accounts, roles, and module-level permissions.</p>
           </div>
           {tab === 'users' && canCreateUsers && (
             <button
@@ -346,7 +346,7 @@ export default function UserManagementPage() {
               onClick={() => setTab('roles')}
               className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition ${tab === 'roles' ? 'border-[#00C96B] text-[#007A43]' : 'border-transparent text-[#667085] hover:text-[#182230]'}`}
             >
-              <Shield className="h-4 w-4" /> Roles &amp; Rights
+              <Shield className="h-4 w-4" /> Roles &amp; Permissions
             </button>
           )}
         </div>
@@ -356,11 +356,11 @@ export default function UserManagementPage() {
             <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div>
                 <h2 className="font-bold text-[#182230]">Staff Accounts</h2>
-                <p className="mt-1 text-xs text-[#667085]">Account ka role badalne par us role ke saved rights apply honge.</p>
+                <p className="mt-1 text-xs text-[#667085]">Changing an account’s role applies the permissions configured for that role.</p>
               </div>
               <label className="relative block w-full sm:w-80">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98A2B3]" />
-                <input value={searchUsers} onChange={event => setSearchUsers(event.target.value)} placeholder="Naam, email ya role se search" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
+                <input value={searchUsers} onChange={event => setSearchUsers(event.target.value)} placeholder="Search by name, email, or role" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
               </label>
             </div>
             <div className="overflow-x-auto">
@@ -370,9 +370,9 @@ export default function UserManagementPage() {
                 </thead>
                 <tbody className="divide-y divide-[#EAECF0]">
                   {loadingUsers ? (
-                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">Users load ho rahe hain…</td></tr>
+                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">Loading users…</td></tr>
                   ) : filteredUsers.length === 0 ? (
-                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">Koi staff account nahi mila.</td></tr>
+                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">No staff accounts found.</td></tr>
                   ) : filteredUsers.map(member => (
                     <tr key={member.id} className="hover:bg-[#FCFCFD]">
                       <td className="px-5 py-4">
@@ -404,15 +404,15 @@ export default function UserManagementPage() {
             <section className="h-fit overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-sm">
               <div className="border-b border-[#EAECF0] px-4 py-4">
                 <h2 className="font-bold text-[#182230]">Role Directory</h2>
-                <p className="mt-1 text-xs text-[#667085]">Role choose karke uske rights edit karo.</p>
+                <p className="mt-1 text-xs text-[#667085]">Select a role to review and edit its permissions.</p>
               </div>
               <div className="max-h-[650px] space-y-2 overflow-y-auto p-3">
-                {loadingRoles ? <p className="p-4 text-center text-sm text-[#667085]">Roles load ho rahe hain…</p> : roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => (
+                {loadingRoles ? <p className="p-4 text-center text-sm text-[#667085]">Loading roles…</p> : roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => (
                   <div key={role.id} className={`flex items-start gap-2 rounded-xl border p-3 transition ${selectedRoleId === role.id ? 'border-[#00C96B] bg-[#F0FDF5] shadow-sm' : 'border-[#EAECF0] hover:border-[#B7EBD0]'}`}>
                     <button onClick={() => setSelectedRoleId(role.id)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate text-sm font-bold text-[#182230]">{role.display_name}</span>
-                      <span className="mt-1 block text-xs text-[#667085]">{grantCountByRole(role.id)} rights assigned</span>
-                      {!role.permissions_configured && <span className="mt-1 inline-block text-[10px] font-bold text-amber-700">Rights review needed</span>}
+                      <span className="mt-1 block text-xs text-[#667085]">{grantCountByRole(role.id)} permissions assigned</span>
+                      {!role.permissions_configured && <span className="mt-1 inline-block text-[10px] font-bold text-amber-700">Permission review required</span>}
                     </button>
                     <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 ${selectedRoleId === role.id ? 'text-[#00A854]' : 'text-[#98A2B3]'}`} />
                     {isSuperAdmin && !role.is_system && <button onClick={() => void handleDeleteRole(role)} title="Delete role" className="rounded-md p-1 text-[#98A2B3] hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
@@ -425,28 +425,28 @@ export default function UserManagementPage() {
               <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                 <div>
                   <h2 className="font-bold text-[#182230]">{selectedRole?.display_name || 'Role permissions'}</h2>
-                  <p className="mt-1 text-xs text-[#667085]">Har row ek independent right hai. Sirf checked actions hi grant honge.</p>
+                  <p className="mt-1 text-xs text-[#667085]">Each permission is independent. Only selected actions will be granted.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="rounded-full bg-[#F2F4F7] px-3 py-1.5 text-xs font-bold text-[#475467]">{selectedCount} selected</span>
-                  {isSuperAdmin && selectedRole && selectedRole.name !== 'SUPER_ADMIN' && <button onClick={() => void handleSaveRights()} disabled={savingRights || loadingRoles} className="inline-flex items-center gap-2 rounded-xl bg-[#00C96B] px-4 py-2.5 text-xs font-black text-[#071B13] transition hover:bg-[#00B85F] disabled:cursor-not-allowed disabled:opacity-60"><Check className="h-4 w-4" />{savingRights ? 'Saving…' : 'Save Rights'}</button>}
+                  {isSuperAdmin && selectedRole && selectedRole.name !== 'SUPER_ADMIN' && <button onClick={() => void handleSaveRights()} disabled={savingRights || loadingRoles} className="inline-flex items-center gap-2 rounded-xl bg-[#00C96B] px-4 py-2.5 text-xs font-black text-[#071B13] transition hover:bg-[#00B85F] disabled:cursor-not-allowed disabled:opacity-60"><Check className="h-4 w-4" />{savingRights ? 'Saving…' : 'Save Permissions'}</button>}
                 </div>
               </div>
 
               {selectedRole?.name === 'SUPER_ADMIN' ? (
-                <div className="m-5 flex gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900"><LockKeyhole className="h-5 w-5 shrink-0" /><p>Super Admin ke full system access ko yahan se edit nahi kiya ja sakta.</p></div>
+                <div className="m-5 flex gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900"><LockKeyhole className="h-5 w-5 shrink-0" /><p>Super Admin has full system access and cannot be modified here.</p></div>
               ) : !selectedRole ? (
-                <div className="p-12 text-center text-sm text-[#667085]">Pehle left side se role select karo.</div>
+                <div className="p-12 text-center text-sm text-[#667085]">Select a role to continue.</div>
               ) : (
                 <>
                   <div className="border-b border-[#EAECF0] p-4 sm:px-5">
                     <label className="relative block max-w-md">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98A2B3]" />
-                      <input value={searchPermissions} onChange={event => setSearchPermissions(event.target.value)} placeholder="Permission name ya action search karo" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
+                      <input value={searchPermissions} onChange={event => setSearchPermissions(event.target.value)} placeholder="Search permissions or actions" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
                     </label>
                   </div>
                   <div className="space-y-4 p-4 sm:p-5">
-                    {groupedPermissions.length === 0 ? <p className="py-10 text-center text-sm text-[#667085]">Koi permission match nahi hui.</p> : groupedPermissions.map(([module, items]) => (
+                    {groupedPermissions.length === 0 ? <p className="py-10 text-center text-sm text-[#667085]">No matching permissions found.</p> : groupedPermissions.map(([module, items]) => (
                       <div key={module} className="overflow-hidden rounded-xl border border-[#EAECF0]">
                         <div className="flex items-center justify-between bg-[#F9FAFB] px-4 py-3">
                           <h3 className="text-sm font-extrabold text-[#344054]">{module}</h3>
@@ -484,7 +484,7 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-[#101828]/50 p-4 backdrop-blur-sm">
           <form onSubmit={handleCreateUser} className="my-auto w-full max-w-xl space-y-5 rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
             <div className="flex items-start justify-between">
-              <div><h2 className="text-xl font-black text-[#182230]">Create User</h2><p className="mt-1 text-sm text-[#667085]">Naye staff account ko role assign karo.</p></div>
+              <div><h2 className="text-xl font-black text-[#182230]">Create User</h2><p className="mt-1 text-sm text-[#667085]">Create a staff account and assign a role.</p></div>
               <button type="button" onClick={() => setCreateUserOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[#667085]" /></button>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -493,7 +493,7 @@ export default function UserManagementPage() {
               <label className="text-xs font-bold text-[#344054]">Phone (optional)<input value={userForm.phone} onChange={event => setUserForm(form => ({ ...form, phone: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
               <label className="text-xs font-bold text-[#344054]">Temporary password<input required minLength={8} type="password" autoComplete="new-password" value={userForm.password} onChange={event => setUserForm(form => ({ ...form, password: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
               <label className="text-xs font-bold text-[#344054] sm:col-span-2">Role{isSuperAdmin ? (
-                <select required value={userForm.roleId} onChange={event => setUserForm(form => ({ ...form, roleId: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]"><option value="">Role choose karo</option>{roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => <option key={role.id} value={role.id}>{role.display_name}{grantCountByRole(role.id) === 0 ? ' · no rights configured' : ''}</option>)}</select>
+                <select required value={userForm.roleId} onChange={event => setUserForm(form => ({ ...form, roleId: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]"><option value="">Select a role</option>{roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => <option key={role.id} value={role.id}>{role.display_name}{grantCountByRole(role.id) === 0 ? ' · no permissions configured' : ''}</option>)}</select>
               ) : <input disabled value={user?.roleDisplayName || 'Your role'} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-[#F9FAFB] px-3 py-2.5 text-sm font-normal text-[#667085]" />}</label>
             </div>
             <div className="flex justify-end gap-2 border-t border-[#EAECF0] pt-4">
@@ -508,11 +508,11 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#101828]/50 p-4 backdrop-blur-sm">
           <form onSubmit={handleCreateRole} className="w-full max-w-md space-y-5 rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
             <div className="flex items-start justify-between">
-              <div><h2 className="text-xl font-black text-[#182230]">Create Custom Role</h2><p className="mt-1 text-sm text-[#667085]">Role save hote hi rights zero rahenge.</p></div>
+              <div><h2 className="text-xl font-black text-[#182230]">Create Custom Role</h2><p className="mt-1 text-sm text-[#667085]">New roles are created without permissions. Assign permissions after creation.</p></div>
               <button type="button" onClick={() => setCreateRoleOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[#667085]" /></button>
             </div>
             <label className="block text-xs font-bold text-[#344054]">Role name<input required maxLength={80} autoFocus value={roleForm.displayName} onChange={event => setRoleForm(form => ({ ...form, displayName: event.target.value }))} placeholder="Jaise: Workshop Supervisor" className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
-            <label className="block text-xs font-bold text-[#344054]">Description (optional)<textarea maxLength={250} rows={3} value={roleForm.description} onChange={event => setRoleForm(form => ({ ...form, description: event.target.value }))} placeholder="Is role ka kaam likho" className="mt-1.5 w-full resize-none rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+            <label className="block text-xs font-bold text-[#344054]">Description (optional)<textarea maxLength={250} rows={3} value={roleForm.description} onChange={event => setRoleForm(form => ({ ...form, description: event.target.value }))} placeholder="Describe this role’s responsibilities" className="mt-1.5 w-full resize-none rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
             <div className="flex justify-end gap-2 border-t border-[#EAECF0] pt-4">
               <button type="button" onClick={() => setCreateRoleOpen(false)} className="rounded-xl border border-[#D0D5DD] px-4 py-2.5 text-sm font-bold text-[#344054]">Cancel</button>
               <button type="submit" disabled={creatingRole} className="rounded-xl bg-[#00C96B] px-5 py-2.5 text-sm font-black text-[#071B13] disabled:opacity-50">{creatingRole ? 'Creating…' : 'Create empty role'}</button>
