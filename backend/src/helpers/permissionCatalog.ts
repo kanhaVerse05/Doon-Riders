@@ -48,7 +48,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { code: 'recoveries.create', module: 'Scooty Recoveries', description: 'Create and dispatch recovery tickets (Hub Incharge/Admin).' },
   { code: 'recoveries.accept', module: 'Scooty Recoveries', description: 'Accept a recovery ticket assigned to the recovery agent.' },
   { code: 'recoveries.pickup', module: 'Scooty Recoveries', description: 'Record pickup details and evidence for an assigned recovery.' },
-  { code: 'recoveries.reached_hub', module: 'Scooty Recoveries', description: 'Confirm delivery of a recovered scooter to the hub.' },
+  { code: 'recoveries.reached_hub', module: 'Scooty Recoveries', description: 'Recovery Agent: Mark task Done after delivering the scooter to the hub.' },
   { code: 'recoveries.assign_tech', module: 'Scooty Recoveries', description: 'Assign a technician for damage inspection (Hub Incharge/Admin).' },
   { code: 'recoveries.inspect', module: 'Scooty Recoveries', description: 'Review recovery damage inspection details.' },
   { code: 'recoveries.settle', module: 'Scooty Recoveries', description: 'Finalize the recovery settlement (Hub Incharge/Admin).' },
