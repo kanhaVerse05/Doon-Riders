@@ -13,7 +13,6 @@ import {
   BarChart3,
   LogOut,
   X,
-  ShieldCheck,
   Camera,
   Tag,
   Ticket,
@@ -207,7 +206,6 @@ export const MobileBottomNav: React.FC = () => {
     { name: 'Vehicle Gallery', href: '/admin/gallery', icon: Camera, show: hasPermission('fleet.view') },
     { name: 'Reports & Attribution', href: '/admin/reports', icon: BarChart3, show: hasPermission('reports.view') },
     { name: 'Team Directory', href: '/admin/users', icon: Users, show: hasPermission('users.view') },
-    { name: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck, show: hasPermission('roles.view') },
   ].filter(item => item.show);
 
   return (

@@ -89,10 +89,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           router.replace('/admin/pre-bookings');
           return;
         }
-        if (pathname?.startsWith('/admin/roles') && !hasPermission('roles.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
         if (pathname?.startsWith('/admin/users') && !hasPermission('users.view')) {
           router.replace('/admin/pre-bookings');
           return;

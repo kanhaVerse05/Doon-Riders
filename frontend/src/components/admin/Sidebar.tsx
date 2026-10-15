@@ -13,7 +13,6 @@ import {
   UserCog,
   Contact,
   BarChart3,
-  ShieldCheck,
   LogOut,
   Sparkles,
   Boxes,
@@ -175,12 +174,6 @@ export const Sidebar: React.FC = () => {
           icon: Users,
           permission: 'users.view'
         },
-        {
-          name: 'Roles & Permissions',
-          href: '/admin/roles',
-          icon: ShieldCheck,
-          permission: 'roles.view'
-        }
       ]
     }
   ];

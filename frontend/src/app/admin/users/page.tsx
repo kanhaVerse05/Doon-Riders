@@ -12,15 +12,11 @@ import {
   Lock,
   Check,
   X,
-  ShieldCheck,
-  ArrowRight,
   Trash2,
   AlertCircle,
   Camera,
   Upload
 } from 'lucide-react';
-import Link from 'next/link';
-
 interface TeamMember {
   id: number;
   name: string;
@@ -532,12 +528,6 @@ export default function UsersPage() {
               <Check className="w-4 h-4 stroke-[3]" />
               <span>{successToast}</span>
             </div>
-            <Link
-              href="/admin/roles"
-              className="text-xs font-bold underline hover:text-[#111827] flex items-center gap-1"
-            >
-              Configure Permissions &rarr;
-            </Link>
           </div>
         )}
 
@@ -658,14 +648,6 @@ export default function UsersPage() {
                             </span>
                           ) : (
                             <div className="flex items-center justify-end gap-2">
-                              <Link
-                                href={`/admin/roles?userId=${u.id}`}
-                                className="inline-flex items-center gap-1.5 bg-[#F7F9FA] hover:bg-[#EAFBF2] text-[#111827] hover:text-[#00A854] border border-[#E5E7EB] hover:border-[#00D96B]/50 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm"
-                              >
-                                <ShieldCheck className="w-3.5 h-3.5 text-[#00A854]" />
-                                <span>Permissions</span>
-                                <ArrowRight className="w-3 h-3" />
-                              </Link>
                               <button
                                 onClick={() => handleDeleteUser(u.id, u.name, u.is_super_admin)}
                                 title="Remove User"
