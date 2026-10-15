@@ -9,30 +9,30 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     if (getDbStatus()) {
       // 1. Leads Stats
-      let leadFilter = 'WHERE deleted_at IS NULL';
+      let leadFilter = 'WHERE l.deleted_at IS NULL';
       if (isSalesExec) {
-        leadFilter += ` AND assigned_to = ${user.id}`;
+        leadFilter += ` AND l.assigned_to = ${user.id}`;
       }
 
       const leadsQuery = `
         SELECT 
           COUNT(*) as total_leads,
-          COUNT(CASE WHEN status = 'New' THEN 1 END) as new_leads,
-          COUNT(CASE WHEN status = 'Contacted' THEN 1 END) as contacted_leads,
-          COUNT(CASE WHEN status = 'Interested' THEN 1 END) as interested_leads,
-          COUNT(CASE WHEN status = 'Follow-up' THEN 1 END) as followup_leads,
-          COUNT(CASE WHEN status = 'Documents Pending' THEN 1 END) as docs_pending_leads,
-          COUNT(CASE WHEN status = 'Booking Confirmed' THEN 1 END) as confirmed_leads,
-          COUNT(CASE WHEN status = 'Converted' THEN 1 END) as converted_leads,
-          COUNT(CASE WHEN status = 'Lost' THEN 1 END) as lost_leads
-        FROM leads
+          COUNT(CASE WHEN l.status = 'New' THEN 1 END) as new_leads,
+          COUNT(CASE WHEN l.status = 'Contacted' THEN 1 END) as contacted_leads,
+          COUNT(CASE WHEN l.status = 'Interested' THEN 1 END) as interested_leads,
+          COUNT(CASE WHEN l.status = 'Follow-up' THEN 1 END) as followup_leads,
+          COUNT(CASE WHEN l.status = 'Documents Pending' THEN 1 END) as docs_pending_leads,
+          COUNT(CASE WHEN l.status = 'Booking Confirmed' THEN 1 END) as confirmed_leads,
+          COUNT(CASE WHEN l.status = 'Converted' THEN 1 END) as converted_leads,
+          COUNT(CASE WHEN l.status = 'Lost' THEN 1 END) as lost_leads
+        FROM leads l
         ${leadFilter}
       `;
 
       // 2. Leads by Marketing Channel / Source
       const sourceQuery = `
-        SELECT lead_source, COUNT(*) as count
-        FROM leads
+        SELECT l.lead_source, COUNT(*) as count
+        FROM leads l
         ${leadFilter}
         GROUP BY lead_source
         ORDER BY count DESC
