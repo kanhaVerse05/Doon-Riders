@@ -115,6 +115,11 @@ function RolesAndPermissionsContent() {
     { id: 2, code: 'dashboard.view_all', module: 'Dashboard', description: 'View enterprise analytics and full company metrics' },
     { id: 3, code: 'dashboard.view_sales', module: 'Dashboard', description: 'View personal sales KPI and conversion metrics' },
 
+    // Sidebar modules that were previously missing from the assignable permission matrix
+    { id: 60, code: 'complaints.view', module: 'Complaints', description: 'View customer complaints and field support cases' },
+    { id: 61, code: 'returns.view', module: 'Returns', description: 'View scooter return and settlement records' },
+    { id: 62, code: 'settings.view', module: 'Settings', description: 'View and manage pricing plans' },
+
     // Pre-Bookings
     { id: 43, code: 'pre_bookings.view', module: 'Pre-Bookings', description: 'View pre-booking registry and customer queues' },
     { id: 44, code: 'pre_bookings.view_all', module: 'Pre-Bookings', description: 'View full company-wide EV pre-bookings' },
@@ -605,7 +610,7 @@ function RolesAndPermissionsContent() {
     }
   };
 
-  const modules = ['ALL', 'Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports', 'Team Directory'];
+  const modules = ['ALL', 'Dashboard', 'Complaints', 'Returns', 'Settings', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports', 'Team Directory'];
 
   const filteredPermissions = allPermissions.filter(p => {
     const matchesTab = activeModuleTab === 'ALL' || p.module === activeModuleTab;
