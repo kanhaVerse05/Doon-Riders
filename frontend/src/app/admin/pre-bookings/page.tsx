@@ -135,14 +135,9 @@ const getCustomerInitials = (nameStr?: string): string => {
 
 export default function PreBookingsAdminPage() {
   const { user, hasPermission } = useAuth();
-  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
-  const isPreBookingUser = 
-    user?.roleName === 'PRE_BOOKING' || 
-    user?.roleName?.includes('PRE_BOOK') || 
-    Boolean(user?.roleDisplayName?.toLowerCase().includes('pre-booking'));
-  const isManager = user?.roleName === 'MANAGER' || user?.roleName?.includes('MANAGER');
-  const canCreatePreBooking = isSuperAdmin || hasPermission('pre_bookings.create') || isPreBookingUser;
-  const canViewAllBookings = isSuperAdmin || isPreBookingUser || isManager || hasPermission('pre_bookings.view_all') || hasPermission('pre_bookings.view', 'ALL') || hasPermission('pre_bookings.view');
+  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN';
+  const canCreatePreBooking = isSuperAdmin || hasPermission('pre_bookings.create');
+  const canViewAllBookings = isSuperAdmin || hasPermission('pre_bookings.view_all') || hasPermission('pre_bookings.view', 'ALL');
 
   const [bookings, setBookings] = useState<PreBooking[]>([]);
   const [stats, setStats] = useState({

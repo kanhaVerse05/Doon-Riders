@@ -1,912 +1,523 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  Check,
+  ChevronRight,
+  LockKeyhole,
+  Plus,
+  Search,
+  Shield,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+  X
+} from 'lucide-react';
 import { AdminLayout } from '../../../components/admin/AdminLayout';
 import { adminApi } from '../../../lib/adminApi';
-import {
-  UserPlus,
-  Search,
-  User,
-  Phone,
-  Mail,
-  Lock,
-  Check,
-  X,
-  Trash2,
-  AlertCircle,
-  Camera,
-  Upload
-} from 'lucide-react';
-interface TeamMember {
+import { useAuth } from '../../../context/AuthContext';
+
+type Role = {
+  id: number;
+  name: string;
+  display_name: string;
+  description?: string;
+  is_system?: boolean;
+  permissions_configured?: boolean;
+};
+
+type Permission = { code: string; module: string; description: string };
+type RolePermission = { role_id: number; code: string; scope?: string };
+type StaffUser = {
   id: number;
   name: string;
   email: string;
   phone?: string;
-  role_id: number;
+  role_id: number | null;
   role_name?: string;
-  role_display_name: string;
+  role_display_name?: string;
   status: string;
   avatar_url?: string;
-  last_login?: string;
   created_at?: string;
-  is_super_admin?: boolean;
-}
-
-interface RoleItem {
-  id: number | string;
-  name: string;
-  display_name: string;
-  is_system?: boolean;
-}
-
-const DEFAULT_ROLES: RoleItem[] = [
-  { id: 4, name: 'SALES_EXECUTIVE', display_name: 'Sales Executive', is_system: true },
-  { id: 3, name: 'MANAGER', display_name: 'Sales & Operations Manager', is_system: true },
-  { id: 5, name: 'HUB_INCHARGE', display_name: 'Hub Incharge', is_system: false },
-  { id: 6, name: 'TECHNICIAN', display_name: 'Technician', is_system: false },
-  { id: 7, name: 'CUSTOMER_SUPPORT', display_name: 'Customer Support', is_system: false },
-  { id: 8, name: 'PRE_BOOKING', display_name: 'Pre-Booking', is_system: false },
-  { id: 16, name: 'ACCOUNTANT', display_name: 'Accountant', is_system: false },
-  { id: 17, name: 'RECOVERY_AGENT', display_name: 'Recovery Agent', is_system: false }
-];
-
-const POPULAR_ROLE_CHIPS = [
-  'Technician',
-  'Hub Incharge',
-  'Workshop Manager',
-  'Fleet Supervisor',
-  'Accountant',
-  'Field Executive'
-];
-
-const DEMO_EMAILS = [
-  'admin@doonriders.com',
-  'manager@doonriders.com',
-  'rahul.sales@doonriders.com',
-  'priya.sales@doonriders.com',
-  'amit.sales@doonriders.com',
-  'amit.tech@doonriders.com',
-  'hub.isbt@doonriders.com',
-  'rajesh.tech@doonriders.com',
-  'sandeep.tech@doonriders.com',
-  'support@doonriders.com',
-  'demo@doonriders.com'
-];
-
-const getInitials = (nameStr: string) => {
-  if (!nameStr) return 'DR';
-  const parts = nameStr.trim().split(' ').filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return parts[0].slice(0, 2).toUpperCase();
 };
+type Tab = 'users' | 'roles';
 
-export default function UsersPage() {
-  const [users, setUsers] = useState<TeamMember[]>([]);
-  const [roles, setRoles] = useState<RoleItem[]>(DEFAULT_ROLES);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('ALL');
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [successToast, setSuccessToast] = useState<string | null>(null);
-  const [errorToast, setErrorToast] = useState<string | null>(null);
+const normalizeRoleCode = (value: string) => value
+  .trim()
+  .toUpperCase()
+  .replace(/[^A-Z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '');
 
-  // Form State
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [selectedRoleValue, setSelectedRoleValue] = useState<string>('4'); // ID or 'CUSTOM'
-  const [customRoleInput, setCustomRoleInput] = useState('');
-  const [password, setPassword] = useState('Admin@1234');
-  const [status, setStatus] = useState('active');
-  const [avatarUrl, setAvatarUrl] = useState<string>('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'DR';
 
-  const getSuperAdmin = (): TeamMember => {
-    let savedSuperAdminAvatar = '';
-    let savedSuperAdminName = 'Ankit Kumar';
-    if (typeof window !== 'undefined') {
-      const savedUser = localStorage.getItem('dr_admin_user');
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          if (parsed.avatarUrl && !parsed.avatarUrl.includes('doon-riders-logo') && !parsed.avatarUrl.includes('avt-')) {
-            savedSuperAdminAvatar = parsed.avatarUrl;
-          }
-          if (parsed.name) savedSuperAdminName = parsed.name;
-        } catch (e) {}
-      }
+export default function UserManagementPage() {
+  const { user, hasPermission } = useAuth();
+  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN';
+  const canViewRoles = hasPermission('roles.view');
+  const canCreateUsers = hasPermission('users.create');
+  const canEditUsers = hasPermission('users.edit') && isSuperAdmin;
+
+  const [tab, setTab] = useState<Tab>('users');
+  const [users, setUsers] = useState<StaffUser[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
+  const [selectedCodes, setSelectedCodes] = useState<Record<string, boolean>>({});
+  const [searchUsers, setSearchUsers] = useState('');
+  const [searchPermissions, setSearchPermissions] = useState('');
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [savingRights, setSavingRights] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [userForm, setUserForm] = useState({ name: '', email: '', phone: '', password: '', roleId: '' });
+  const [roleForm, setRoleForm] = useState({ displayName: '', description: '' });
+
+  const selectedRole = roles.find(role => role.id === selectedRoleId) || null;
+
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    const response = await adminApi.get('/admin/users');
+    if (!response?.success || !Array.isArray(response.data)) {
+      setNotice({ type: 'error', text: response?.message || 'Staff accounts load nahi ho paaye.' });
+      setUsers([]);
+    } else {
+      setUsers(response.data);
     }
-
-    return {
-      id: 1,
-      name: savedSuperAdminName,
-      email: 'doonridersmain@gmail.com',
-      phone: '+91 8439431999',
-      role_id: 1,
-      role_name: 'SUPER_ADMIN',
-      role_display_name: 'Super Admin',
-      status: 'active',
-      avatar_url: savedSuperAdminAvatar,
-      is_super_admin: true,
-      last_login: new Date().toISOString()
-    };
-  };
-
-  const fetchRoles = async () => {
-    try {
-      let combined: RoleItem[] = [];
-
-      try {
-        const res = await adminApi.get('/admin/roles');
-        if (res && res.success && res.data && Array.isArray(res.data.roles)) {
-          combined = res.data.roles
-            .filter((br: any) => br.name !== 'SUPER_ADMIN' && br.name !== 'ADMIN')
-            .map((br: any) => ({
-              id: br.id,
-              name: br.name,
-              display_name: br.display_name,
-              is_system: br.is_system
-            }));
-        }
-      } catch (e) {}
-
-      // If API returned nothing, fallback to DEFAULT_ROLES
-      if (combined.length === 0) {
-        combined = [...DEFAULT_ROLES];
-      }
-
-      setRoles(combined);
-    } catch (e) {
-      console.warn('Error fetching roles:', e);
-    }
-  };
-
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const superAdmin = getSuperAdmin();
-      let customList: TeamMember[] = [];
-
-      // Try Backend API (PostgreSQL is source of truth)
-      try {
-        const res = await adminApi.get('/admin/users');
-        if (res && res.success && Array.isArray(res.data)) {
-          const backendNonDemo = res.data.filter((u: any) => 
-            u.email !== 'doonridersmain@gmail.com' && 
-            u.id !== 1 && 
-            !DEMO_EMAILS.includes(u.email?.toLowerCase())
-          );
-          customList = backendNonDemo.map((bu: any) => ({
-            id: bu.id,
-            name: bu.name,
-            email: bu.email,
-            phone: bu.phone,
-            role_id: bu.role_id,
-            role_name: bu.role_name,
-            role_display_name: bu.role_display_name,
-            status: bu.status || 'active',
-            avatar_url: bu.avatar_url || '',
-            is_super_admin: false
-          }));
-        }
-      } catch (apiErr) {}
-
-      // Only fallback to localStorage if API failed completely and returned 0 users
-      if (customList.length === 0) {
-        const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
-        if (storedCustomUsers) {
-          try {
-            const parsed = JSON.parse(storedCustomUsers);
-            customList = parsed.filter((u: any) => !DEMO_EMAILS.includes(u.email?.toLowerCase()) && u.email !== 'doonridersmain@gmail.com');
-          } catch (e) {}
-        }
-      } else {
-        localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
-      }
-
-      setUsers([superAdmin, ...customList]);
-    } catch (err) {
-      console.warn('Error loading users:', err);
-      setUsers([getSuperAdmin()]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRoles();
-    fetchUsers();
+    setLoadingUsers(false);
   }, []);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setAvatarUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
-    setErrorToast(null);
-
-    const emailClean = email.toLowerCase().trim();
-
-    if (emailClean === 'doonridersmain@gmail.com') {
-      setErrorToast('Cannot create another Super Admin account.');
-      setCreating(false);
+  const loadRoles = useCallback(async () => {
+    if (!canViewRoles) return;
+    setLoadingRoles(true);
+    const response = await adminApi.get('/admin/roles');
+    if (!response?.success || !response.data) {
+      setNotice({ type: 'error', text: response?.message || 'Roles aur permissions load nahi ho paaye.' });
+      setLoadingRoles(false);
       return;
     }
 
-    if (users.some(u => u.email.toLowerCase() === emailClean)) {
-      setErrorToast('A team member with this email address already exists.');
-      setCreating(false);
+    const nextRoles = (response.data.roles || []).map((role: any) => ({
+      ...role,
+      id: Number(role.id)
+    })) as Role[];
+    const nextPermissions = (response.data.permissions || []) as Permission[];
+    const nextRolePermissions = (response.data.rolePermissions || []).map((item: any) => ({
+      ...item,
+      role_id: Number(item.role_id)
+    })) as RolePermission[];
+
+    setRoles(nextRoles);
+    setPermissions(nextPermissions);
+    setRolePermissions(nextRolePermissions);
+    setSelectedRoleId(current => current && nextRoles.some(role => role.id === current)
+      ? current
+      : (nextRoles.find(role => role.name !== 'SUPER_ADMIN')?.id ?? null));
+    setLoadingRoles(false);
+  }, [canViewRoles]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
+
+  useEffect(() => {
+    if (tab === 'roles' || isSuperAdmin) void loadRoles();
+  }, [tab, loadRoles, isSuperAdmin]);
+
+  useEffect(() => {
+    if (!selectedRoleId) {
+      setSelectedCodes({});
       return;
     }
+    const grants: Record<string, boolean> = {};
+    rolePermissions
+      .filter(permission => permission.role_id === selectedRoleId)
+      .forEach(permission => { grants[permission.code] = true; });
+    setSelectedCodes(grants);
+  }, [selectedRoleId, rolePermissions]);
 
-    const isCustom = selectedRoleValue === 'CUSTOM';
-    if (isCustom && !customRoleInput.trim()) {
-      setErrorToast('Please enter a Custom Role Name (e.g. Technician, Hub Incharge, XYZ).');
-      setCreating(false);
-      return;
+  const groupedPermissions = useMemo(() => {
+    const normalizedSearch = searchPermissions.trim().toLowerCase();
+    const groups = new Map<string, Permission[]>();
+    for (const permission of permissions) {
+      const matches = !normalizedSearch || permission.code.toLowerCase().includes(normalizedSearch) ||
+        permission.description.toLowerCase().includes(normalizedSearch);
+      if (!matches) continue;
+      const group = groups.get(permission.module) || [];
+      group.push(permission);
+      groups.set(permission.module, group);
     }
+    return Array.from(groups.entries());
+  }, [permissions, searchPermissions]);
 
-    let targetRoleId: number | string = Number(selectedRoleValue);
-    let targetRoleDisplayName = 'Sales Executive';
-    let targetRoleName = 'SALES_EXECUTIVE';
-
-    if (isCustom) {
-      targetRoleDisplayName = customRoleInput.trim();
-      targetRoleName = targetRoleDisplayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-      targetRoleId = Date.now();
-
-      // Register new role in roles list
-      const newRoleObj: RoleItem = {
-        id: targetRoleId,
-        name: targetRoleName,
-        display_name: targetRoleDisplayName,
-        is_system: false
-      };
-
-      setRoles(prev => {
-        if (prev.some(r => r.name === targetRoleName || r.display_name.toLowerCase() === targetRoleDisplayName.toLowerCase())) {
-          return prev;
-        }
-        const updated = [...prev, newRoleObj];
-        localStorage.setItem('dr_custom_roles_list', JSON.stringify(updated));
-        return updated;
-      });
-    } else {
-      const matchedRole = roles.find(r => String(r.id) === String(selectedRoleValue));
-      if (matchedRole) {
-        targetRoleId = matchedRole.id;
-        targetRoleDisplayName = matchedRole.display_name;
-        targetRoleName = matchedRole.name;
-      }
-    }
-
-    const newUser: TeamMember = {
-      id: Date.now(),
-      name: name.trim(),
-      email: emailClean,
-      phone: phone.trim() || '+91 98000 00000',
-      role_id: Number(targetRoleId) || Date.now(),
-      role_name: targetRoleName,
-      role_display_name: targetRoleDisplayName,
-      status: status,
-      avatar_url: avatarUrl || '',
-      created_at: new Date().toISOString(),
-      is_super_admin: false
-    };
-
-    // 1. Send to Backend API
-    try {
-      const isTimestampRole = isCustom || (typeof targetRoleId === 'number' && targetRoleId > 1000000);
-      const res = await adminApi.post('/admin/users', {
-        name: newUser.name,
-        email: newUser.email,
-        phone: newUser.phone,
-        roleId: isTimestampRole ? undefined : targetRoleId,
-        custom_role_name: isTimestampRole ? targetRoleDisplayName : undefined,
-        password,
-        avatar_url: newUser.avatar_url,
-        avatarUrl: newUser.avatar_url
-      });
-
-      if (!res?.success) {
-        const msg = res?.message || '';
-        if (msg.toLowerCase().includes('jwt expired') || msg.toLowerCase().includes('authentication failed')) {
-          setErrorToast('Session expired! Please log in again. Redirecting...');
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('dr_admin_token');
-            localStorage.removeItem('dr_admin_user');
-            setTimeout(() => {
-              window.location.href = '/admin/login?session_expired=1';
-            }, 1200);
-          }
-          setCreating(false);
-          return;
-        }
-        setErrorToast(res?.message || 'Failed to create user in database.');
-        setCreating(false);
-        return;
-      }
-
-      if (res.data) {
-        newUser.id = res.data.id;
-        newUser.role_id = res.data.role_id;
-        newUser.role_name = res.data.role_name;
-        newUser.role_display_name = res.data.role_display_name;
-        if (res.data.avatar_url) {
-          newUser.avatar_url = res.data.avatar_url;
-        }
-      }
-    } catch (err: any) {
-      setErrorToast(err?.message || 'Network error while creating user.');
-      setCreating(false);
-      return;
-    }
-
-    // 2. Save locally and update state
-    const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
-    const customList: TeamMember[] = storedCustomUsers ? JSON.parse(storedCustomUsers) : [];
-    customList.push(newUser);
-    localStorage.setItem('dr_custom_team_users', JSON.stringify(customList));
-
-    setUsers(prev => [...prev.filter(u => u.email !== newUser.email), newUser]);
-    setSuccessToast(`Team member "${newUser.name}" with role "${targetRoleDisplayName}" created successfully!`);
-    setCreating(false);
-    setCreateModalOpen(false);
-
-    // Refresh from backend to ensure 100% sync
-    fetchUsers();
-
-    // Reset Form
-    setName('');
-    setEmail('');
-    setPhone('');
-    setPassword('Admin@1234');
-    setSelectedRoleValue('4');
-    setCustomRoleInput('');
-    setAvatarUrl('');
-
-    setTimeout(() => setSuccessToast(null), 4000);
-  };
-
-  const handleDeleteUser = async (userId: number, userName: string, isSuperAdmin?: boolean) => {
-    if (isSuperAdmin || userId === 1) {
-      alert('Super Admin cannot be deleted.');
-      return;
-    }
-
-    if (!confirm(`Are you sure you want to permanently remove "${userName}" from the team directory and database?`)) {
-      return;
-    }
-
-    try {
-      const res = await adminApi.delete(`/admin/users/${userId}`);
-      if (!res?.success) {
-        setErrorToast(res?.message || 'Failed to delete user from database.');
-        return;
-      }
-    } catch (e: any) {
-      setErrorToast(e?.message || 'Network error while deleting user.');
-      return;
-    }
-
-    const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
-    if (storedCustomUsers) {
-      try {
-        const list: TeamMember[] = JSON.parse(storedCustomUsers);
-        const updated = list.filter(u => u.id !== userId);
-        localStorage.setItem('dr_custom_team_users', JSON.stringify(updated));
-      } catch (e) {}
-    }
-
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    setSuccessToast(`Team member "${userName}" permanently deleted from database.`);
-    setTimeout(() => setSuccessToast(null), 3500);
-
-    // Refresh from database to ensure 100% sync
-    fetchUsers();
-  };
-
-  const handleQuickRoleChange = async (userId: number, newRoleId: number) => {
-    const targetRole = roles.find(r => Number(r.id) === Number(newRoleId));
-    if (!targetRole) return;
-
-    try {
-      let res = await adminApi.patch(`/admin/users/${userId}/status`, {
-        roleId: targetRole.id,
-        roleName: targetRole.name
-      });
-      if (!res?.success) {
-        res = await adminApi.put(`/admin/users/${userId}/status`, {
-          roleId: targetRole.id,
-          roleName: targetRole.name
-        });
-      }
-
-      if (!res?.success) {
-        setErrorToast(res?.message || 'Failed to update user role');
-        setTimeout(() => setErrorToast(null), 3000);
-        return;
-      }
-
-      setUsers(prev => prev.map(u => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            role_id: Number(targetRole.id),
-            role_name: targetRole.name,
-            role_display_name: targetRole.display_name
-          };
-        }
-        return u;
-      }));
-
-      const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
-      if (storedCustomUsers) {
-        try {
-          const list = JSON.parse(storedCustomUsers);
-          const uIdx = list.findIndex((u: any) => u.id === userId);
-          if (uIdx !== -1) {
-            list[uIdx].role_id = Number(targetRole.id);
-            list[uIdx].role_name = targetRole.name;
-            list[uIdx].role_display_name = targetRole.display_name;
-            localStorage.setItem('dr_custom_team_users', JSON.stringify(list));
-          }
-        } catch (e) {}
-      }
-
-      setSuccessToast(`Role updated to "${targetRole.display_name}"!`);
-      setTimeout(() => setSuccessToast(null), 3000);
-    } catch (err: any) {
-      setErrorToast(err?.message || 'Failed to update user role');
-      setTimeout(() => setErrorToast(null), 3000);
-    }
-  };
-
-  const dynamicFilterRoles = ['ALL', ...Array.from(new Set([
-    'SUPER_ADMIN',
-    'MANAGER',
-    'SALES_EXECUTIVE',
-    'HUB_INCHARGE',
-    'TECHNICIAN',
-    ...roles.map(r => r.name),
-    ...users.map(u => u.role_name).filter(Boolean)
-  ]))];
-
-  const filteredUsers = users.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
-                          u.email.toLowerCase().includes(search.toLowerCase()) ||
-                          (u.phone && u.phone.includes(search));
-    const matchesRole = roleFilter === 'ALL' || 
-                        u.role_name === roleFilter || 
-                        u.role_display_name?.toLowerCase() === roleFilter.toLowerCase();
-    return matchesSearch && matchesRole;
+  const filteredUsers = users.filter(member => {
+    const query = searchUsers.trim().toLowerCase();
+    return !query || member.name.toLowerCase().includes(query) || member.email.toLowerCase().includes(query) ||
+      (member.phone || '').toLowerCase().includes(query) || (member.role_display_name || '').toLowerCase().includes(query);
   });
+
+  const selectedCount = Object.values(selectedCodes).filter(Boolean).length;
+  const grantCountByRole = (roleId: number) => rolePermissions.filter(permission => permission.role_id === roleId).length;
+
+  const notifyError = (message: string) => setNotice({ type: 'error', text: message });
+
+  const handleCreateUser = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canCreateUsers) return;
+    if (!userForm.name.trim() || !userForm.email.trim() || userForm.password.length < 8 || (isSuperAdmin && !userForm.roleId)) {
+      notifyError('Naam, email, role aur kam se kam 8 character ka password bharna zaroori hai.');
+      return;
+    }
+    setCreatingUser(true);
+    setNotice(null);
+    const response = await adminApi.post('/admin/users', {
+      name: userForm.name.trim(),
+      email: userForm.email.trim().toLowerCase(),
+      phone: userForm.phone.trim() || undefined,
+      password: userForm.password,
+      ...(isSuperAdmin ? { roleId: Number(userForm.roleId) } : {})
+    });
+    setCreatingUser(false);
+    if (!response?.success) {
+      notifyError(response?.message || 'User create nahi ho paaya.');
+      return;
+    }
+    setCreateUserOpen(false);
+    setUserForm({ name: '', email: '', phone: '', password: '', roleId: '' });
+    setNotice({ type: 'success', text: `${response.data?.name || 'User'} ka account create ho gaya.` });
+    await loadUsers();
+  };
+
+  const handleCreateRole = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!isSuperAdmin) return;
+    const displayName = roleForm.displayName.trim();
+    if (!displayName || !normalizeRoleCode(displayName)) {
+      notifyError('Role ka naam letters ya numbers ke saath likho.');
+      return;
+    }
+    setCreatingRole(true);
+    setNotice(null);
+    const response = await adminApi.post('/admin/roles', {
+      display_name: displayName,
+      name: normalizeRoleCode(displayName),
+      description: roleForm.description.trim() || `Custom ${displayName} role`
+    });
+    setCreatingRole(false);
+    if (!response?.success) {
+      notifyError(response?.message || 'Role create nahi ho paaya.');
+      return;
+    }
+    setRoleForm({ displayName: '', description: '' });
+    setCreateRoleOpen(false);
+    setNotice({ type: 'success', text: `${displayName} role create ho gaya. Iske rights abhi khaali hain.` });
+    await loadRoles();
+    if (response.data?.id) setSelectedRoleId(Number(response.data.id));
+  };
+
+  const handleSaveRights = async () => {
+    if (!isSuperAdmin || !selectedRole || selectedRole.name === 'SUPER_ADMIN') return;
+    setSavingRights(true);
+    setNotice(null);
+    const permissionMap = Object.fromEntries(
+      permissions.map(permission => [permission.code, {
+        enabled: selectedCodes[permission.code] === true,
+        scope: ['leads.view', 'pre_bookings.view', 'recoveries.view'].includes(permission.code)
+          ? selectedCodes[permission.code.replace('.view', '.view_all')] ? 'ALL' : 'ASSIGNED'
+          : 'ALL'
+      }])
+    );
+    const response = await adminApi.post('/admin/roles/permission', {
+      roleId: selectedRole.id,
+      permissions: permissionMap
+    });
+    setSavingRights(false);
+    if (!response?.success) {
+      notifyError(response?.message || 'Rights save nahi ho paaye.');
+      return;
+    }
+    setRolePermissions(current => [
+      ...current.filter(permission => permission.role_id !== selectedRole.id),
+      ...permissions.filter(permission => selectedCodes[permission.code]).map(permission => ({
+        role_id: selectedRole.id,
+        code: permission.code,
+        scope: 'ALL'
+      }))
+    ]);
+    setRoles(current => current.map(role => role.id === selectedRole.id
+      ? { ...role, permissions_configured: true }
+      : role));
+    setNotice({ type: 'success', text: `${selectedRole.display_name} ke ${selectedCount} alag rights save ho gaye.` });
+  };
+
+  const handleDeleteRole = async (role: Role) => {
+    if (!isSuperAdmin || role.is_system || role.name === 'SUPER_ADMIN') return;
+    if (!window.confirm(`“${role.display_name}” role delete karna hai? Assigned users wale role ko API delete nahi hone degi.`)) return;
+    const response = await adminApi.delete(`/admin/roles/${role.id}`);
+    if (!response?.success) {
+      notifyError(response?.message || 'Role delete nahi ho paaya.');
+      return;
+    }
+    setNotice({ type: 'success', text: `${role.display_name} role delete ho gaya.` });
+    await loadRoles();
+  };
+
+  const handleRoleChange = async (member: StaffUser, roleId: number) => {
+    if (!canEditUsers) return;
+    const role = roles.find(item => item.id === roleId);
+    if (!role) return;
+    const response = await adminApi.patch(`/admin/users/${member.id}/status`, { roleId: role.id });
+    if (!response?.success) {
+      notifyError(response?.message || 'User ka role update nahi ho paaya.');
+      return;
+    }
+    setNotice({ type: 'success', text: `${member.name} ka role ${role.display_name} kar diya.` });
+    await loadUsers();
+  };
+
+  const handleDeleteUser = async (member: StaffUser) => {
+    if (!hasPermission('users.delete') || member.role_name === 'SUPER_ADMIN') return;
+    if (!window.confirm(`${member.name} ka staff account permanently delete karna hai?`)) return;
+    const response = await adminApi.delete(`/admin/users/${member.id}`);
+    if (!response?.success) {
+      notifyError(response?.message || 'User delete nahi ho paaya.');
+      return;
+    }
+    setNotice({ type: 'success', text: `${member.name} ka account delete ho gaya.` });
+    await loadUsers();
+  };
 
   return (
     <AdminLayout>
-      <div className="space-y-6 max-w-7xl mx-auto">
-        
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <h2 className="text-2xl font-bold text-[#111827] tracking-tight flex items-center gap-2.5">
-              Team Directory
-              <span className="text-xs bg-[#EAFBF2] text-[#00A854] font-mono font-bold px-2.5 py-0.5 rounded-full border border-[#00D96B]/30">
-                {users.length} Total Members
-              </span>
-            </h2>
-            <p className="text-xs text-[#667085] mt-0.5">
-              Manage authorized employees, create staff accounts, create custom roles (Technician, Hub Incharge, XYZ), and configure access
-            </p>
-          </div>
-
-          <button
-            onClick={() => setCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-white font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition-all transform active:scale-95 cursor-pointer flex-shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Create New User</span>
-          </button>
-        </div>
-
-        {/* Notifications */}
-        {successToast && (
-          <div className="bg-[#EAFBF2] border border-[#00D96B] text-[#00A854] p-4 rounded-2xl flex items-center justify-between shadow-sm animate-fadeIn">
-            <div className="flex items-center gap-2.5 font-bold text-xs">
-              <Check className="w-4 h-4 stroke-[3]" />
-              <span>{successToast}</span>
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#00A854]">
+              <ShieldCheck className="h-4 w-4" /> Access Control
             </div>
+            <h1 className="text-2xl font-black tracking-tight text-[#111827] sm:text-3xl">User Management</h1>
+            <p className="mt-1 text-sm text-[#667085]">Staff accounts, roles aur har module ke alag access rights yahan manage karo.</p>
+          </div>
+          {tab === 'users' && canCreateUsers && (
+            <button
+              onClick={() => {
+                const firstRole = roles.find(role => role.name !== 'SUPER_ADMIN');
+                setUserForm(form => ({ ...form, roleId: form.roleId || (isSuperAdmin && firstRole ? String(firstRole.id) : '') }));
+                setCreateUserOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#00C96B] px-5 py-3 text-sm font-bold text-[#071B13] shadow-[0_8px_20px_rgba(0,201,107,.2)] transition hover:bg-[#00B85F]"
+            >
+              <UserPlus className="h-4 w-4" /> Create User
+            </button>
+          )}
+          {tab === 'roles' && isSuperAdmin && (
+            <button
+              onClick={() => setCreateRoleOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D0D5DD] bg-white px-5 py-3 text-sm font-bold text-[#182230] shadow-sm transition hover:border-[#00C96B]"
+            >
+              <Plus className="h-4 w-4 text-[#00A854]" /> Create Role
+            </button>
+          )}
+        </div>
+
+        {notice && (
+          <div className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
+            {notice.type === 'success' ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+            <span className="flex-1">{notice.text}</span>
+            <button aria-label="Dismiss message" onClick={() => setNotice(null)}><X className="h-4 w-4" /></button>
           </div>
         )}
 
-        {errorToast && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl flex items-center gap-2.5 shadow-sm text-xs font-bold animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-            <span>{errorToast}</span>
+        <div className="flex gap-2 border-b border-[#E4E7EC]">
+          <button
+            onClick={() => setTab('users')}
+            className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition ${tab === 'users' ? 'border-[#00C96B] text-[#007A43]' : 'border-transparent text-[#667085] hover:text-[#182230]'}`}
+          >
+            <Users className="h-4 w-4" /> Users <span className="rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[11px]">{users.length}</span>
+          </button>
+          {canViewRoles && (
+            <button
+              onClick={() => setTab('roles')}
+              className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition ${tab === 'roles' ? 'border-[#00C96B] text-[#007A43]' : 'border-transparent text-[#667085] hover:text-[#182230]'}`}
+            >
+              <Shield className="h-4 w-4" /> Roles &amp; Rights
+            </button>
+          )}
+        </div>
+
+        {tab === 'users' ? (
+          <section className="overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div>
+                <h2 className="font-bold text-[#182230]">Staff Accounts</h2>
+                <p className="mt-1 text-xs text-[#667085]">Account ka role badalne par us role ke saved rights apply honge.</p>
+              </div>
+              <label className="relative block w-full sm:w-80">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98A2B3]" />
+                <input value={searchUsers} onChange={event => setSearchUsers(event.target.value)} placeholder="Naam, email ya role se search" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
+              </label>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-[#667085]">
+                  <tr><th className="px-5 py-3">User</th><th className="px-5 py-3">Email / Phone</th><th className="px-5 py-3">Role</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr>
+                </thead>
+                <tbody className="divide-y divide-[#EAECF0]">
+                  {loadingUsers ? (
+                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">Users load ho rahe hain…</td></tr>
+                  ) : filteredUsers.length === 0 ? (
+                    <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-[#667085]">Koi staff account nahi mila.</td></tr>
+                  ) : filteredUsers.map(member => (
+                    <tr key={member.id} className="hover:bg-[#FCFCFD]">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-xs font-black text-emerald-700">{initials(member.name)}</span>
+                          <div><div className="font-bold text-[#182230]">{member.name}</div><div className="mt-0.5 text-xs text-[#98A2B3]">ID #{member.id}</div></div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4"><div className="text-[#344054]">{member.email}</div><div className="mt-0.5 text-xs text-[#98A2B3]">{member.phone || 'Phone not added'}</div></td>
+                      <td className="px-5 py-4">
+                        {canEditUsers && member.role_name !== 'SUPER_ADMIN' ? (
+                          <select value={member.role_id ?? ''} onChange={event => void handleRoleChange(member, Number(event.target.value))} className="max-w-[230px] rounded-lg border border-[#D0D5DD] bg-white px-3 py-2 text-xs font-bold text-[#344054] outline-none focus:border-[#00C96B]">
+                            {roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => <option key={role.id} value={role.id}>{role.display_name}</option>)}
+                          </select>
+                        ) : <span className="inline-flex rounded-full border border-[#EAECF0] bg-[#F9FAFB] px-3 py-1.5 text-xs font-bold text-[#344054]">{member.role_display_name || 'No role'}</span>}
+                      </td>
+                      <td className="px-5 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{member.status || 'unknown'}</span></td>
+                      <td className="px-5 py-4 text-right">
+                        {hasPermission('users.delete') && member.role_name !== 'SUPER_ADMIN' && <button onClick={() => void handleDeleteUser(member)} title="Delete user" className="rounded-lg p-2 text-[#98A2B3] transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-[290px_minmax(0,1fr)]">
+            <section className="h-fit overflow-hidden rounded-2xl border border-[#E4E7EC] bg-white shadow-sm">
+              <div className="border-b border-[#EAECF0] px-4 py-4">
+                <h2 className="font-bold text-[#182230]">Role Directory</h2>
+                <p className="mt-1 text-xs text-[#667085]">Role choose karke uske rights edit karo.</p>
+              </div>
+              <div className="max-h-[650px] space-y-2 overflow-y-auto p-3">
+                {loadingRoles ? <p className="p-4 text-center text-sm text-[#667085]">Roles load ho rahe hain…</p> : roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => (
+                  <div key={role.id} className={`flex items-start gap-2 rounded-xl border p-3 transition ${selectedRoleId === role.id ? 'border-[#00C96B] bg-[#F0FDF5] shadow-sm' : 'border-[#EAECF0] hover:border-[#B7EBD0]'}`}>
+                    <button onClick={() => setSelectedRoleId(role.id)} className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-sm font-bold text-[#182230]">{role.display_name}</span>
+                      <span className="mt-1 block text-xs text-[#667085]">{grantCountByRole(role.id)} rights assigned</span>
+                      {!role.permissions_configured && <span className="mt-1 inline-block text-[10px] font-bold text-amber-700">Rights review needed</span>}
+                    </button>
+                    <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 ${selectedRoleId === role.id ? 'text-[#00A854]' : 'text-[#98A2B3]'}`} />
+                    {isSuperAdmin && !role.is_system && <button onClick={() => void handleDeleteRole(role)} title="Delete role" className="rounded-md p-1 text-[#98A2B3] hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="min-w-0 rounded-2xl border border-[#E4E7EC] bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-[#EAECF0] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                <div>
+                  <h2 className="font-bold text-[#182230]">{selectedRole?.display_name || 'Role permissions'}</h2>
+                  <p className="mt-1 text-xs text-[#667085]">Har row ek independent right hai. Sirf checked actions hi grant honge.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full bg-[#F2F4F7] px-3 py-1.5 text-xs font-bold text-[#475467]">{selectedCount} selected</span>
+                  {isSuperAdmin && selectedRole && selectedRole.name !== 'SUPER_ADMIN' && <button onClick={() => void handleSaveRights()} disabled={savingRights || loadingRoles} className="inline-flex items-center gap-2 rounded-xl bg-[#00C96B] px-4 py-2.5 text-xs font-black text-[#071B13] transition hover:bg-[#00B85F] disabled:cursor-not-allowed disabled:opacity-60"><Check className="h-4 w-4" />{savingRights ? 'Saving…' : 'Save Rights'}</button>}
+                </div>
+              </div>
+
+              {selectedRole?.name === 'SUPER_ADMIN' ? (
+                <div className="m-5 flex gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900"><LockKeyhole className="h-5 w-5 shrink-0" /><p>Super Admin ke full system access ko yahan se edit nahi kiya ja sakta.</p></div>
+              ) : !selectedRole ? (
+                <div className="p-12 text-center text-sm text-[#667085]">Pehle left side se role select karo.</div>
+              ) : (
+                <>
+                  <div className="border-b border-[#EAECF0] p-4 sm:px-5">
+                    <label className="relative block max-w-md">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98A2B3]" />
+                      <input value={searchPermissions} onChange={event => setSearchPermissions(event.target.value)} placeholder="Permission name ya action search karo" className="w-full rounded-xl border border-[#D0D5DD] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#00C96B]" />
+                    </label>
+                  </div>
+                  <div className="space-y-4 p-4 sm:p-5">
+                    {groupedPermissions.length === 0 ? <p className="py-10 text-center text-sm text-[#667085]">Koi permission match nahi hui.</p> : groupedPermissions.map(([module, items]) => (
+                      <div key={module} className="overflow-hidden rounded-xl border border-[#EAECF0]">
+                        <div className="flex items-center justify-between bg-[#F9FAFB] px-4 py-3">
+                          <h3 className="text-sm font-extrabold text-[#344054]">{module}</h3>
+                          <span className="text-[11px] font-semibold text-[#98A2B3]">{items.filter(item => selectedCodes[item.code]).length} / {items.length}</span>
+                        </div>
+                        <div className="divide-y divide-[#F2F4F7]">
+                          {items.map(permission => (
+                            <label key={permission.code} className={`flex cursor-pointer items-start gap-3 px-4 py-3.5 transition ${selectedCodes[permission.code] ? 'bg-[#F6FEF9]' : 'hover:bg-[#FCFCFD]'}`}>
+                              <input type="checkbox" checked={Boolean(selectedCodes[permission.code])} disabled={!isSuperAdmin} onChange={event => setSelectedCodes(current => {
+                                const enabled = event.target.checked;
+                                const next = { ...current, [permission.code]: enabled };
+                                if (permission.code.endsWith('.view_all')) next[permission.code.replace('.view_all', '.view')] = enabled || Boolean(current[permission.code.replace('.view_all', '.view')]);
+                                if (permission.code.endsWith('.view') && !enabled) next[permission.code.replace('.view', '.view_all')] = false;
+                                return next;
+                              })} className="mt-0.5 h-4 w-4 rounded border-[#D0D5DD] accent-[#00B85F] disabled:cursor-not-allowed" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-[#344054]">{permission.description}</span>
+                                <span className="mt-1 block font-mono text-[11px] text-[#98A2B3]">{permission.code}</span>
+                              </span>
+                              {selectedCodes[permission.code] && <Check className="h-4 w-4 shrink-0 text-[#00A854]" />}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
           </div>
         )}
-
-        {/* Filter Toolbar */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by name, email, or phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#F7F9FA] border border-[#E5E7EB] rounded-xl pl-10 pr-4 py-2 text-xs text-[#111827] placeholder-[#98A2B3] focus:outline-none focus:border-[#00D96B] focus:bg-white transition"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            {dynamicFilterRoles.slice(0, 8).map((rf) => (
-              <button
-                key={rf}
-                onClick={() => setRoleFilter(rf as string)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                  roleFilter === rf
-                    ? 'bg-[#EAFBF2] text-[#00A854] border border-[#00D96B]/40 shadow-sm'
-                    : 'bg-[#F7F9FA] border border-[#E5E7EB] text-[#667085] hover:text-[#111827]'
-                }`}
-              >
-                {rf === 'ALL' ? 'All Roles' : (rf as string).replace(/_/g, ' ')}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Users Table */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden flex flex-col">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-              <thead>
-                <tr className="border-b border-[#E5E7EB] bg-[#F7F9FA] text-[#667085] uppercase text-[11px] font-bold">
-                  <th className="p-4 px-5">Team Member</th>
-                  <th className="p-4 px-5">Email Address</th>
-                  <th className="p-4 px-5">Assigned Role</th>
-                  <th className="p-4 px-5">Account Status</th>
-                  <th className="p-4 px-5 text-right">Actions &amp; Authorization</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E7EB] font-medium bg-white">
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="p-10 text-center text-[#98A2B3]">
-                      Loading directory...
-                    </td>
-                  </tr>
-                ) : filteredUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-10 text-center text-[#98A2B3]">
-                      No team members found matching your search.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredUsers.map((u) => {
-                    const isSuperAdmin = u.is_super_admin || u.role_name === 'SUPER_ADMIN' || u.id === 1 || u.email === 'doonridersmain@gmail.com';
-                    
-                    return (
-                      <tr key={u.id} className="hover:bg-[#F7F9FA] transition group">
-                        <td className="p-4 px-5 flex items-center gap-3.5">
-                          <div className="relative w-10 h-10 rounded-xl bg-[#EAFBF2] border border-[#00D96B]/30 flex items-center justify-center text-[#00A854] font-black text-xs shadow-sm overflow-hidden flex-shrink-0">
-                            {u.avatar_url && !u.avatar_url.includes('doon-riders-logo') && !u.avatar_url.includes('avt-') ? (
-                              <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <span>{getInitials(u.name)}</span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-bold text-[#111827] text-xs sm:text-sm">
-                              {u.name}
-                            </p>
-                            <p className="text-[11px] text-[#667085] font-mono">{u.phone || 'No phone'}</p>
-                          </div>
-                        </td>
-                        <td className="p-4 px-5 font-mono text-[#667085]">{u.email}</td>
-                        <td className="p-4 px-5">
-                          {isSuperAdmin ? (
-                            <span className="font-bold px-3 py-1 rounded-lg text-[10px] border bg-purple-50 text-purple-700 border-purple-200">
-                              {u.role_display_name}
-                            </span>
-                          ) : (
-                            <select
-                              value={u.role_id || ''}
-                              onChange={(e) => handleQuickRoleChange(u.id, Number(e.target.value))}
-                              className="bg-[#F7F9FA] hover:bg-white border border-[#D0D5DD] hover:border-[#00D96B] rounded-lg px-2 py-1 text-xs font-bold text-[#111827] focus:outline-none focus:border-[#00D96B] focus:ring-1 focus:ring-[#00D96B] cursor-pointer shadow-sm transition"
-                            >
-                              {roles.map(r => (
-                                <option key={r.id} value={r.id}>
-                                  {r.display_name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                        <td className="p-4 px-5">
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            {u.status}
-                          </span>
-                        </td>
-                        <td className="p-4 px-5 text-right">
-                          {isSuperAdmin ? (
-                            <span className="text-[#98A2B3] text-sm font-mono pr-4 select-none">
-                              —
-                            </span>
-                          ) : (
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleDeleteUser(u.id, u.name, u.is_super_admin)}
-                                title="Remove User"
-                                className="p-1.5 rounded-xl text-[#98A2B3] hover:text-red-600 hover:bg-red-50 transition border border-transparent hover:border-red-200 cursor-pointer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
       </div>
 
-      {/* ========================================================= */}
-      {/* CREATE NEW USER MODAL (WITH DYNAMIC CUSTOM ROLE CREATION) */}
-      {/* ========================================================= */}
-      {createModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E5E7EB] w-full max-w-lg p-6 sm:p-8 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-[#EAFBF2] text-[#00A854] flex items-center justify-center font-bold">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111827]">Create Team Member</h3>
-                  <p className="text-xs text-[#667085]">Add staff and assign existing or custom role</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setCreateModalOpen(false)}
-                className="p-1.5 rounded-lg text-[#98A2B3] hover:text-[#111827] hover:bg-[#F7F9FA] transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {createUserOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-[#101828]/50 p-4 backdrop-blur-sm">
+          <form onSubmit={handleCreateUser} className="my-auto w-full max-w-xl space-y-5 rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between">
+              <div><h2 className="text-xl font-black text-[#182230]">Create User</h2><p className="mt-1 text-sm text-[#667085]">Naye staff account ko role assign karo.</p></div>
+              <button type="button" onClick={() => setCreateUserOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[#667085]" /></button>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-bold text-[#344054]">Full name<input required value={userForm.name} onChange={event => setUserForm(form => ({ ...form, name: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+              <label className="text-xs font-bold text-[#344054]">Email<input required type="email" autoComplete="off" value={userForm.email} onChange={event => setUserForm(form => ({ ...form, email: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+              <label className="text-xs font-bold text-[#344054]">Phone (optional)<input value={userForm.phone} onChange={event => setUserForm(form => ({ ...form, phone: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+              <label className="text-xs font-bold text-[#344054]">Temporary password<input required minLength={8} type="password" autoComplete="new-password" value={userForm.password} onChange={event => setUserForm(form => ({ ...form, password: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+              <label className="text-xs font-bold text-[#344054] sm:col-span-2">Role{isSuperAdmin ? (
+                <select required value={userForm.roleId} onChange={event => setUserForm(form => ({ ...form, roleId: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]"><option value="">Role choose karo</option>{roles.filter(role => role.name !== 'SUPER_ADMIN').map(role => <option key={role.id} value={role.id}>{role.display_name}{grantCountByRole(role.id) === 0 ? ' · no rights configured' : ''}</option>)}</select>
+              ) : <input disabled value={user?.roleDisplayName || 'Your role'} className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] bg-[#F9FAFB] px-3 py-2.5 text-sm font-normal text-[#667085]" />}</label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-[#EAECF0] pt-4">
+              <button type="button" onClick={() => setCreateUserOpen(false)} className="rounded-xl border border-[#D0D5DD] px-4 py-2.5 text-sm font-bold text-[#344054]">Cancel</button>
+              <button type="submit" disabled={creatingUser || (isSuperAdmin && roles.length === 0)} className="rounded-xl bg-[#00C96B] px-5 py-2.5 text-sm font-black text-[#071B13] disabled:opacity-50">{creatingUser ? 'Creating…' : 'Create account'}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
-            {/* Form */}
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              
-              {/* Profile Photo Uploader with Auto Initials Preview */}
-              <div className="flex items-center gap-4 p-3 bg-[#F7F9FA] border border-[#E5E7EB] rounded-2xl">
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="relative w-16 h-16 rounded-2xl bg-[#EAFBF2] border-2 border-dashed border-[#00D96B] flex items-center justify-center overflow-hidden cursor-pointer group shadow-sm flex-shrink-0 hover:scale-105 transition-transform"
-                >
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-black text-lg text-[#00A854]">
-                      {getInitials(name || 'New User')}
-                    </span>
-                  )}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
-                    <Camera className="w-4 h-4" />
-                    <span className="text-[8px] font-bold uppercase mt-0.5">Upload</span>
-                  </div>
-                </div>
-
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handlePhotoUpload}
-                  accept="image/*"
-                  className="hidden"
-                />
-
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-[#111827]">Profile Picture</p>
-                    {avatarUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAvatarUrl('')}
-                        className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
-                      >
-                        Remove Photo
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[#667085]">
-                    {avatarUrl
-                      ? 'Custom photo uploaded'
-                      : 'No photo uploaded — avatar with initials will be generated automatically.'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00A854] hover:text-[#00D96B] cursor-pointer mt-1"
-                  >
-                    <Upload className="w-3 h-3" />
-                    <span>Upload Photo (Optional)</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Rohit Sharma"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-[#F7F9FA] border border-[#E5E7EB] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] focus:bg-white transition"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                    Email Address <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      placeholder="rohit.sales@doonriders.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-[#F7F9FA] border border-[#E5E7EB] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] focus:bg-white transition"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-[#F7F9FA] border border-[#E5E7EB] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] focus:bg-white transition font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Role Selection & Custom Role Option */}
-              <div className="space-y-3 p-3.5 bg-[#F7F9FA] border border-[#E5E7EB] rounded-2xl">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                      Select Base Role <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedRoleValue}
-                      onChange={(e) => setSelectedRoleValue(e.target.value)}
-                      className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] transition cursor-pointer font-bold shadow-sm"
-                    >
-                      {roles.map(r => (
-                        <option key={r.id} value={String(r.id)}>
-                          {r.display_name} {r.is_system ? '(Standard)' : '(Custom)'}
-                        </option>
-                      ))}
-                      <option value="CUSTOM">+ Create New Custom Role (e.g. Technician, Hub Incharge, etc.)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-                      Account Password <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-[#98A2B3] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-white border border-[#E5E7EB] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#111827] focus:outline-none focus:border-[#00D96B] transition font-mono shadow-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* If Custom Role is chosen */}
-                {selectedRoleValue === 'CUSTOM' && (
-                  <div className="pt-2 border-t border-[#E5E7EB] space-y-2.5 animate-fadeIn">
-                    <div>
-                      <label className="block text-xs font-bold text-[#00A854] mb-1">
-                        Enter Custom Role Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Technician, Hub Incharge, Workshop Manager, XYZ..."
-                        value={customRoleInput}
-                        onChange={(e) => setCustomRoleInput(e.target.value)}
-                        className="w-full bg-white border-2 border-[#00D96B] rounded-xl px-3.5 py-2 text-xs text-[#111827] font-bold focus:outline-none focus:ring-2 focus:ring-[#00D96B]/30 shadow-sm"
-                        autoFocus
-                      />
-                    </div>
-
-                    {/* Quick suggestion chips */}
-                    <div>
-                      <span className="text-[10px] font-bold text-[#667085] uppercase tracking-wider block mb-1">
-                        Quick Suggestions:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {POPULAR_ROLE_CHIPS.map((chip) => (
-                          <button
-                            key={chip}
-                            type="button"
-                            onClick={() => setCustomRoleInput(chip)}
-                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
-                              customRoleInput.toLowerCase() === chip.toLowerCase()
-                                ? 'bg-[#00D96B] text-white border-[#00D96B] shadow-sm'
-                                : 'bg-white border-[#E5E7EB] text-[#475467] hover:border-[#00D96B] hover:text-[#00A854]'
-                            }`}
-                          >
-                            + {chip}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCreateModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#667085] hover:bg-[#F7F9FA] transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="bg-[#00D96B] hover:bg-[#00A854] text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition cursor-pointer disabled:opacity-50"
-                >
-                  {creating ? 'Creating User...' : 'Create Team Member'}
-                </button>
-              </div>
-            </form>
-
-          </div>
+      {createRoleOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#101828]/50 p-4 backdrop-blur-sm">
+          <form onSubmit={handleCreateRole} className="w-full max-w-md space-y-5 rounded-2xl bg-white p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between">
+              <div><h2 className="text-xl font-black text-[#182230]">Create Custom Role</h2><p className="mt-1 text-sm text-[#667085]">Role save hote hi rights zero rahenge.</p></div>
+              <button type="button" onClick={() => setCreateRoleOpen(false)} aria-label="Close"><X className="h-5 w-5 text-[#667085]" /></button>
+            </div>
+            <label className="block text-xs font-bold text-[#344054]">Role name<input required maxLength={80} autoFocus value={roleForm.displayName} onChange={event => setRoleForm(form => ({ ...form, displayName: event.target.value }))} placeholder="Jaise: Workshop Supervisor" className="mt-1.5 w-full rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+            <label className="block text-xs font-bold text-[#344054]">Description (optional)<textarea maxLength={250} rows={3} value={roleForm.description} onChange={event => setRoleForm(form => ({ ...form, description: event.target.value }))} placeholder="Is role ka kaam likho" className="mt-1.5 w-full resize-none rounded-xl border border-[#D0D5DD] px-3 py-2.5 text-sm font-normal outline-none focus:border-[#00C96B]" /></label>
+            <div className="flex justify-end gap-2 border-t border-[#EAECF0] pt-4">
+              <button type="button" onClick={() => setCreateRoleOpen(false)} className="rounded-xl border border-[#D0D5DD] px-4 py-2.5 text-sm font-bold text-[#344054]">Cancel</button>
+              <button type="submit" disabled={creatingRole} className="rounded-xl bg-[#00C96B] px-5 py-2.5 text-sm font-black text-[#071B13] disabled:opacity-50">{creatingRole ? 'Creating…' : 'Create empty role'}</button>
+            </div>
+          </form>
         </div>
       )}
     </AdminLayout>

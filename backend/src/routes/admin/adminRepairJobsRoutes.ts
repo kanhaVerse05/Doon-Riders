@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authenticateJwt } from '../../middleware/authMiddleware';
+import { requirePermission } from '../../middleware/rbacMiddleware';
 import {
   getAllRepairJobs,
   getRepairJobById,
@@ -27,23 +29,23 @@ router.get('/:id/review-info', getJobReviewInfo);
 router.post('/:id/review', submitJobReview);
 
 // Meta and Notifications
-router.get('/meta/hubs-and-technicians', getRepairMeta);
-router.get('/notifications/list', getRepairNotifications);
-router.patch('/notifications/:id/read', markNotificationRead);
-router.delete('/clear-all', clearAllRepairJobs);
+router.get('/meta/hubs-and-technicians', authenticateJwt, requirePermission('repairs.view'), getRepairMeta);
+router.get('/notifications/list', authenticateJwt, requirePermission('repairs.view'), getRepairNotifications);
+router.patch('/notifications/:id/read', authenticateJwt, requirePermission('repairs.update'), markNotificationRead);
+router.delete('/clear-all', authenticateJwt, requirePermission('repairs.delete'), clearAllRepairJobs);
 
 // CRUD & Core Workflow Operations
-router.get('/', getAllRepairJobs);
-router.get('/:id', getRepairJobById);
-router.post('/', createRepairJob);
-router.patch('/:id/assign-technician', assignTechnician);
-router.post('/:id/inspection', submitInspection);
-router.post('/:id/approve-parts', approveParts);
-router.post('/:id/start-repair', startRepair);
-router.post('/:id/add-part', addAdditionalPart);
-router.post('/:id/complete-repair', completeRepair);
-router.post('/:id/generate-bill', generateFinalBill);
-router.post('/:id/record-payment', recordPayment);
-router.post('/:id/close-job', closeRepairJob);
+router.get('/', authenticateJwt, requirePermission('repairs.view'), getAllRepairJobs);
+router.get('/:id', authenticateJwt, requirePermission('repairs.view'), getRepairJobById);
+router.post('/', authenticateJwt, requirePermission('repairs.create'), createRepairJob);
+router.patch('/:id/assign-technician', authenticateJwt, requirePermission('repairs.update'), assignTechnician);
+router.post('/:id/inspection', authenticateJwt, requirePermission('repairs.update'), submitInspection);
+router.post('/:id/approve-parts', authenticateJwt, requirePermission('repairs.update'), approveParts);
+router.post('/:id/start-repair', authenticateJwt, requirePermission('repairs.update'), startRepair);
+router.post('/:id/add-part', authenticateJwt, requirePermission('repairs.update'), addAdditionalPart);
+router.post('/:id/complete-repair', authenticateJwt, requirePermission('repairs.update'), completeRepair);
+router.post('/:id/generate-bill', authenticateJwt, requirePermission('repairs.update'), generateFinalBill);
+router.post('/:id/record-payment', authenticateJwt, requirePermission('repairs.update'), recordPayment);
+router.post('/:id/close-job', authenticateJwt, requirePermission('repairs.update'), closeRepairJob);
 
 export default router;

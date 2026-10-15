@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authenticateJwt } from '../../middleware/authMiddleware';
+import { requirePermission } from '../../middleware/rbacMiddleware';
 import {
   getAllComplaints,
   getComplaintById,
@@ -11,17 +13,18 @@ import {
 
 const router = Router();
 
-// Complaints API Endpoints
-router.get('/', getAllComplaints);
-router.post('/parse-location', parseLocationUrlHandler);
-router.get('/:id', getComplaintById);
-router.post('/', createComplaint);
-router.post('/:id/assign', assignTechnician);
-router.patch('/:id/assign', assignTechnician);
-router.post('/:id/location', updateTechnicianLocation);
-router.patch('/:id/location', updateTechnicianLocation);
-router.patch('/:id/status', updateComplaintStatus);
-router.post('/:id/status', updateComplaintStatus);
+router.use(authenticateJwt);
+
+router.get('/', requirePermission('complaints.view'), getAllComplaints);
+router.post('/parse-location', requirePermission('complaints.create'), parseLocationUrlHandler);
+router.get('/:id', requirePermission('complaints.view'), getComplaintById);
+router.post('/', requirePermission('complaints.create'), createComplaint);
+router.post('/:id/assign', requirePermission('complaints.assign'), assignTechnician);
+router.patch('/:id/assign', requirePermission('complaints.assign'), assignTechnician);
+router.post('/:id/location', requirePermission('complaints.track'), updateTechnicianLocation);
+router.patch('/:id/location', requirePermission('complaints.track'), updateTechnicianLocation);
+router.patch('/:id/status', requirePermission('complaints.update'), updateComplaintStatus);
+router.post('/:id/status', requirePermission('complaints.update'), updateComplaintStatus);
 
 export default router;
 

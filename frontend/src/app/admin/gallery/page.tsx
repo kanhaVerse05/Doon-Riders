@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AdminLayout } from '../../../components/admin/AdminLayout';
+import { useAuth } from '../../../context/AuthContext';
 import {
   fetchGalleryImages,
   uploadGalleryImage,
@@ -35,6 +36,8 @@ const CATEGORIES = [
 ];
 
 export default function AdminGalleryPage() {
+  const { hasPermission } = useAuth();
+  const canManageGallery = hasPermission('fleet.manage');
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('All');
@@ -200,6 +203,7 @@ export default function AdminGalleryPage() {
         )}
 
         {/* Top Section: Upload New Image Card */}
+        {canManageGallery && (
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-[0_2px_12px_rgba(16,24,40,0.03)] space-y-5">
           <div className="flex items-center gap-2 pb-3 border-b border-[#E5E7EB]">
             <div className="w-8 h-8 rounded-lg bg-[#EAFBF2] flex items-center justify-center text-[#00A854]">
@@ -339,6 +343,7 @@ export default function AdminGalleryPage() {
             </div>
           </form>
         </div>
+        )}
 
         {/* Bottom Section: Media Library */}
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-[0_2px_12px_rgba(16,24,40,0.03)] space-y-6">
@@ -435,14 +440,16 @@ export default function AdminGalleryPage() {
                       <span>Preview</span>
                     </button>
 
-                    <button
-                      onClick={() => handleDelete(img.id, img.title)}
-                      className="text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
-                      title="Delete Photo"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete</span>
-                    </button>
+                    {canManageGallery && (
+                      <button
+                        onClick={() => handleDelete(img.id, img.title)}
+                        className="text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+                        title="Delete Photo"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

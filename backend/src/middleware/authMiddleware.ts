@@ -1,10 +1,16 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { pool, getDbStatus } from '../config/db';
+import { pool, getDbStatus, memoryStore } from '../config/db';
 import { AuthRequest, AuthenticatedUser } from '../types/auth';
-import { getPermissionsForRole, resolveRolePermissions } from '../helpers/rbacHelper';
+import { resolveRolePermissions } from '../helpers/rbacHelper';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'doon_riders_rbac_super_secret_jwt_key_2026';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('JWT_SECRET must be configured with at least 32 characters.');
+  }
+  return secret;
+};
 
 export const authenticateJwt = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -15,22 +21,7 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
 
     const token = authHeader.split(' ')[1];
 
-    if (token && token.startsWith('dr_super_admin_token_')) {
-      req.user = {
-        id: 1,
-        name: 'Ankit Kumar',
-        email: 'doonridersmain@gmail.com',
-        phone: '+91 8439431999',
-        roleId: 1,
-        roleName: 'SUPER_ADMIN',
-        roleDisplayName: 'Super Admin',
-        avatarUrl: '/images/doon-riders-logo.png',
-        permissions: getPermissionsForRole('SUPER_ADMIN')
-      };
-      return next();
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, getJwtSecret()) as any;
 
     if (!decoded || !decoded.id) {
       return res.status(401).json({ success: false, message: 'Invalid or expired session token.' });
@@ -85,16 +76,32 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
         permissions
       };
     } else {
+      const memoryUser = memoryStore.users.find(candidate => Number(candidate.id) === Number(decoded.id));
+      if (!memoryUser || memoryUser.status !== 'active') {
+        return res.status(401).json({ success: false, message: 'User account is inactive, suspended, or not found.' });
+      }
+      const memoryRole = memoryStore.roles.find(role => role.id === memoryUser.role_id);
+      const roleName = memoryRole?.name || memoryUser.role_name || 'UNASSIGNED';
+      const storedPermissions = (memoryStore.rolePermissions || [])
+        .filter((permission: any) => Number(permission.role_id) === Number(memoryUser.role_id))
+        .map((permission: any) => ({ code: permission.code, scope: permission.scope }));
+      const permissions = resolveRolePermissions(
+        roleName,
+        storedPermissions,
+        Boolean(memoryRole?.permissions_configured),
+        memoryUser.custom_permissions
+      );
       // In-memory fallback
       req.user = {
-        id: decoded.id,
-        name: decoded.name || 'Admin User',
-        email: decoded.email || 'admin@doonriders.com',
-        roleId: decoded.roleId || 1,
-        roleName: decoded.roleName || 'SUPER_ADMIN',
-        roleDisplayName: decoded.roleDisplayName || 'Super Admin',
-        avatarUrl: decoded.avatarUrl || '/images/avt-1-70x70.jpg',
-        permissions: decoded.permissions || []
+        id: memoryUser.id,
+        name: memoryUser.name,
+        email: memoryUser.email,
+        phone: memoryUser.phone,
+        roleId: memoryUser.role_id || 0,
+        roleName,
+        roleDisplayName: memoryRole?.display_name || memoryUser.role_display_name || 'Team Member',
+        avatarUrl: memoryUser.avatar_url || '',
+        permissions
       };
     }
 
@@ -115,7 +122,7 @@ export const generateToken = (user: AuthenticatedUser): string => {
       roleDisplayName: user.roleDisplayName,
       avatarUrl: user.avatarUrl
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '7d' }
   );
 };

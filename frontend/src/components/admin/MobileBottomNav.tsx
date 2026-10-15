@@ -44,7 +44,7 @@ export const MobileBottomNav: React.FC = () => {
           name: 'My Tasks',
           href: '/admin/technician/jobs',
           icon: Home,
-          show: true
+          show: hasPermission('repairs.view')
         },
         {
           name: 'Profile',
@@ -64,7 +64,7 @@ export const MobileBottomNav: React.FC = () => {
           name: 'Recoveries',
           href: '/admin/recoveries',
           icon: ShieldAlert,
-          show: true
+          show: hasPermission('recoveries.view')
         },
         {
           name: 'Profile',
@@ -91,31 +91,31 @@ export const MobileBottomNav: React.FC = () => {
           name: 'Complaints',
           href: '/admin/complaints',
           icon: AlertCircle,
-          show: true
+          show: hasPermission('complaints.view')
         },
         {
           name: 'Repair Jobs',
           href: '/admin/repair-jobs',
           icon: Wrench,
-          show: true
+          show: hasPermission('repairs.view')
         },
         {
           name: 'Returns',
           href: '/admin/returns',
           icon: RotateCcw,
-          show: true
+          show: hasPermission('returns.view')
         },
         {
           name: 'Recoveries',
           href: '/admin/recoveries',
           icon: ShieldAlert,
-          show: true
+          show: hasPermission('recoveries.view')
         },
         {
           name: 'Inventory',
           href: '/admin/inventory',
           icon: Boxes,
-          show: true
+          show: hasPermission('inventory.view')
         },
         {
           name: 'Profile',
@@ -129,7 +129,7 @@ export const MobileBottomNav: React.FC = () => {
           }
         }
       ]
-    : isPreBookingUser
+    : isPreBookingUser && hasPermission('pre_bookings.view')
     ? [
         {
           name: 'Pre-Bookings',
@@ -197,15 +197,15 @@ export const MobileBottomNav: React.FC = () => {
       ].filter(item => item.show);
 
   const moreItems = [
-    { name: 'Scooty Returns', href: '/admin/returns', icon: RotateCcw, show: true },
-    { name: 'Scooty Recoveries', href: '/admin/recoveries', icon: ShieldAlert, show: hasPermission('recoveries.view') || hasPermission('fleet.view') || isRecoveryAgent },
+    { name: 'Scooty Returns', href: '/admin/returns', icon: RotateCcw, show: hasPermission('returns.view') },
+    { name: 'Scooty Recoveries', href: '/admin/recoveries', icon: ShieldAlert, show: hasPermission('recoveries.view') },
     { name: 'Complaints', href: '/admin/complaints', icon: AlertCircle, show: hasPermission('complaints.view') },
-    { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') || isPreBookingUser },
+    { name: 'Pre-Bookings', href: '/admin/pre-bookings', icon: Ticket, show: hasPermission('pre_bookings.view') },
     { name: 'Inventory', href: '/admin/inventory', icon: Boxes, show: hasPermission('inventory.view') },
     { name: 'Pricing Plans', href: '/admin/pricing', icon: Tag, show: hasPermission('settings.view') },
     { name: 'Vehicle Gallery', href: '/admin/gallery', icon: Camera, show: hasPermission('fleet.view') },
     { name: 'Reports & Attribution', href: '/admin/reports', icon: BarChart3, show: hasPermission('reports.view') },
-    { name: 'Team Directory', href: '/admin/users', icon: Users, show: hasPermission('users.view') },
+    { name: 'User Management', href: '/admin/users', icon: Users, show: hasPermission('users.view') },
   ].filter(item => item.show);
 
   return (

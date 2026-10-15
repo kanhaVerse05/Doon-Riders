@@ -245,8 +245,10 @@ export const fetchGalleryImages = async (category?: string): Promise<GalleryImag
 
 export const uploadGalleryImage = async (formData: FormData): Promise<{ success: boolean; data?: GalleryImage; message?: string }> => {
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('dr_admin_token') : null;
     const res = await fetch(`${API_BASE_URL}/gallery/upload`, {
       method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData,
     });
     return await res.json();
@@ -258,8 +260,10 @@ export const uploadGalleryImage = async (formData: FormData): Promise<{ success:
 
 export const deleteGalleryImage = async (id: number): Promise<{ success: boolean; message?: string }> => {
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('dr_admin_token') : null;
     const res = await fetch(`${API_BASE_URL}/gallery/${id}`, {
       method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     return await res.json();
   } catch (error: any) {

@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getPermissionsForRole, resolveRolePermissions } from './rbacHelper';
-import { requireSuperAdmin } from '../middleware/rbacMiddleware';
+import { requirePermission, requireSuperAdmin } from '../middleware/rbacMiddleware';
+import { PERMISSION_CATALOG } from './permissionCatalog';
+
+test('the permission catalog exposes one row per independently assignable right', () => {
+  const codes = PERMISSION_CATALOG.map(permission => permission.code);
+  assert.ok(codes.length > 30);
+  assert.equal(new Set(codes).size, codes.length, 'permission codes must be unique');
+  assert.ok(PERMISSION_CATALOG.every(permission => permission.module && permission.description));
+});
 
 test('an explicitly configured empty role receives no default permissions', () => {
   assert.deepEqual(resolveRolePermissions('SALES_EXECUTIVE', [], true), []);
@@ -71,4 +79,31 @@ test('role mutation guard allows Super Admin users', () => {
 
   requireSuperAdmin({ user: { roleName: 'SUPER_ADMIN' } } as any, res, (() => { reachedNext = true; }) as any);
   assert.equal(reachedNext, true);
+});
+
+test('module route guard accepts only the exact granted permission code', () => {
+  let statusCode = 0;
+  let reachedNext = false;
+  const res: any = {
+    status(code: number) { statusCode = code; return this; },
+    json() { return this; }
+  };
+
+  requirePermission('pre_bookings.view')({
+    user: { roleName: 'CUSTOM_ROLE', permissions: [{ code: 'recoveries.view', scope: 'ALL' }] }
+  } as any, res, (() => { reachedNext = true; }) as any);
+
+  assert.equal(statusCode, 403);
+  assert.equal(reachedNext, false);
+});
+
+test('module route guard carries the selected permission scope forward', () => {
+  let reachedNext = false;
+  const req: any = { user: { roleName: 'CUSTOM_ROLE', permissions: [{ code: 'leads.view', scope: 'ASSIGNED' }] } };
+  const res: any = { status() { return this; }, json() { return this; } };
+
+  requirePermission('leads.view')(req, res, (() => { reachedNext = true; }) as any);
+
+  assert.equal(reachedNext, true);
+  assert.equal(req.permissionScope, 'ASSIGNED');
 });

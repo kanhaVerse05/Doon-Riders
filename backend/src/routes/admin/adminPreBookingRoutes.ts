@@ -1,4 +1,6 @@
 import express from 'express';
+import { authenticateJwt } from '../../middleware/authMiddleware';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbacMiddleware';
 import {
   getAllPreBookings,
   createPreBooking,
@@ -10,12 +12,14 @@ import {
 
 const router = express.Router();
 
-router.get('/settings/qr', getQrSettings);
-router.post('/settings/qr', updateQrSettings);
+router.use(authenticateJwt);
 
-router.get('/', getAllPreBookings);
-router.post('/', createPreBooking);
-router.patch('/:id', updatePreBookingStatus);
-router.delete('/:id', deletePreBooking);
+router.get('/settings/qr', requirePermission('pre_bookings.settings'), getQrSettings);
+router.post('/settings/qr', requirePermission('pre_bookings.settings'), updateQrSettings);
+
+router.get('/', requireAnyPermission('pre_bookings.view', 'pre_bookings.view_all'), getAllPreBookings);
+router.post('/', requirePermission('pre_bookings.create'), createPreBooking);
+router.patch('/:id', requirePermission('pre_bookings.status_update'), updatePreBookingStatus);
+router.delete('/:id', requirePermission('pre_bookings.delete'), deletePreBooking);
 
 export default router;

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { pool, memoryStore, getDbStatus } from '../../config/db';
+import { AuthRequest } from '../../types/auth';
 import {
   loadPreBookingsBackup,
   savePreBookingsBackup,
@@ -8,22 +9,16 @@ import {
   syncPreBookingsWithDb
 } from '../../helpers/preBookingStorage';
 
-export const getAllPreBookings = async (req: Request, res: Response) => {
+export const getAllPreBookings = async (req: AuthRequest, res: Response) => {
   try {
-    const { search, status, paymentMode, date, user_id, role, view_all } = req.query;
-    const normalizedRole = String(role || '').toUpperCase();
-    const canViewAll = 
-      normalizedRole === 'SUPER_ADMIN' || 
-      normalizedRole === 'MANAGER' || 
-      normalizedRole === 'PRE_BOOKING' || 
-      normalizedRole.includes('SUPER') || 
-      normalizedRole.includes('BOOKING') || 
-      normalizedRole.includes('ADMIN') || 
-      view_all === 'true' || 
-      view_all === '1' ||
-      view_all !== 'false';
-    const isSuperAdmin = Boolean(normalizedRole === 'SUPER_ADMIN' || canViewAll);
-    const currentUserId = user_id ? Number(user_id) : null;
+    const { search, status, paymentMode, date } = req.query;
+    const isSuperAdmin = req.user?.roleName === 'SUPER_ADMIN';
+    const permissions = req.user?.permissions || [];
+    const canViewAll = isSuperAdmin || permissions.some(permission =>
+      permission.code === 'pre_bookings.view_all' ||
+      (permission.code === 'pre_bookings.view' && permission.scope === 'ALL')
+    );
+    const currentUserId = req.user?.id ?? null;
 
     if (getDbStatus()) {
       try {
@@ -31,9 +26,9 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
         const params: any[] = [];
         let pIdx = 1;
 
-        // RBAC: If not permitted to view all, only show pre-bookings created by this user
+        // Scope is derived from the authenticated user's stored grants, never query parameters.
         if (!canViewAll && currentUserId) {
-          sql += ` AND (created_by_id = $${pIdx++} OR created_by_id IS NULL)`;
+          sql += ` AND created_by_id = $${pIdx++}`;
           params.push(currentUserId);
         }
 
@@ -108,9 +103,9 @@ export const getAllPreBookings = async (req: Request, res: Response) => {
       list = [...(memoryStore.preBookings || [])];
     }
 
-    // RBAC: If not permitted to view all, only show pre-bookings created by this user
+    // Scope is derived from the authenticated user's stored grants, never query parameters.
     if (!canViewAll && currentUserId) {
-      list = list.filter(b => b.created_by_id === currentUserId || !b.created_by_id);
+      list = list.filter(b => Number(b.created_by_id) === Number(currentUserId));
     }
 
     if (status && status !== 'All' && status !== 'all') {

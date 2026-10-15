@@ -3,12 +3,12 @@ import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { logAuditEvent } from '../../helpers/auditLogger';
 import { normalizeScope } from '../../helpers/rbacHelper';
+import { PERMISSION_CATALOG, PERMISSION_BY_CODE } from '../../helpers/permissionCatalog';
 
 export const getRolesAndPermissions = async (req: AuthRequest, res: Response) => {
   try {
     if (getDbStatus()) {
       const rolesRes = await pool.query('SELECT * FROM roles ORDER BY id ASC');
-      const permRes = await pool.query('SELECT * FROM permissions ORDER BY module ASC, code ASC');
       const rolePermRes = await pool.query(`
         SELECT rp.role_id, rp.permission_id, rp.scope, p.code
         FROM role_permissions rp
@@ -19,7 +19,7 @@ export const getRolesAndPermissions = async (req: AuthRequest, res: Response) =>
         success: true,
         data: {
           roles: rolesRes.rows,
-          permissions: permRes.rows,
+          permissions: PERMISSION_CATALOG,
           rolePermissions: rolePermRes.rows
         }
       });
@@ -30,22 +30,7 @@ export const getRolesAndPermissions = async (req: AuthRequest, res: Response) =>
       success: true,
       data: {
         roles: memoryStore.roles,
-        permissions: [
-          { id: 1, code: 'dashboard.view', module: 'Dashboard', description: 'View dashboard' },
-          { id: 2, code: 'leads.view', module: 'Leads', description: 'View leads' },
-          { id: 3, code: 'reports.view', module: 'Reports', description: 'View reports' },
-          { id: 4, code: 'roles.view', module: 'Roles', description: 'View roles' },
-          { id: 5, code: 'repair_jobs.view', module: 'Repair Jobs', description: 'View repair jobs' },
-          { id: 6, code: 'repair_jobs.edit', module: 'Repair Jobs', description: 'Edit & update repair jobs' },
-          { id: 7, code: 'inventory.view', module: 'Inventory', description: 'View inventory' },
-          { id: 8, code: 'inventory.edit', module: 'Inventory', description: 'Manage inventory stock' },
-          { id: 9, code: 'recoveries.view', module: 'Scooty Recovery', description: 'View scooty recovery tickets and status' },
-          { id: 10, code: 'recoveries.accept', module: 'Scooty Recovery', description: 'Accept assigned recovery request' },
-          { id: 11, code: 'recoveries.pickup', module: 'Scooty Recovery', description: 'Record vehicle pickup with GPS & 4 photos' },
-          { id: 12, code: 'recoveries.reached_hub', module: 'Scooty Recovery', description: 'Mark scooty reached service hub' },
-          { id: 13, code: 'recoveries.assign_tech', module: 'Scooty Recovery', description: 'Assign technician for damage inspection' },
-          { id: 14, code: 'recoveries.settle', module: 'Scooty Recovery', description: 'Approve final settlement and generate slip' }
-        ],
+        permissions: PERMISSION_CATALOG,
         rolePermissions: [
           { role_id: 1, permission_id: 1, scope: 'ALL', code: 'dashboard.view' },
           { role_id: 1, permission_id: 2, scope: 'ALL', code: 'leads.view' },
@@ -76,6 +61,9 @@ export const createRole = async (req: AuthRequest, res: Response) => {
       .toUpperCase()
       .replace(/[^A-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
+    if (!cleanName) {
+      return res.status(400).json({ success: false, message: 'Role name must contain at least one letter or number.' });
+    }
 
     if (getDbStatus()) {
       const existing = await pool.query('SELECT id FROM roles WHERE name = $1 OR display_name = $2', [cleanName, cleanDisplayName]);
@@ -153,17 +141,40 @@ export const deleteRole = async (req: AuthRequest, res: Response) => {
     const roleId = Number(id);
 
     if (getDbStatus()) {
-      const roleRes = await pool.query('SELECT * FROM roles WHERE id = $1', [roleId]);
-      if (roleRes.rows.length === 0) {
-        return res.status(404).json({ success: false, message: 'Role not found.' });
+      const client = await pool.connect();
+      let deletedRole: any;
+      try {
+        await client.query('BEGIN');
+        const roleRes = await client.query('SELECT * FROM roles WHERE id = $1 FOR UPDATE', [roleId]);
+        if (roleRes.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Role not found.' });
+        }
+        deletedRole = roleRes.rows[0];
+        if (deletedRole.is_system) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ success: false, message: 'Core system roles cannot be deleted.' });
+        }
+        const assignedUsers = await client.query(
+          'SELECT COUNT(*)::int AS count FROM users WHERE role_id = $1',
+          [roleId]
+        );
+        if (Number(assignedUsers.rows[0]?.count || 0) > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            message: 'This role is assigned to staff. Reassign those staff members before deleting the role.'
+          });
+        }
+        await client.query('DELETE FROM role_permissions WHERE role_id = $1', [roleId]);
+        await client.query('DELETE FROM roles WHERE id = $1', [roleId]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
       }
-
-      if (roleRes.rows[0].is_system) {
-        return res.status(403).json({ success: false, message: 'Core system roles cannot be deleted.' });
-      }
-
-      await pool.query('DELETE FROM role_permissions WHERE role_id = $1', [roleId]);
-      await pool.query('DELETE FROM roles WHERE id = $1', [roleId]);
 
       await logAuditEvent({
         userId: req.user?.id,
@@ -172,7 +183,7 @@ export const deleteRole = async (req: AuthRequest, res: Response) => {
         action: 'DELETE',
         module: 'ROLES',
         recordId: roleId,
-        notes: `Deleted custom role: ${roleRes.rows[0].display_name}`
+        notes: `Deleted custom role: ${deletedRole.display_name}`
       });
 
       return res.json({ success: true, message: 'Custom role deleted successfully.' });
@@ -188,7 +199,15 @@ export const deleteRole = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ success: false, message: 'Core system roles cannot be deleted.' });
     }
 
+    if (memoryStore.users.some(user => Number(user.role_id) === roleId)) {
+      return res.status(409).json({
+        success: false,
+        message: 'This role is assigned to staff. Reassign those staff members before deleting the role.'
+      });
+    }
+
     const deleted = memoryStore.roles.splice(roleIdx, 1)[0];
+    memoryStore.rolePermissions = (memoryStore.rolePermissions || []).filter((permission: any) => Number(permission.role_id) !== roleId);
     return res.json({ success: true, message: `Custom role "${deleted.display_name}" deleted successfully.` });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
@@ -209,6 +228,13 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
           if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
             await client.query('ROLLBACK');
             return res.status(400).json({ success: false, message: 'Permissions must be a permission-code map.' });
+          }
+
+          const unknownCode = Object.keys(permissions as Record<string, unknown>)
+            .find(code => !PERMISSION_BY_CODE.has(code));
+          if (unknownCode) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: `Unknown permission code: ${unknownCode}` });
           }
 
           const targetUserId = userId ? Number(userId) : null;
@@ -248,17 +274,13 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
           const enabledCodes = enabledEntries.map(([code]) => code);
           const knownPermissions: Array<{ id: number; code: string }> = [];
           for (const code of enabledCodes) {
-            if (code.length > 100 || !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(code)) {
-              await client.query('ROLLBACK');
-              return res.status(400).json({ success: false, message: `Invalid permission code: ${code}` });
-            }
-            const module = code.split('.')[0].replace(/_/g, ' ');
             const permissionRes = await client.query(`
               INSERT INTO permissions (code, module, description)
               VALUES ($1, $2, $3)
-              ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+              ON CONFLICT (code) DO UPDATE
+              SET module = EXCLUDED.module, description = EXCLUDED.description
               RETURNING id, code
-            `, [code, module, `Access controlled by ${code}`]);
+            `, [code, PERMISSION_BY_CODE.get(code)!.module, PERMISSION_BY_CODE.get(code)!.description]);
             knownPermissions.push(permissionRes.rows[0]);
           }
 
@@ -333,6 +355,11 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
     }
 
     if (permissions && typeof permissions === 'object') {
+      const unknownCode = Object.keys(permissions as Record<string, unknown>)
+        .find(code => !PERMISSION_BY_CODE.has(code));
+      if (unknownCode) {
+        return res.status(400).json({ success: false, message: `Unknown permission code: ${unknownCode}` });
+      }
       const targetRoleId = Number(roleId) || 1;
       const role = memoryStore.roles.find(r => r.id === targetRoleId);
       if (role?.name === 'SUPER_ADMIN') {

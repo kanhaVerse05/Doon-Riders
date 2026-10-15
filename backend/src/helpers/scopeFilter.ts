@@ -9,7 +9,7 @@ export const buildLeadScopeCondition = (req: AuthRequest, paramOffset: number = 
   const scope = req.permissionScope || 'ASSIGNED';
   const userId = req.user?.id;
 
-  if (scope === 'ALL' || req.user?.roleName === 'SUPER_ADMIN' || req.user?.roleName === 'ADMIN' || req.user?.roleName === 'MANAGER') {
+  if (scope === 'ALL' || req.user?.roleName === 'SUPER_ADMIN') {
     return { whereClause: '1=1', params: [] };
   }
 

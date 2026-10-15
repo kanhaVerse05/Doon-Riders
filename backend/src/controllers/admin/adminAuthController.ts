@@ -75,10 +75,7 @@ export const login = async (req: Request, res: Response) => {
       }
 
       // Check password
-      const isMatch = (cleanPassword === '!Admin@8285') || 
-                      (cleanPassword === 'Admin@1234') || 
-                      (cleanPassword === 'admin@1234') || 
-                      await bcrypt.compare(cleanPassword, u.password_hash);
+      const isMatch = await bcrypt.compare(cleanPassword, u.password_hash);
       if (!isMatch) {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
@@ -127,11 +124,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials. User not found.' });
     }
 
-    const isMatch = (cleanPassword === '!Admin@8285') || 
-                    (cleanPassword === 'Admin@1234') || 
-                    (cleanPassword === 'admin@1234') || 
-                    (cleanPassword === 'password123') ||
-                    (u.password_hash ? await bcrypt.compare(cleanPassword, u.password_hash) : false);
+    const isMatch = u.password_hash ? await bcrypt.compare(cleanPassword, u.password_hash) : false;
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
@@ -186,8 +179,9 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
-        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url,
+        SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.custom_permissions,
                r.id as role_id, r.name as role_name, r.display_name as role_display_name
+               ,r.permissions_configured as role_permissions_configured
         FROM users u
         JOIN roles r ON u.role_id = r.id
         WHERE LOWER(u.email) = $1
@@ -198,7 +192,7 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
       }
 
       const u = userRes.rows[0];
-      const permissions = getPermissionsForRole(u.role_name);
+      const permissions = await computeUserPermissions(u);
 
       const authUser = {
         id: u.id,

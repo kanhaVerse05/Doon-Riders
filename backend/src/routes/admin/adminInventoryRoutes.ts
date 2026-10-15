@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authenticateJwt } from '../../middleware/authMiddleware';
+import { requirePermission } from '../../middleware/rbacMiddleware';
 import {
   getAllInventory,
   getInventoryById,
@@ -11,12 +13,14 @@ import {
 
 const router = Router();
 
-router.get('/', getAllInventory);
-router.post('/bulk-upload', bulkUploadInventory);
-router.get('/:id', getInventoryById);
-router.post('/', createInventoryItem);
-router.put('/:id', updateInventoryItem);
-router.patch('/:id/adjust-stock', adjustStock);
-router.delete('/:id', deleteInventoryItem);
+router.use(authenticateJwt);
+
+router.get('/', requirePermission('inventory.view'), getAllInventory);
+router.post('/bulk-upload', requirePermission('inventory.manage'), bulkUploadInventory);
+router.get('/:id', requirePermission('inventory.view'), getInventoryById);
+router.post('/', requirePermission('inventory.manage'), createInventoryItem);
+router.put('/:id', requirePermission('inventory.manage'), updateInventoryItem);
+router.patch('/:id/adjust-stock', requirePermission('inventory.manage'), adjustStock);
+router.delete('/:id', requirePermission('inventory.manage'), deleteInventoryItem);
 
 export default router;

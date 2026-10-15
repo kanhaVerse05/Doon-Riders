@@ -5,6 +5,8 @@ import {
   deleteGalleryImage,
   upload,
 } from '../controllers/galleryController';
+import { authenticateJwt } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/rbacMiddleware';
 
 const router = Router();
 
@@ -12,9 +14,9 @@ const router = Router();
 router.get('/', getGalleryImages);
 
 // POST upload an image
-router.post('/upload', upload.single('image'), uploadGalleryImage);
+router.post('/upload', authenticateJwt, requirePermission('fleet.manage'), upload.single('image'), uploadGalleryImage);
 
 // DELETE an image
-router.delete('/:id', deleteGalleryImage);
+router.delete('/:id', authenticateJwt, requirePermission('fleet.manage'), deleteGalleryImage);
 
 export default router;

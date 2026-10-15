@@ -38,7 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const getDefaultRolePermissions = (roleName: string): UserPermission[] => {
   const norm = (roleName || '').toUpperCase();
 
-  if (norm === 'SUPER_ADMIN' || norm.includes('SUPER')) {
+  if (norm === 'SUPER_ADMIN') {
     return [
       { code: 'dashboard.view', scope: 'ALL' },
       { code: 'dashboard.view_all', scope: 'ALL' },
@@ -89,34 +89,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    try {
-      const savedToken = localStorage.getItem('dr_admin_token');
-      const savedUser = localStorage.getItem('dr_admin_user');
-      if (savedToken && savedUser) {
-        const parsedUser = JSON.parse(savedUser);
+    let active = true;
+    const restoreSession = async () => {
+      try {
+        const savedToken = localStorage.getItem('dr_admin_token');
+        if (!savedToken) return;
         setToken(savedToken);
-        setUser(parsedUser);
-
-        // Background re-sync profile & permissions with backend if token exists
-        adminApi.get('/admin/auth/me').then((meRes) => {
-          if (meRes && meRes.success && meRes.user) {
-            setUser(meRes.user);
-            localStorage.setItem('dr_admin_user', JSON.stringify(meRes.user));
-          }
-        }).catch(() => {});
+        const meRes = await adminApi.get('/admin/auth/me');
+        if (!active) return;
+        if (meRes?.success && meRes.user) {
+          setUser(meRes.user);
+          localStorage.setItem('dr_admin_user', JSON.stringify(meRes.user));
+        } else {
+          setToken(null);
+          localStorage.removeItem('dr_admin_token');
+          localStorage.removeItem('dr_admin_user');
+        }
+      } catch (e) {
+        if (active) {
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('dr_admin_token');
+          localStorage.removeItem('dr_admin_user');
+        }
+      } finally {
+        if (active) setIsLoading(false);
       }
-    } catch (e) {
-      console.error('Error loading session:', e);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    void restoreSession();
+    return () => { active = false; };
   }, []);
 
   const login = async (emailInput: string, passwordInput = ''): Promise<boolean> => {
     const emailClean = (emailInput || '').toLowerCase().trim();
     const passClean = (passwordInput || '').trim();
 
-    // 1. Try Backend API first
+    // Only a server-verified account may create an authenticated session.
     try {
       const res = await adminApi.post('/admin/auth/login', { email: emailClean, password: passClean });
       if (res && res.success && res.token && res.user) {
@@ -127,90 +135,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       }
     } catch (apiErr) {
-      console.warn('API call error, verifying local credentials:', apiErr);
+      console.warn('Login request failed:', apiErr);
     }
-
-    // 2. Direct Super Admin Credentials validation
-    const superAdminEmails = ['doonridersmain@gmail.com', 'superadmin@doonriders.com'];
-    const validPasswords = ['!Admin@8285', 'Admin@1234', 'admin@1234', '!admin@8285'];
-
-    if (superAdminEmails.includes(emailClean) && validPasswords.includes(passClean)) {
-      const superAdminUser: AdminUser = {
-        id: 1,
-        name: 'Ankit Kumar',
-        email: 'doonridersmain@gmail.com',
-        phone: '+91 8439431999',
-        roleId: 1,
-        roleName: 'SUPER_ADMIN',
-        roleDisplayName: 'Super Admin',
-        avatarUrl: '/images/doon-riders-logo.png',
-        permissions: getDefaultRolePermissions('SUPER_ADMIN')
-      };
-
-      const mockToken = 'dr_super_admin_token_' + Date.now();
-      setToken(mockToken);
-      setUser(superAdminUser);
-      localStorage.setItem('dr_admin_token', mockToken);
-      localStorage.setItem('dr_admin_user', JSON.stringify(superAdminUser));
-      return true;
-    }
-
-    // 3. Authenticate against Custom Team Members
-    const storedCustomUsers = localStorage.getItem('dr_custom_team_users');
-    if (storedCustomUsers) {
-      try {
-        const usersList: any[] = JSON.parse(storedCustomUsers);
-        const matchedMember = usersList.find(u => u.email?.toLowerCase().trim() === emailClean);
-
-        if (matchedMember) {
-          // Load custom permissions if saved in matrix
-          let userPerms: UserPermission[] = [];
-          const storedPerms = localStorage.getItem('dr_user_custom_permissions');
-          let hasSavedPermissionConfig = false;
-          if (storedPerms) {
-            try {
-              const permMap = JSON.parse(storedPerms);
-              if (permMap[matchedMember.id] && typeof permMap[matchedMember.id] === 'object') {
-                hasSavedPermissionConfig = true;
-                userPerms = Object.entries(permMap[matchedMember.id])
-                  .filter(([_, val]: any) => val?.enabled)
-                  .map(([code, val]: any) => ({
-                    code,
-                    scope: val.scope || 'ALL'
-                  }));
-              }
-            } catch (e) {}
-          }
-
-          if (!hasSavedPermissionConfig) {
-            userPerms = getDefaultRolePermissions(matchedMember.role_name || matchedMember.role || 'SALES_EXECUTIVE');
-          }
-
-          const authenticatedCustomUser: AdminUser = {
-            id: matchedMember.id,
-            name: matchedMember.name,
-            email: matchedMember.email,
-            phone: matchedMember.phone,
-            roleId: matchedMember.role_id || 4,
-            roleName: matchedMember.role_name || matchedMember.role || 'SALES_EXECUTIVE',
-            roleDisplayName: matchedMember.role_display_name || matchedMember.roleDisplayName || 'Team Member',
-            avatarUrl: matchedMember.avatar_url || '',
-            permissions: userPerms
-          };
-
-          const customToken = 'dr_team_token_' + matchedMember.id + '_' + Date.now();
-          setToken(customToken);
-          setUser(authenticatedCustomUser);
-          localStorage.setItem('dr_admin_token', customToken);
-          localStorage.setItem('dr_admin_user', JSON.stringify(authenticatedCustomUser));
-          return true;
-        }
-      } catch (e) {
-        console.error('Error parsing custom users for auth:', e);
-      }
-    }
-
-    // Invalid credentials
     return false;
   };
 
@@ -253,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasPermission = (permissionCode: string, requiredScope?: string): boolean => {
     if (!user) return false;
     const normRole = (user.roleName || user.roleDisplayName || '').toUpperCase();
-    if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
+    if (normRole === 'SUPER_ADMIN') {
       return true;
     }
 
@@ -298,13 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canAccess = (module: string): boolean => {
     if (!user) return false;
     const normRole = (user.roleName || user.roleDisplayName || '').toUpperCase();
-    if (normRole === 'SUPER_ADMIN' || normRole.includes('SUPER')) {
-      return true;
-    }
-
-    const modClean = module.toLowerCase().replace(/[-_\s]+/g, '');
-    if ((normRole === 'PRE_BOOKING' || normRole.includes('PRE_BOOK') || normRole.includes('PRE-BOOK')) &&
-        (modClean === 'prebookings' || modClean === 'prebooking')) {
+    if (normRole === 'SUPER_ADMIN') {
       return true;
     }
 

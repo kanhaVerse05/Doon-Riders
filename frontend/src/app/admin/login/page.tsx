@@ -54,17 +54,14 @@ export default function AdminLoginPage() {
           return;
         }
 
-        const isSuper = parsed?.roleName === 'SUPER_ADMIN' || parsed?.roleName?.includes('SUPER');
+        const isSuper = parsed?.roleName === 'SUPER_ADMIN';
         const userPerms: Array<{ code: string }> = Array.isArray(parsed?.permissions) ? parsed.permissions : [];
         const hasPerm = (code: string) => isSuper || userPerms.some((p: any) => p.code === code || p.code?.toLowerCase() === code.toLowerCase());
-        const isPreBooking = parsed?.roleName === 'PRE_BOOKING' || parsed?.roleName?.includes('PRE_BOOK') || parsed?.roleDisplayName?.toLowerCase().includes('pre-booking');
-        const isRecovery = parsed?.roleName === 'RECOVERY_AGENT' || parsed?.roleName?.includes('RECOVERY') || parsed?.roleDisplayName?.toLowerCase().includes('recovery');
-
         if (isSuper || hasPerm('dashboard.view')) {
           router.push('/admin/dashboard');
-        } else if (isRecovery || hasPerm('recoveries.view')) {
+        } else if (hasPerm('recoveries.view')) {
           router.push('/admin/recoveries');
-        } else if (isPreBooking || hasPerm('pre_bookings.view')) {
+        } else if (hasPerm('pre_bookings.view')) {
           router.push('/admin/pre-bookings');
         } else if (hasPerm('leads.view')) {
           router.push('/admin/leads');
@@ -74,8 +71,18 @@ export default function AdminLoginPage() {
           router.push('/admin/repair-jobs');
         } else if (hasPerm('inventory.view')) {
           router.push('/admin/inventory');
+        } else if (hasPerm('returns.view')) {
+          router.push('/admin/returns');
+        } else if (hasPerm('customers.view')) {
+          router.push('/admin/customers');
+        } else if (hasPerm('users.view')) {
+          router.push('/admin/users');
+        } else if (hasPerm('reports.view')) {
+          router.push('/admin/reports');
+        } else if (hasPerm('settings.view')) {
+          router.push('/admin/settings');
         } else {
-          router.push('/admin/recoveries');
+          router.push('/admin/no-access');
         }
       } else {
         setError('Invalid credentials. Please check your email and password.');

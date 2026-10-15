@@ -47,7 +47,6 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.deleted_at IS NULL
-          AND u.email NOT IN ('admin@doonriders.com', 'manager@doonriders.com', 'rahul.sales@doonriders.com', 'priya.sales@doonriders.com', 'amit.sales@doonriders.com', 'amit.tech@doonriders.com', 'hub.isbt@doonriders.com')
         ORDER BY u.id ASC
       `;
       const result = await pool.query(query);
@@ -73,8 +72,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true, data: usersWithRoles });
   } catch (err: any) {
-    const backupUsers = loadUsersBackup();
-    return res.json({ success: true, data: backupUsers });
+    return res.status(500).json({ success: false, message: err?.message || 'Could not load users.' });
   }
 };
 
@@ -89,7 +87,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
     }
 
-    let finalRoleId = roleId ? Number(roleId) : 4;
+    let finalRoleId = roleId ? Number(roleId) : Number(req.user?.roleId || 4);
     let finalRoleDisplayName = 'Sales Executive';
     let finalRoleName = 'SALES_EXECUTIVE';
 
@@ -110,7 +108,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
           finalRoleName = existingRoleRes.rows[0].name;
         } else {
           const createRoleRes = await pool.query(
-            'INSERT INTO roles (name, display_name, description, is_system) VALUES ($1, $2, $3, FALSE) RETURNING id',
+            'INSERT INTO roles (name, display_name, description, is_system, permissions_configured) VALUES ($1, $2, $3, FALSE, TRUE) RETURNING id',
             [cleanCode, cleanCustomName, `Custom role: ${cleanCustomName}`]
           );
           finalRoleId = createRoleRes.rows[0]?.id || 4;
@@ -132,7 +130,8 @@ export const createUser = async (req: AuthRequest, res: Response) => {
             name: cleanCode,
             display_name: cleanCustomName,
             description: `Custom role: ${cleanCustomName}`,
-            is_system: false
+            is_system: false,
+            permissions_configured: true
           };
           memoryStore.roles.push(newRoleObj);
           finalRoleId = nextRoleId;

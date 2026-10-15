@@ -54,6 +54,34 @@ const getTechnicianIdsForUser = async (user: AuthRequest['user']): Promise<numbe
   return matches.length > 0 ? matches.map(technician => Number(technician.id)) : [Number(user.id)];
 };
 
+const canViewRecoveryRecord = async (req: AuthRequest, recovery: any): Promise<boolean> => {
+  const roleName = (req.user?.roleName || '').toUpperCase();
+  const permissions = req.user?.permissions || [];
+  if (roleName === 'SUPER_ADMIN' || permissions.some(permission =>
+    permission.code === 'recoveries.view_all' ||
+    (permission.code === 'recoveries.view' && permission.scope === 'ALL')
+  )) return true;
+
+  if (roleName.includes('TECH')) {
+    const technicianIds = await getTechnicianIdsForUser(req.user);
+    return technicianIds.includes(Number(recovery.technician_id));
+  }
+  if (roleName.includes('HUB')) {
+    return Boolean((req.user as any)?.hub_id) && Number(recovery.hub_id) === Number((req.user as any).hub_id);
+  }
+
+  const userId = Number(req.user?.id) || 0;
+  const userName = (req.user?.name || '').trim().toLowerCase();
+  return Number(recovery.recovery_agent_id) === userId ||
+    (recovery.recovery_agent_name || '').trim().toLowerCase() === userName ||
+    (recovery.recovered_by || '').trim().toLowerCase() === userName;
+};
+
+const userCanAssignRecoveries = (req: AuthRequest) => req.user?.roleName === 'SUPER_ADMIN' ||
+  (req.user?.permissions || []).some(permission =>
+    permission.code === 'recoveries.create' || permission.code === 'recoveries.assign_tech'
+  );
+
 // Helper: Save Base64 Compressed Image to Disk in uploads/recoveries
 export const saveRecoveryPhoto = (base64Str: string, recoveryId: number | string, angle: string): string => {
   if (!base64Str || typeof base64Str !== 'string') return '';
@@ -171,6 +199,11 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
     const userRole = (req.user?.roleName || '').toUpperCase();
     const userId = req.user?.id;
     const technicianIds = userRole.includes('TECH') ? await getTechnicianIdsForUser(req.user) : [];
+    const hasExplicitViewAll = userRole === 'SUPER_ADMIN' || (req.user?.permissions || []).some((permission: any) =>
+      permission.code === 'recoveries.view_all' ||
+      (permission.code === 'recoveries.view' && permission.scope === 'ALL')
+    );
+    const userName = (req.user?.name || '').toLowerCase().trim();
 
     if (getDbStatus()) {
       try {
@@ -178,25 +211,30 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
         let params: any[] = [];
         let pIndex = 1;
 
-        // Role-based scoping: Hub Incharge only sees their Hub's recoveries, Tech sees their jobs, Agent sees their tasks
-        const isSuperOrManager = userRole.includes('SUPER') || userRole.includes('MANAGER');
-        const hasExplicitViewAll = (req.user?.permissions || []).some((p: any) => p.code === 'recoveries.view_all');
-
         // Technician accounts must only see records assigned to their linked
         // technician profile, even if a broad view permission is present.
         if (userRole.includes('TECH')) {
           whereClauses.push(`r.technician_id = ANY($${pIndex}::int[])`);
           params.push(technicianIds);
           pIndex++;
-        } else if (!isSuperOrManager && !hasExplicitViewAll) {
-          if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
-            whereClauses.push(`r.hub_id = $${pIndex}`);
-            params.push((req.user as any).hub_id);
-            pIndex++;
+        } else if (!hasExplicitViewAll) {
+          if (userRole.includes('HUB')) {
+            if ((req.user as any)?.hub_id) {
+              whereClauses.push(`r.hub_id = $${pIndex}`);
+              params.push((req.user as any).hub_id);
+              pIndex++;
+            } else {
+              whereClauses.push('FALSE');
+            }
           } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
             whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(TRIM(COALESCE(r.recovered_by, ''))) = $${pIndex + 1} OR LOWER(TRIM(COALESCE(r.recovery_agent_name, ''))) = $${pIndex + 1})`);
             params.push(Number(userId) || 0);
-            params.push((req.user?.name || '').toLowerCase().trim());
+            params.push(userName);
+            pIndex += 2;
+          } else {
+            whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(TRIM(COALESCE(r.recovered_by, ''))) = $${pIndex + 1} OR LOWER(TRIM(COALESCE(r.recovery_agent_name, ''))) = $${pIndex + 1})`);
+            params.push(Number(userId) || 0);
+            params.push(userName);
             pIndex += 2;
           }
         }
@@ -270,17 +308,18 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
             COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
             COALESCE(SUM(CASE WHEN status = 'Completed' THEN refund_amount_to_rider ELSE 0 END), 0) as total_refunded,
             COALESCE(SUM(CASE WHEN status = 'Completed' THEN due_amount_from_rider ELSE 0 END), 0) as total_due_collected
-          FROM scooty_recoveries
-        `);
+          FROM scooty_recoveries r
+          WHERE ${whereClauses.join(' AND ')}
+        `, params);
 
         // Fetch recovery agents / staff users for assignment dropdown
-        const agentsRes = await pool.query(`
+        const agentsRes = userCanAssignRecoveries(req) ? await pool.query(`
           SELECT u.id, u.name, u.phone, u.email, u.avatar_url, r.name as role_name, r.display_name as role_display_name
           FROM users u
           LEFT JOIN roles r ON u.role_id = r.id
           WHERE u.deleted_at IS NULL
           ORDER BY u.name ASC
-        `).catch(() => ({ rows: [] }));
+        `).catch(() => ({ rows: [] })) : { rows: [] };
 
         const st = statsRes.rows[0] || {};
         const stats = {
@@ -301,7 +340,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
           data: result.rows,
           stats,
           hubs: memoryStore.repairHubs,
-          technicians: await getAvailableTechnicians(),
+          technicians: userCanAssignRecoveries(req) ? await getAvailableTechnicians() : [],
           recoveryAgents: agentsRes.rows,
           inventoryParts: memoryStore.inventory
         });
@@ -313,22 +352,21 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
     // MemoryStore Fallback
     let list = [...(memoryStore.scootyRecoveries || [])];
 
-    if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
-      list = list.filter(r => r.hub_id === (req.user as any)?.hub_id);
-    } else if (userRole.includes('TECH')) {
+    if (!hasExplicitViewAll && userRole.includes('HUB')) {
+      list = (req.user as any)?.hub_id ? list.filter(r => r.hub_id === (req.user as any)?.hub_id) : [];
+    } else if (!hasExplicitViewAll && userRole.includes('TECH')) {
       const assignedTechIds = new Set(technicianIds);
       const technicianName = (req.user?.name || '').trim().toLowerCase();
       list = list.filter(r =>
         assignedTechIds.has(Number(r.technician_id)) ||
         (r.technician_name || '').trim().toLowerCase() === technicianName
       );
-    } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
-      const uName = (req.user?.name || '').toLowerCase().trim();
+    } else if (!hasExplicitViewAll) {
       const uId = Number(userId) || 0;
       list = list.filter(r =>
         Number(r.recovery_agent_id) === uId ||
-        (r.recovery_agent_name && r.recovery_agent_name.toLowerCase().trim() === uName) ||
-        (r.recovered_by && r.recovered_by.toLowerCase().trim() === uName)
+        (r.recovery_agent_name && r.recovery_agent_name.toLowerCase().trim() === userName) ||
+        (r.recovered_by && r.recovered_by.toLowerCase().trim() === userName)
       );
     }
 
@@ -395,25 +433,28 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
 
         if (rRes.rows.length > 0) {
           const scootyRecovery = rRes.rows[0];
+          if (!await canViewRecoveryRecord(req, scootyRecovery)) {
+            return res.status(404).json({ success: false, message: 'Scooty Recovery record not found' });
+          }
           const eventsRes = await pool.query(
             `SELECT * FROM scooty_recovery_events WHERE recovery_id = $1 ORDER BY created_at ASC`,
             [scootyRecovery.id]
           );
 
-          const agentsRes = await pool.query(`
+          const agentsRes = userCanAssignRecoveries(req) ? await pool.query(`
             SELECT u.id, u.name, u.phone, u.email, u.avatar_url, r.name as role_name, r.display_name as role_display_name
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE u.deleted_at IS NULL
             ORDER BY u.name ASC
-          `).catch(() => ({ rows: [] }));
+          `).catch(() => ({ rows: [] })) : { rows: [] };
 
           return res.json({
             success: true,
             data: scootyRecovery,
             timeline: eventsRes.rows,
             hubs: memoryStore.repairHubs,
-            technicians: await getAvailableTechnicians(),
+            technicians: userCanAssignRecoveries(req) ? await getAvailableTechnicians() : [],
             recoveryAgents: agentsRes.rows,
             inventoryParts: memoryStore.inventory
           });
@@ -430,19 +471,24 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Scooty Recovery record not found' });
     }
+    if (!await canViewRecoveryRecord(req, scootyRecovery)) {
+      return res.status(404).json({ success: false, message: 'Scooty Recovery record not found' });
+    }
 
     const timeline = (memoryStore.scootyRecoveryEvents || [])
       .filter(e => e.recovery_id === scootyRecovery.id)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    const fallbackAgents = (memoryStore.users || []).map(u => ({ id: u.id, name: u.name, phone: u.phone, email: u.email }));
+    const fallbackAgents = userCanAssignRecoveries(req)
+      ? (memoryStore.users || []).map(u => ({ id: u.id, name: u.name, phone: u.phone, email: u.email }))
+      : [];
 
     return res.json({
       success: true,
       data: scootyRecovery,
       timeline,
       hubs: memoryStore.repairHubs,
-      technicians: await getAvailableTechnicians(),
+      technicians: userCanAssignRecoveries(req) ? await getAvailableTechnicians() : [],
       recoveryAgents: fallbackAgents,
       inventoryParts: memoryStore.inventory
     });
@@ -781,7 +827,7 @@ export const acceptRecovery = async (req: AuthRequest, res: Response) => {
     const recoveryId = Number(id);
     const now = new Date().toISOString();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     // Hub Incharge cannot accept recovery on behalf of recovery agent!
     if (userRole.includes('HUB') && !isSuperAdmin) {
@@ -918,7 +964,7 @@ export const pickupScooty = async (req: AuthRequest, res: Response) => {
     const recoveryId = Number(id);
     const now = new Date().toISOString();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     if (userRole.includes('HUB') && !isSuperAdmin) {
       return res.status(403).json({
@@ -1108,7 +1154,7 @@ export const agentReachedHub = async (req: AuthRequest, res: Response) => {
     const recoveryId = Number(id);
     const now = new Date().toISOString();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     if (userRole.includes('HUB') && !isSuperAdmin) {
       return res.status(403).json({
@@ -1226,7 +1272,7 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
     const { technician_id } = req.body;
     const recoveryId = Number(id);
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     if (userRole.includes('RECOVERY') && !isSuperAdmin) {
       return res.status(403).json({
@@ -1364,7 +1410,7 @@ export const submitTechnicianRecoveryInspection = async (req: AuthRequest, res: 
     const recoveryId = Number(id);
     const now = new Date().toISOString();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     if (userRole.includes('RECOVERY') && !isSuperAdmin) {
       return res.status(403).json({
@@ -1543,7 +1589,7 @@ export const settleRecovery = async (req: AuthRequest, res: Response) => {
     const recoveryId = Number(id);
     const now = new Date().toISOString();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
     if (userRole.includes('RECOVERY') && !isSuperAdmin) {
       return res.status(403).json({

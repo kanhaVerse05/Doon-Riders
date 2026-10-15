@@ -26,7 +26,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const router = useRouter();
   const pathname = usePathname();
 
-  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
   const isTechnician = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
   const isHubIncharge = user?.roleName === 'HUB_INCHARGE' || user?.roleName?.includes('HUB');
 
@@ -57,8 +56,33 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         router.replace('/admin/login');
       }
     } else if (mounted && !isLoading && user) {
-      const isSuper = user.roleName === 'SUPER_ADMIN' || user.roleName?.includes('SUPER');
+      const isSuper = user.roleName === 'SUPER_ADMIN';
       if (!isSuper) {
+
+        const protectedRoutes: Array<[string, string]> = [
+          ['/admin/dashboard', 'dashboard.view'],
+          ['/admin/complaints', 'complaints.view'],
+          ['/admin/repair-jobs', 'repairs.view'],
+          ['/admin/technician/jobs', 'repairs.view'],
+          ['/admin/returns', 'returns.view'],
+          ['/admin/recoveries', 'recoveries.view'],
+          ['/admin/pre-bookings', 'pre_bookings.view'],
+          ['/admin/inventory', 'inventory.view'],
+          ['/admin/gallery', 'fleet.view'],
+          ['/admin/pricing', 'settings.view'],
+          ['/admin/leads', 'leads.view'],
+          ['/admin/customers', 'customers.view'],
+          ['/admin/reports', 'reports.view'],
+          ['/admin/users', 'users.view'],
+          ['/admin/audit', 'audit.view'],
+          ['/admin/settings', 'settings.view'],
+        ];
+
+        const protectedRoute = protectedRoutes.find(([prefix]) => pathname?.startsWith(prefix));
+        if (protectedRoute && !hasPermission(protectedRoute[1])) {
+          router.replace('/admin/no-access');
+          return;
+        }
         
         // 1. Redirect away from root admin or dashboard if no dashboard permission
         if ((pathname === '/admin' || pathname === '/admin/dashboard') && !hasPermission('dashboard.view')) {
@@ -74,33 +98,23 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             router.replace('/admin/repair-jobs');
           } else if (hasPermission('inventory.view')) {
             router.replace('/admin/inventory');
+          } else if (hasPermission('returns.view')) {
+            router.replace('/admin/returns');
+          } else if (hasPermission('customers.view')) {
+            router.replace('/admin/customers');
+          } else if (hasPermission('users.view')) {
+            router.replace('/admin/users');
+          } else if (hasPermission('reports.view')) {
+            router.replace('/admin/reports');
+          } else if (hasPermission('settings.view')) {
+            router.replace('/admin/settings');
           } else {
-            router.replace('/admin/pre-bookings');
+            router.replace('/admin/no-access');
           }
           return;
         }
 
         // 2. Protect unauthorized specific routes
-        if (pathname?.startsWith('/admin/recoveries') && !hasPermission('recoveries.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
-        if (pathname?.startsWith('/admin/reports') && !hasPermission('reports.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
-        if (pathname?.startsWith('/admin/users') && !hasPermission('users.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
-        if (pathname?.startsWith('/admin/leads') && !hasPermission('leads.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
-        if (pathname?.startsWith('/admin/customers') && !hasPermission('customers.view')) {
-          router.replace('/admin/pre-bookings');
-          return;
-        }
       }
     }
   }, [mounted, isLoading, user, pathname, router, hasPermission]);

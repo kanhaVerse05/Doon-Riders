@@ -138,7 +138,7 @@ export default function ScootyRecoveriesListPage() {
   const { user, hasPermission } = useAuth();
 
   const userRoleName = (user?.roleName || user?.roleDisplayName || '').toUpperCase();
-  const isSuperAdmin = userRoleName.includes('SUPER') || userRoleName.includes('ADMIN');
+  const isSuperAdmin = userRoleName === 'SUPER_ADMIN';
   const isRecoveryAgent = (userRoleName.includes('RECOVERY') || userRoleName.includes('AGENT')) && !isSuperAdmin;
   const isHubIncharge = userRoleName.includes('HUB') && !isSuperAdmin;
   const canCreateRecovery = hasPermission('recoveries.create');

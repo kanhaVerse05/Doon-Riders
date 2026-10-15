@@ -661,7 +661,7 @@ export default function ScootyRecoveryDetailPage() {
 
   // Role booleans and permission gates
   const userRoleName = (user?.roleName || user?.roleDisplayName || '').toUpperCase();
-  const isSuperAdmin = userRoleName.includes('SUPER') || userRoleName.includes('ADMIN');
+  const isSuperAdmin = userRoleName === 'SUPER_ADMIN';
   const isRecoveryAgent = (userRoleName.includes('RECOVERY') || userRoleName.includes('AGENT')) && !isSuperAdmin;
   const isHubIncharge = userRoleName.includes('HUB') && !isSuperAdmin;
   const isTechnician = userRoleName.includes('TECH') && !isSuperAdmin;

@@ -89,7 +89,7 @@ export const Sidebar: React.FC = () => {
           name: 'Technician Tasks',
           href: '/admin/technician/jobs',
           icon: CheckCircle2,
-          permission: 'repairs.update',
+          permission: 'repairs.view',
           badge: 'Tasks'
         },
         {
@@ -169,7 +169,7 @@ export const Sidebar: React.FC = () => {
           permission: 'reports.view'
         },
         {
-          name: 'Team Directory',
+          name: 'User Management',
           href: '/admin/users',
           icon: Users,
           permission: 'users.view'
@@ -178,7 +178,7 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN' || user?.roleName?.includes('SUPER');
+  const isSuperAdmin = user?.roleName === 'SUPER_ADMIN';
 
   return (
     <aside className="w-56 lg:w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between hidden md:flex flex-shrink-0 h-screen sticky top-0 select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)] z-30">

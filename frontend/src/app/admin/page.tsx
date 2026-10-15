@@ -16,14 +16,10 @@ export default function AdminIndexPage() {
       return;
     }
 
-    const isSuper = user.roleName === 'SUPER_ADMIN' || user.roleName?.includes('SUPER');
-    const isPreBooking = user.roleName === 'PRE_BOOKING' || 
-                         user.roleName?.includes('PRE_BOOK') || 
-                         user.roleDisplayName?.toLowerCase().includes('pre-booking');
-
+    const isSuper = user.roleName === 'SUPER_ADMIN';
     if (isSuper || hasPermission('dashboard.view')) {
       router.replace('/admin/dashboard');
-    } else if (isPreBooking || hasPermission('pre_bookings.view')) {
+    } else if (hasPermission('pre_bookings.view')) {
       router.replace('/admin/pre-bookings');
     } else if (hasPermission('leads.view')) {
       router.replace('/admin/leads');
@@ -33,8 +29,16 @@ export default function AdminIndexPage() {
       router.replace('/admin/repair-jobs');
     } else if (hasPermission('inventory.view')) {
       router.replace('/admin/inventory');
+    } else if (hasPermission('returns.view')) {
+      router.replace('/admin/returns');
+    } else if (hasPermission('recoveries.view')) {
+      router.replace('/admin/recoveries');
+    } else if (hasPermission('customers.view')) {
+      router.replace('/admin/customers');
+    } else if (hasPermission('users.view')) {
+      router.replace('/admin/users');
     } else {
-      router.replace('/admin/pre-bookings');
+      router.replace('/admin/no-access');
     }
   }, [user, isLoading, router, hasPermission]);
 

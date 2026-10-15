@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import net from 'net';
 import { loadUsersBackup, syncUsersWithDb } from '../helpers/userStorage';
 import { loadPreBookingsBackup, syncPreBookingsWithDb } from '../helpers/preBookingStorage';
+import { PERMISSION_CATALOG } from '../helpers/permissionCatalog';
 
 dotenv.config();
 
@@ -1359,6 +1360,26 @@ export const checkDbConnection = async (): Promise<boolean> => {
         ('RECOVERY_AGENT', 'Recovery Agent', 'Field scooty recovery & pickup execution', FALSE)
       ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
     `).catch(() => {});
+
+    // Keep the UI's canonical granular permission list available from PostgreSQL.
+    // Upsert by code so this is safe on existing installations and new deploys.
+    const permissionValues = PERMISSION_CATALOG.flatMap(permission => [
+      permission.code,
+      permission.module,
+      permission.description
+    ]);
+    const permissionRows = PERMISSION_CATALOG.map((_, index) => {
+      const offset = index * 3;
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+    }).join(', ');
+    await pgPool.query(`
+      INSERT INTO permissions (code, module, description)
+      VALUES ${permissionRows}
+      ON CONFLICT (code) DO UPDATE
+      SET module = EXCLUDED.module, description = EXCLUDED.description;
+    `, permissionValues).catch((error) => {
+      console.warn('Permission catalog synchronization failed:', error.message);
+    });
 
     // Materialize team accounts with the Technician role in the technician
     // directory, which recovery/repair assignment workflows reference by ID.

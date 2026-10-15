@@ -31,7 +31,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    const isSuper = user.roleName === 'SUPER_ADMIN' || user.roleName?.includes('SUPER');
+    const isSuper = user.roleName === 'SUPER_ADMIN';
     if (!isSuper && !hasPermission('dashboard.view')) {
       router.replace('/admin/pre-bookings');
       return;
