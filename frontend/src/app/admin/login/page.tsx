@@ -5,9 +5,10 @@ import Image from 'next/image';
 import { useAuth } from '../../../context/AuthContext';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function AdminLoginPage() {
-  const { login, verifyMfaLogin } = useAuth();
+  const { login, verifyMfaLogin, startInitialMfaSetup, confirmInitialMfaSetup } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -15,6 +16,10 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [mfaStep, setMfaStep] = useState(false);
+  const [mfaSetupStep, setMfaSetupStep] = useState(false);
+  const [setupComplete, setSetupComplete] = useState(false);
+  const [setupInfo, setSetupInfo] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [mfaCode, setMfaCode] = useState('');
   const router = useRouter();
 
@@ -33,14 +38,37 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
+      if (setupComplete) return;
+
       let success = false;
       let loginMessage = '';
-      if (mfaStep) {
+      if (mfaSetupStep) {
+        const result = await confirmInitialMfaSetup(mfaCode);
+        if (result.success) {
+          setBackupCodes(result.backupCodes || []);
+          setMfaSetupStep(false);
+          setSetupComplete(true);
+          setMfaCode('');
+          return;
+        }
+        loginMessage = result.message || 'Authenticator setup failed.';
+      } else if (mfaStep) {
         const result = await verifyMfaLogin(mfaCode);
         success = result.success;
         loginMessage = result.message || '';
       } else {
         const result = await login(email, password);
+        if (result.mfaSetupRequired) {
+          setMfaSetupStep(true);
+          setPassword('');
+          const setup = await startInitialMfaSetup();
+          if (!setup.success || !setup.secret || !setup.otpauthUrl) {
+            setError(setup.message || 'Could not start authenticator setup. Please sign in again.');
+            return;
+          }
+          setSetupInfo({ secret: setup.secret, otpauthUrl: setup.otpauthUrl });
+          return;
+        }
         if (result.mfaRequired) {
           setMfaStep(true);
           setPassword('');
@@ -247,7 +275,30 @@ export default function AdminLoginPage() {
               LOGIN FORM
               ===================================================================== */}
           <form onSubmit={handleSubmit} className="relative z-10 mt-6 sm:mt-7 space-y-4 sm:space-y-4.5">
-            {!mfaStep ? <>
+            {setupComplete ? <div className="space-y-4">
+              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left">
+                <h3 className="text-sm font-extrabold text-amber-900">Save these one-time backup codes</h3>
+                <p className="mt-1 text-xs text-amber-800">Authenticator phone kho jaaye toh har code ek baar login ke liye use ho sakta hai. Is screen ke baad dobara nahi dikhayenge.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {backupCodes.map((code) => <code key={code} className="rounded-lg bg-white px-2 py-1.5 text-center text-xs font-bold">{code}</code>)}
+                </div>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(backupCodes.join('\n'))} className="mt-3 text-xs font-bold text-amber-900 underline">Copy backup codes</button>
+              </div>
+              <button type="button" onClick={() => router.push('/admin/dashboard')} className="w-full rounded-full bg-[#00C968] py-3 text-sm font-extrabold text-white">I saved them — continue</button>
+            </div> : mfaSetupStep && setupInfo ? <div className="space-y-4 text-left">
+              <div className="flex flex-col items-center gap-2 rounded-2xl border bg-white p-4">
+                <QRCodeSVG value={setupInfo.otpauthUrl} size={190} level="M" />
+                <span className="text-xs font-semibold text-slate-500">Google Authenticator se QR scan karo</span>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-600">Scan nahi ho raha? App mein setup key manually enter karo:</p>
+                <code className="block break-all rounded-xl bg-slate-100 p-3 text-center text-sm font-bold tracking-wider">{setupInfo.secret}</code>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-[#64748B]">App ka 6-digit code</label>
+                <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" className="w-full rounded-[20px] border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3.5 text-center text-lg tracking-[0.35em] font-bold focus:border-[#00D96B] focus:outline-none" />
+              </div>
+            </div> : !mfaStep ? <>
             {/* Email Field */}
             <div className="space-y-1.5">
               <label className="block text-[12px] sm:text-[12.5px] font-medium text-[#94A3B8]">
@@ -311,13 +362,13 @@ export default function AdminLoginPage() {
                 placeholder="6-digit code or backup code"
                 className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[20px] px-4 py-3.5 text-[16px] tracking-[0.2em] text-center text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#00D96B] focus:bg-white focus:ring-2 focus:ring-[#00D96B]/20 transition-all font-bold"
               />
-              <button type="button" onClick={() => { setMfaStep(false); setMfaCode(''); setError(null); }} className="text-xs font-semibold text-[#008F46] hover:underline">
+                <button type="button" onClick={() => { setMfaStep(false); setMfaCode(''); setError(null); }} className="text-xs font-semibold text-[#008F46] hover:underline">
                 Back to email and password
               </button>
             </div>}
 
             {/* Login Button with Centered Label and Right Circular Arrow */}
-            <div className="pt-2 sm:pt-3">
+            {!setupComplete && <div className="pt-2 sm:pt-3">
               <button
                 type="submit"
                 disabled={loading}
@@ -330,7 +381,7 @@ export default function AdminLoginPage() {
                   <ArrowRight className="w-[18px] h-[18px] stroke-[2.5]" />
                 </div>
               </button>
-            </div>
+            </div>}
           </form>
         </div>
       </div>

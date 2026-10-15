@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { adminApi } from '../lib/adminApi';
 
 export interface UserPermission {
@@ -26,8 +26,10 @@ interface AuthContextType {
   user: AdminUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; mfaRequired?: boolean; message?: string }>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }>;
   verifyMfaLogin: (code: string) => Promise<{ success: boolean; message?: string }>;
+  startInitialMfaSetup: () => Promise<{ success: boolean; secret?: string; otpauthUrl?: string; message?: string }>;
+  confirmInitialMfaSetup: (code: string) => Promise<{ success: boolean; message?: string; backupCodes?: string[] }>;
   logout: () => void;
   switchRoleDemo: (role: 'SUPER_ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => Promise<void>;
   hasPermission: (permissionCode: string, requiredScope?: string) => boolean;
@@ -89,6 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const mfaChallengeRef = useRef<string | null>(null);
+  const initialSetupChallengeRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -122,18 +126,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { active = false; };
   }, []);
 
-  const login = async (emailInput: string, passwordInput = ''): Promise<{ success: boolean; mfaRequired?: boolean; message?: string }> => {
+  const login = async (emailInput: string, passwordInput = ''): Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }> => {
     const emailClean = (emailInput || '').toLowerCase().trim();
     const passClean = (passwordInput || '').trim();
 
     // Only a server-verified account may create an authenticated session.
     try {
       const res = await adminApi.post('/admin/auth/login', { email: emailClean, password: passClean });
+      if (res?.success && res?.mfaSetupRequired && res?.challengeToken) {
+        initialSetupChallengeRef.current = res.challengeToken;
+        return { success: false, mfaSetupRequired: true, message: res.message };
+      }
       if (res?.success && res?.mfaRequired && res?.challengeToken) {
+        mfaChallengeRef.current = res.challengeToken;
         setMfaChallengeToken(res.challengeToken);
         return { success: false, mfaRequired: true, message: res.message };
       }
       if (res && res.success && res.token && res.user) {
+        mfaChallengeRef.current = null;
+        initialSetupChallengeRef.current = null;
         setMfaChallengeToken(null);
         setToken(res.token);
         setUser(res.user);
@@ -149,12 +160,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const verifyMfaLogin = async (code: string): Promise<{ success: boolean; message?: string }> => {
-    if (!mfaChallengeToken) return { success: false, message: 'Sign in again to restart verification.' };
+    const challengeToken = mfaChallengeRef.current || mfaChallengeToken;
+    if (!challengeToken) return { success: false, message: 'Sign in again to restart verification.' };
     try {
-      const res = await adminApi.post('/admin/auth/login/mfa', { challengeToken: mfaChallengeToken, code });
+      const res = await adminApi.post('/admin/auth/login/mfa', { challengeToken, code });
       if (!res?.success || !res.token || !res.user) {
         return { success: false, message: res?.message || 'Authenticator verification failed.' };
       }
+      mfaChallengeRef.current = null;
       setMfaChallengeToken(null);
       setToken(res.token);
       setUser(res.user);
@@ -166,7 +179,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const startInitialMfaSetup = async (): Promise<{ success: boolean; secret?: string; otpauthUrl?: string; message?: string }> => {
+    const challengeToken = initialSetupChallengeRef.current;
+    if (!challengeToken) return { success: false, message: 'Sign in again to restart authenticator setup.' };
+    const res = await adminApi.post('/admin/auth/mfa/setup/first/start', { challengeToken });
+    if (!res?.success) return { success: false, message: res?.message || 'Could not start authenticator setup.' };
+    return { success: true, secret: res.secret, otpauthUrl: res.otpauthUrl };
+  };
+
+  const confirmInitialMfaSetup = async (code: string): Promise<{ success: boolean; message?: string; backupCodes?: string[] }> => {
+    const challengeToken = initialSetupChallengeRef.current;
+    if (!challengeToken) return { success: false, message: 'Setup session expired. Sign in again to restart.' };
+    const res = await adminApi.post('/admin/auth/mfa/setup/first/confirm', { challengeToken, code });
+    if (!res?.success || !res.token || !res.user) {
+      return { success: false, message: res?.message || 'Authenticator setup could not be verified.' };
+    }
+    initialSetupChallengeRef.current = null;
+    setToken(res.token);
+    setUser(res.user);
+    localStorage.setItem('dr_admin_token', res.token);
+    localStorage.setItem('dr_admin_user', JSON.stringify(res.user));
+    return { success: true, message: res.message, backupCodes: res.backupCodes || [] };
+  };
+
   const logout = (redirectUrl?: string | any) => {
+    mfaChallengeRef.current = null;
+    initialSetupChallengeRef.current = null;
     setMfaChallengeToken(null);
     const isTech = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
     const isTechPath = typeof window !== 'undefined' && (
@@ -275,6 +313,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         verifyMfaLogin,
+        startInitialMfaSetup,
+        confirmInitialMfaSetup,
         logout,
         switchRoleDemo,
         hasPermission,

@@ -91,6 +91,20 @@ export const login = async (req: Request, res: Response) => {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
 
+      if (u.role_name === 'SUPER_ADMIN' && !u.totp_enabled) {
+        const setupToken = jwt.sign(
+          { id: u.id, purpose: 'totp_initial_setup' },
+          getJwtSecret(),
+          { expiresIn: '10m' }
+        );
+        return res.json({
+          success: true,
+          mfaSetupRequired: true,
+          challengeToken: setupToken,
+          message: 'Set up your authenticator to finish signing in.',
+        });
+      }
+
       if (u.totp_enabled) {
         const challengeToken = jwt.sign(
           { id: u.id, purpose: 'totp_login' },
@@ -183,6 +197,129 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const readSetupChallenge = (challengeToken: string) => {
+  const decoded: any = jwt.verify(challengeToken, getJwtSecret());
+  if (decoded?.purpose !== 'totp_initial_setup' || !decoded.id) {
+    throw new Error('Invalid authenticator setup session. Sign in again.');
+  }
+  return decoded;
+};
+
+export const beginInitialMfaSetup = async (req: Request, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator setup requires the database.' });
+    const challenge = readSetupChallenge(String(req.body?.challengeToken || ''));
+    const userRes = await pool.query(`
+      SELECT u.email, u.status, u.totp_enabled, r.name AS role_name
+      FROM users u LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = $1 AND u.deleted_at IS NULL
+    `, [challenge.id]);
+    const user = userRes.rows[0];
+    if (!user || user.status !== 'active' || user.role_name !== 'SUPER_ADMIN' || user.totp_enabled) {
+      return res.status(403).json({ success: false, message: 'Initial setup is only available to an active Super Admin without authenticator enabled.' });
+    }
+
+    const secret = createTotpSecret();
+    await pool.query(
+      'UPDATE users SET totp_pending_secret_encrypted = $1 WHERE id = $2',
+      [encryptTotpSecret(secret), challenge.id]
+    );
+    return res.json({ success: true, secret, otpauthUrl: createTotpUri(user.email, secret) });
+  } catch (err: any) {
+    const expired = err.name === 'TokenExpiredError';
+    return res.status(expired ? 401 : 400).json({
+      success: false,
+      message: expired ? 'Setup session expired. Sign in again to restart.' : err.message,
+    });
+  }
+};
+
+export const confirmInitialMfaSetup = async (req: Request, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator setup requires the database.' });
+    const challenge = readSetupChallenge(String(req.body?.challengeToken || ''));
+    const userRes = await pool.query(`
+      SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.custom_permissions,
+             u.totp_pending_secret_encrypted, u.totp_failed_attempts, u.totp_locked_until,
+             r.id AS role_id, r.name AS role_name, r.display_name AS role_display_name,
+             r.permissions_configured AS role_permissions_configured
+      FROM users u LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = $1 AND u.deleted_at IS NULL
+    `, [challenge.id]);
+    const user = userRes.rows[0];
+    if (!user || user.status !== 'active' || user.role_name !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, message: 'Initial setup is only available to an active Super Admin.' });
+    }
+    if (user.totp_locked_until && new Date(user.totp_locked_until).getTime() > Date.now()) {
+      return res.status(429).json({ success: false, message: 'Too many incorrect codes. Try again in 15 minutes.' });
+    }
+    if (!user.totp_pending_secret_encrypted) {
+      return res.status(400).json({ success: false, message: 'Authenticator setup expired. Sign in again to restart.' });
+    }
+
+    const secret = decryptTotpSecret(user.totp_pending_secret_encrypted);
+    if (!verifyTotp(secret, String(req.body?.code || ''))) {
+      const failedAttempts = Number(user.totp_failed_attempts || 0) + 1;
+      const lockAccount = failedAttempts >= 5;
+      await pool.query(`
+        UPDATE users
+        SET totp_failed_attempts = CASE WHEN $1 THEN 0 ELSE $2 END,
+            totp_locked_until = CASE WHEN $1 THEN NOW() + INTERVAL '15 minutes' ELSE totp_locked_until END
+        WHERE id = $3
+      `, [lockAccount, failedAttempts, user.id]);
+      return res.status(lockAccount ? 429 : 401).json({
+        success: false,
+        message: lockAccount ? 'Too many incorrect codes. Try again in 15 minutes.' : 'Code did not match. Enter the current code shown in Google Authenticator.',
+      });
+    }
+
+    const backupCodes = createBackupCodes();
+    await pool.query(`
+      UPDATE users
+      SET totp_secret_encrypted = totp_pending_secret_encrypted,
+          totp_pending_secret_encrypted = NULL,
+          totp_backup_codes = $1::jsonb,
+          totp_enabled = TRUE,
+          totp_failed_attempts = 0,
+          totp_locked_until = NULL,
+          updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(backupCodes.map(hashBackupCode)), user.id]);
+
+    const permissions = await computeUserPermissions(user);
+    const authUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      roleId: user.role_id,
+      roleName: user.role_name,
+      roleDisplayName: user.role_display_name,
+      avatarUrl: user.avatar_url,
+      customPermissions: user.custom_permissions,
+      permissions,
+    };
+    const token = generateToken(authUser);
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+    await logAuditEvent({
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role_name,
+      action: 'MFA_ENABLED',
+      module: 'AUTH',
+      notes: `Authenticator enabled during first sign-in for ${user.email}`,
+      ipAddress: req.ip,
+    });
+    return res.json({ success: true, token, user: authUser, backupCodes, message: 'Authenticator enabled successfully.' });
+  } catch (err: any) {
+    const expired = err.name === 'TokenExpiredError';
+    return res.status(expired ? 401 : 400).json({
+      success: false,
+      message: expired ? 'Setup session expired. Sign in again to restart.' : err.message,
+    });
   }
 };
 

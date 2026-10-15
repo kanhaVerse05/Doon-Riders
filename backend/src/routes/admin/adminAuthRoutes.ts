@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import {
   beginMfaSetup,
+  beginInitialMfaSetup,
   confirmMfaSetup,
+  confirmInitialMfaSetup,
   disableMfa,
   getMe,
   getMfaStatus,
@@ -16,6 +18,8 @@ const router = Router();
 
 router.post('/login', login);
 router.post('/login/mfa', verifyMfaLogin);
+router.post('/mfa/setup/first/start', beginInitialMfaSetup);
+router.post('/mfa/setup/first/confirm', confirmInitialMfaSetup);
 router.get('/mfa/status', authenticateJwt, requireSuperAdmin, getMfaStatus);
 router.post('/mfa/setup', authenticateJwt, requireSuperAdmin, beginMfaSetup);
 router.post('/mfa/confirm', authenticateJwt, requireSuperAdmin, confirmMfaSetup);
