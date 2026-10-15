@@ -141,14 +141,16 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
           pIndex++;
         }
 
-        // Payment and billing tables are not part of the deployed PostgreSQL schema.
-        // Keep payment filtering safely empty until those values are persisted in SQL.
-        if (payment_status && payment_status !== 'all') whereClauses.push('FALSE');
+        if (payment_status && payment_status !== 'all') {
+          whereClauses.push(`pay.payment_status = $${pIndex}`);
+          params.push(payment_status);
+          pIndex++;
+        }
 
         let orderSql = 'j.id DESC';
         if (sort_by === 'oldest') orderSql = 'j.id ASC';
         if (sort_by === 'priority') orderSql = `CASE j.priority WHEN 'Urgent' THEN 1 ELSE 2 END, j.id DESC`;
-        if (sort_by === 'bill_amount') orderSql = `j.id ${sort_order === 'asc' ? 'ASC' : 'DESC'}`;
+        if (sort_by === 'bill_amount') orderSql = `bill.grand_total ${sort_order === 'asc' ? 'ASC NULLS FIRST' : 'DESC NULLS LAST'}, j.id DESC`;
 
         const sql = `
           SELECT 
@@ -157,17 +159,19 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
             t.repair_completed_at,
             t.total_duration_seconds,
             t.total_duration_formatted,
-            NULL::numeric as bill_amount,
-            NULL::text as bill_number,
-            NULL::text as payment_method,
-            NULL::text as payment_status,
-            NULL::numeric as payment_amount,
-            NULL::timestamptz as payment_paid_at,
+            bill.grand_total as bill_amount,
+            bill.bill_number,
+            pay.payment_method,
+            pay.payment_status,
+            pay.amount as payment_amount,
+            pay.paid_at as payment_paid_at,
             tech.phone as technician_phone,
             tech.technician_code
           FROM repair_jobs j
           LEFT JOIN repair_timing t ON j.id = t.job_id
           LEFT JOIN technicians tech ON j.technician_id = tech.id
+          LEFT JOIN repair_bills bill ON bill.job_id = j.id
+          LEFT JOIN repair_payments pay ON pay.job_id = j.id
           WHERE ${whereClauses.join(' AND ')}
           ORDER BY ${orderSql}
           LIMIT ${Number(limit)} OFFSET ${Number(offset)}
@@ -374,11 +378,13 @@ export const getRepairJobById = async (req: AuthRequest, res: Response) => {
         return res.status(404).json({ success: false, message: 'Repair job not found.' });
       }
       const row = jobResult.rows[0];
-      const [inspectionResult, partsResult, timingResult, auditResult, directories, inventoryResult] = await Promise.all([
+      const [inspectionResult, partsResult, timingResult, auditResult, billResult, paymentResult, directories, inventoryResult] = await Promise.all([
         pool.query('SELECT * FROM repair_inspections WHERE job_id = $1 ORDER BY id DESC LIMIT 1', [jobId]),
         pool.query('SELECT * FROM repair_parts WHERE job_id = $1 ORDER BY id ASC', [jobId]),
         pool.query('SELECT * FROM repair_timing WHERE job_id = $1 ORDER BY id DESC LIMIT 1', [jobId]),
         pool.query('SELECT * FROM repair_audit_logs WHERE job_id = $1 ORDER BY created_at ASC, id ASC', [jobId]),
+        pool.query('SELECT * FROM repair_bills WHERE job_id = $1 LIMIT 1', [jobId]),
+        pool.query('SELECT * FROM repair_payments WHERE job_id = $1 LIMIT 1', [jobId]),
         getDatabaseRepairDirectories(req.user),
         pool.query('SELECT id, part_code, part_name, unit_price, quantity FROM inventory ORDER BY part_name')
       ]);
@@ -431,8 +437,8 @@ export const getRepairJobById = async (req: AuthRequest, res: Response) => {
             live_elapsed_seconds: liveElapsedSeconds,
             live_duration_formatted: liveElapsedSeconds > 0 ? formatDuration(liveElapsedSeconds) : timing?.total_duration_formatted
           },
-          bill: null,
-          payment: null,
+          bill: billResult.rows[0] || null,
+          payment: paymentResult.rows[0] || null,
           timeline: auditResult.rows.map((entry: any) => ({
             ...entry,
             event_type: entry.action,
@@ -2025,6 +2031,89 @@ export const generateFinalBill = async (req: AuthRequest, res: Response) => {
       notes = ''
     } = req.body;
 
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid repair job ID.' });
+    }
+
+    if (getDbStatus()) {
+      const labour = Number(labour_charge) || 0;
+      const other = Number(other_charge) || 0;
+      const disc = Number(discount) || 0;
+      if (![labour, other, disc].every(Number.isFinite) || labour < 0 || other < 0 || disc < 0) {
+        return res.status(400).json({ success: false, message: 'Charges and discount must be valid non-negative amounts.' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query('SELECT * FROM repair_jobs WHERE id = $1 FOR UPDATE', [jobId]);
+        if (!jobResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        const job = jobResult.rows[0];
+        const partsResult = await client.query(`
+          SELECT COALESCE(SUM(replaced_quantity * unit_price), 0)::numeric AS parts_total
+          FROM repair_parts
+          WHERE job_id = $1 AND replaced_quantity > 0
+        `, [jobId]);
+        const partsTotal = Number(partsResult.rows[0]?.parts_total || 0);
+        const grandTotal = Math.max(0, partsTotal + labour + other - disc);
+        const billNumber = `INV-${job.job_number}`;
+        const billResult = await client.query(`
+          INSERT INTO repair_bills
+            (job_id, bill_number, parts_total, labour_charge, other_charge, discount,
+             tax_amount, grand_total, notes, created_by_id, created_by_name)
+          VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10)
+          ON CONFLICT (job_id) DO UPDATE SET
+            parts_total = EXCLUDED.parts_total,
+            labour_charge = EXCLUDED.labour_charge,
+            other_charge = EXCLUDED.other_charge,
+            discount = EXCLUDED.discount,
+            grand_total = EXCLUDED.grand_total,
+            notes = EXCLUDED.notes,
+            created_by_id = EXCLUDED.created_by_id,
+            created_by_name = EXCLUDED.created_by_name,
+            updated_at = NOW()
+          RETURNING *
+        `, [jobId, billNumber, partsTotal, labour, other, disc, grandTotal, notes,
+          req.user?.id || null, req.user?.name || 'Hub Incharge']);
+        const updatedJob = await client.query(
+          "UPDATE repair_jobs SET status = 'Payment Pending', updated_at = NOW() WHERE id = $1 RETURNING *",
+          [jobId]
+        );
+        await client.query(`
+          INSERT INTO repair_audit_logs
+            (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'BILL_GENERATED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || null, req.user?.name || 'Hub Incharge',
+          req.user?.roleDisplayName || req.user?.roleName || 'Hub Incharge',
+          JSON.stringify({ bill_number: billNumber, parts_total: partsTotal, labour_charge: labour,
+            other_charge: other, discount: disc, grand_total: grandTotal, notes })]);
+        await client.query('COMMIT');
+
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'CREATE',
+          module: 'REPAIR_BILLS',
+          recordId: billResult.rows[0].id,
+          notes: `Generated invoice ${billNumber} for ${job.job_number}: ₹${grandTotal}`
+        });
+        return res.json({
+          success: true,
+          data: { job: updatedJob.rows[0], bill: billResult.rows[0] },
+          message: `Final bill of ₹${grandTotal} generated successfully.`
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {
       return res.status(404).json({ success: false, message: 'Repair job not found.' });
@@ -2124,6 +2213,93 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       notes = ''
     } = req.body;
 
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid repair job ID.' });
+    }
+
+    if (getDbStatus()) {
+      if (!['Cash', 'UPI'].includes(payment_method)) {
+        return res.status(400).json({ success: false, message: 'Payment method must be Cash or UPI.' });
+      }
+      if (!['Paid', 'Pending'].includes(payment_status)) {
+        return res.status(400).json({ success: false, message: 'Payment status must be Paid or Pending.' });
+      }
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query('SELECT * FROM repair_jobs WHERE id = $1 FOR UPDATE', [jobId]);
+        if (!jobResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        const job = jobResult.rows[0];
+        const billResult = await client.query('SELECT * FROM repair_bills WHERE job_id = $1 LIMIT 1', [jobId]);
+        if (!billResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Generate the repair bill before recording payment.' });
+        }
+        const finalAmount = amount !== undefined ? Number(amount) : Number(billResult.rows[0].grand_total || 0);
+        if (!Number.isFinite(finalAmount) || finalAmount < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Payment amount must be a valid non-negative number.' });
+        }
+        const paidAt = payment_status === 'Paid' ? new Date().toISOString() : null;
+        const resolvedTransactionId = transaction_id || (payment_method === 'UPI'
+          ? `UPI/${new Date().toISOString().slice(0, 10).replace(/-/g, '')}/${Math.floor(100000 + Math.random() * 900000)}`
+          : null);
+        const paymentResult = await client.query(`
+          INSERT INTO repair_payments
+            (job_id, payment_method, payment_status, transaction_id, cash_received_by, amount, paid_at, notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (job_id) DO UPDATE SET
+            payment_method = EXCLUDED.payment_method,
+            payment_status = EXCLUDED.payment_status,
+            transaction_id = COALESCE(EXCLUDED.transaction_id, repair_payments.transaction_id),
+            cash_received_by = COALESCE(EXCLUDED.cash_received_by, repair_payments.cash_received_by),
+            amount = EXCLUDED.amount,
+            paid_at = EXCLUDED.paid_at,
+            notes = EXCLUDED.notes,
+            updated_at = NOW()
+          RETURNING *
+        `, [jobId, payment_method, payment_status, resolvedTransactionId,
+          payment_method === 'Cash' ? (cash_received_by || req.user?.name || 'Cashier') : null,
+          finalAmount, paidAt, notes]);
+        const nextStatus = payment_status === 'Paid' ? 'Payment Received' : 'Payment Pending';
+        const updatedJob = await client.query(
+          'UPDATE repair_jobs SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *',
+          [jobId, nextStatus]
+        );
+        await client.query(`
+          INSERT INTO repair_audit_logs
+            (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'PAYMENT_RECORDED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || null, req.user?.name || 'Hub Incharge',
+          req.user?.roleDisplayName || req.user?.roleName || 'Hub Incharge',
+          JSON.stringify({ payment_method, payment_status, amount: finalAmount, transaction_id: resolvedTransactionId, notes })]);
+        await client.query('COMMIT');
+
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'UPDATE',
+          module: 'REPAIR_PAYMENTS',
+          recordId: paymentResult.rows[0].id,
+          notes: `Recorded ${payment_status} payment of ₹${finalAmount} for ${job.job_number}`
+        });
+        return res.json({
+          success: true,
+          data: { job: updatedJob.rows[0], payment: paymentResult.rows[0] },
+          message: `Payment of ₹${finalAmount} recorded successfully.`
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {
       return res.status(404).json({ success: false, message: 'Repair job not found.' });
@@ -2215,6 +2391,73 @@ export const closeRepairJob = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const jobId = Number(id);
     const { override_payment = false, remarks = '' } = req.body;
+
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid repair job ID.' });
+    }
+
+    if (getDbStatus()) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query('SELECT * FROM repair_jobs WHERE id = $1 FOR UPDATE', [jobId]);
+        if (!jobResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        const job = jobResult.rows[0];
+        const paymentResult = await client.query('SELECT * FROM repair_payments WHERE job_id = $1 LIMIT 1', [jobId]);
+        if (!override_payment && paymentResult.rows[0]?.payment_status !== 'Paid') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, message: 'Payment must be marked as Paid before closing the repair job.' });
+        }
+
+        const closedAt = new Date().toISOString();
+        const updatedJob = await client.query(`
+          UPDATE repair_jobs SET status = 'Closed', closed_at = $2, updated_at = $2
+          WHERE id = $1 RETURNING *
+        `, [jobId, closedAt]);
+        if (job.technician_id) {
+          await client.query(`
+            UPDATE technicians
+            SET active_jobs_count = workload.active_count,
+                status = CASE WHEN workload.active_count < 3 THEN 'Available' ELSE technicians.status END
+            FROM (
+              SELECT COUNT(*)::int AS active_count FROM repair_jobs
+              WHERE technician_id = $1 AND status NOT IN ('Closed', 'Cancelled')
+            ) workload
+            WHERE technicians.id = $1
+          `, [job.technician_id]);
+        }
+        await client.query(`
+          INSERT INTO repair_audit_logs
+            (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'JOB_CLOSED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || null, req.user?.name || 'Hub Incharge',
+          req.user?.roleDisplayName || req.user?.roleName || 'Hub Incharge', JSON.stringify({ remarks, override_payment })]);
+        await client.query('COMMIT');
+
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'CLOSE',
+          module: 'REPAIR_JOBS',
+          recordId: jobId,
+          notes: `Closed Repair Job ${job.job_number}. ${remarks || ''}`
+        });
+        return res.json({
+          success: true,
+          data: updatedJob.rows[0],
+          message: `Job ${job.job_number} closed successfully. Scooter is ready for handover.`
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
 
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {

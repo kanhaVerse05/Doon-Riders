@@ -1076,6 +1076,38 @@ export const checkDbConnection = async (): Promise<boolean> => {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS repair_bills (
+        id SERIAL PRIMARY KEY,
+        job_id INT NOT NULL UNIQUE REFERENCES repair_jobs(id) ON DELETE CASCADE,
+        bill_number VARCHAR(80) NOT NULL UNIQUE,
+        parts_total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        labour_charge NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        other_charge NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        discount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        grand_total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_by_id INT,
+        created_by_name VARCHAR(150),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS repair_payments (
+        id SERIAL PRIMARY KEY,
+        job_id INT NOT NULL UNIQUE REFERENCES repair_jobs(id) ON DELETE CASCADE,
+        payment_method VARCHAR(50) NOT NULL DEFAULT 'UPI',
+        payment_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+        transaction_id VARCHAR(150),
+        cash_received_by VARCHAR(150),
+        amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        paid_at TIMESTAMPTZ,
+        receipt_url TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS repair_audit_logs (
         id SERIAL PRIMARY KEY,
         job_id INT REFERENCES repair_jobs(id) ON DELETE CASCADE,
@@ -1328,6 +1360,8 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ALTER TABLE IF EXISTS repair_inspections ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS repair_parts ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS repair_timing ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_bills ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE IF EXISTS repair_payments ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS repair_audit_logs ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS complaints ENABLE ROW LEVEL SECURITY;
       ALTER TABLE IF EXISTS complaint_events ENABLE ROW LEVEL SECURITY;
@@ -1353,6 +1387,12 @@ export const checkDbConnection = async (): Promise<boolean> => {
 
       DROP POLICY IF EXISTS "scooty_recovery_events_auth_manage" ON scooty_recovery_events;
       CREATE POLICY "scooty_recovery_events_auth_manage" ON scooty_recovery_events FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
+
+      DROP POLICY IF EXISTS "repair_bills_service_role_all" ON repair_bills;
+      CREATE POLICY "repair_bills_service_role_all" ON repair_bills FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
+
+      DROP POLICY IF EXISTS "repair_payments_service_role_all" ON repair_payments;
+      CREATE POLICY "repair_payments_service_role_all" ON repair_payments FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
     `).catch(() => {});
 
     // 1. Seed Roles idempotently
