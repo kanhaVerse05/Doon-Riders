@@ -4,7 +4,7 @@ import { pool, getDbStatus, memoryStore } from '../config/db';
 import { AuthRequest, AuthenticatedUser } from '../types/auth';
 import { resolveRolePermissions } from '../helpers/rbacHelper';
 
-const getJwtSecret = () => {
+export const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error('JWT_SECRET must be configured with at least 32 characters.');
@@ -25,6 +25,9 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
 
     if (!decoded || !decoded.id) {
       return res.status(401).json({ success: false, message: 'Invalid or expired session token.' });
+    }
+    if (decoded.purpose) {
+      return res.status(401).json({ success: false, message: 'A verification challenge is not a session token.' });
     }
 
     // Fetch live user with role and permissions from DB

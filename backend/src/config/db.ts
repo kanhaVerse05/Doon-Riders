@@ -833,6 +833,14 @@ export const checkDbConnection = async (): Promise<boolean> => {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_encrypted TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret_encrypted TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_backup_codes JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_failed_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_permissions JSONB NOT NULL DEFAULT '{}'::jsonb;
+
       CREATE TABLE IF NOT EXISTS permissions (
         id SERIAL PRIMARY KEY,
         code VARCHAR(100) NOT NULL UNIQUE,

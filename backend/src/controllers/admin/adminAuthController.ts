@@ -1,10 +1,20 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { pool, getDbStatus, memoryStore } from '../../config/db';
-import { generateToken } from '../../middleware/authMiddleware';
+import { generateToken, getJwtSecret } from '../../middleware/authMiddleware';
 import { logAuditEvent } from '../../helpers/auditLogger';
 import { AuthRequest } from '../../types/auth';
 import { loadUsersBackup } from '../../helpers/userStorage';
+import {
+  createBackupCodes,
+  createTotpSecret,
+  createTotpUri,
+  decryptTotpSecret,
+  encryptTotpSecret,
+  hashBackupCode,
+  verifyTotp,
+} from '../../helpers/totp';
 
 import { getPermissionsForRole, resolveRolePermissions } from '../../helpers/rbacHelper';
 export { getPermissionsForRole };
@@ -58,6 +68,7 @@ export const login = async (req: Request, res: Response) => {
     if (getDbStatus()) {
       const userRes = await pool.query(`
         SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url, u.custom_permissions,
+               u.totp_enabled,
                r.id as role_id, r.name as role_name, r.display_name as role_display_name,
                r.permissions_configured as role_permissions_configured
         FROM users u
@@ -78,6 +89,20 @@ export const login = async (req: Request, res: Response) => {
       const isMatch = await bcrypt.compare(cleanPassword, u.password_hash);
       if (!isMatch) {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      }
+
+      if (u.totp_enabled) {
+        const challengeToken = jwt.sign(
+          { id: u.id, purpose: 'totp_login' },
+          getJwtSecret(),
+          { expiresIn: '5m' }
+        );
+        return res.json({
+          success: true,
+          mfaRequired: true,
+          challengeToken,
+          message: 'Enter the 6-digit code from your authenticator app.',
+        });
       }
 
       const permissions = await computeUserPermissions(u);
@@ -156,6 +181,220 @@ export const login = async (req: Request, res: Response) => {
       token,
       user: authUser
     });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const verifyMfaLogin = async (req: Request, res: Response) => {
+  let client: Awaited<ReturnType<typeof pool.connect>> | null = null;
+  try {
+    if (!getDbStatus()) {
+      return res.status(503).json({ success: false, message: 'Authenticator verification requires the database.' });
+    }
+    const { challengeToken, code } = req.body || {};
+    if (!challengeToken || !code) {
+      return res.status(400).json({ success: false, message: 'Verification token and authenticator code are required.' });
+    }
+
+    let challenge: any;
+    try {
+      challenge = jwt.verify(challengeToken, getJwtSecret());
+    } catch (_) {
+      return res.status(401).json({ success: false, message: 'Verification session expired. Please sign in again.' });
+    }
+    if (challenge?.purpose !== 'totp_login' || !challenge.id) {
+      return res.status(401).json({ success: false, message: 'Invalid verification session.' });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const userRes = await client.query(`
+      SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url, u.custom_permissions,
+             u.totp_enabled, u.totp_secret_encrypted, u.totp_backup_codes,
+             u.totp_failed_attempts, u.totp_locked_until,
+             r.id AS role_id, r.name AS role_name, r.display_name AS role_display_name,
+             r.permissions_configured AS role_permissions_configured
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = $1 AND u.deleted_at IS NULL
+      FOR UPDATE OF u
+    `, [challenge.id]);
+
+    if (userRes.rows.length === 0 || userRes.rows[0].status !== 'active' || !userRes.rows[0].totp_enabled) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ success: false, message: 'Account or authenticator setup is no longer active.' });
+    }
+
+    const u = userRes.rows[0];
+    if (u.totp_locked_until && new Date(u.totp_locked_until).getTime() > Date.now()) {
+      await client.query('ROLLBACK');
+      return res.status(429).json({ success: false, message: 'Too many incorrect codes. Try again in 15 minutes.' });
+    }
+    let verified = false;
+    try {
+      verified = Boolean(u.totp_secret_encrypted)
+        && verifyTotp(decryptTotpSecret(u.totp_secret_encrypted), String(code));
+    } catch (_) {
+      verified = false;
+    }
+
+    let remainingBackupCodes: string[] | null = null;
+    if (!verified) {
+      const suppliedHash = hashBackupCode(String(code));
+      const savedCodes: string[] = Array.isArray(u.totp_backup_codes) ? u.totp_backup_codes : [];
+      const matchedIndex = savedCodes.indexOf(suppliedHash);
+      if (matchedIndex >= 0) {
+        remainingBackupCodes = savedCodes.filter((_: string, index: number) => index !== matchedIndex);
+        verified = true;
+      }
+    }
+
+    if (!verified) {
+      const failedAttempts = Number(u.totp_failed_attempts || 0) + 1;
+      const lockAccount = failedAttempts >= 5;
+      await client.query(`
+        UPDATE users
+        SET totp_failed_attempts = CASE WHEN $1 THEN 0 ELSE $2 END,
+            totp_locked_until = CASE WHEN $1 THEN NOW() + INTERVAL '15 minutes' ELSE totp_locked_until END
+        WHERE id = $3
+      `, [lockAccount, failedAttempts, u.id]);
+      await client.query('COMMIT');
+      return res.status(lockAccount ? 429 : 401).json({
+        success: false,
+        message: lockAccount ? 'Too many incorrect codes. Try again in 15 minutes.' : 'Authenticator code is incorrect.',
+      });
+    }
+
+    if (remainingBackupCodes) {
+      await client.query('UPDATE users SET totp_backup_codes = $1::jsonb WHERE id = $2', [JSON.stringify(remainingBackupCodes), u.id]);
+    }
+    await client.query('UPDATE users SET totp_failed_attempts = 0, totp_locked_until = NULL WHERE id = $1', [u.id]);
+
+    const permissions = await computeUserPermissions(u);
+    const authUser = {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      roleId: u.role_id,
+      roleName: u.role_name || 'SALES_EXECUTIVE',
+      roleDisplayName: u.role_display_name || 'Team Member',
+      avatarUrl: u.avatar_url,
+      customPermissions: u.custom_permissions,
+      permissions,
+    };
+    await client.query('UPDATE users SET last_login = NOW() WHERE id = $1', [u.id]);
+    await client.query('COMMIT');
+
+    const token = generateToken(authUser);
+    await logAuditEvent({
+      userId: u.id,
+      userName: u.name,
+      userRole: u.role_name,
+      action: 'LOGIN_MFA',
+      module: 'AUTH',
+      notes: `User ${u.name} completed authenticator verification`,
+      ipAddress: req.ip,
+    });
+    return res.json({ success: true, message: 'Login successful', token, user: authUser });
+  } catch (err: any) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    client?.release();
+  }
+};
+
+export const getMfaStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator setup requires the database.' });
+    const result = await pool.query('SELECT totp_enabled FROM users WHERE id = $1 AND deleted_at IS NULL', [req.user?.id]);
+    if (!result.rows.length) return res.status(404).json({ success: false, message: 'User not found.' });
+    return res.json({ success: true, enabled: Boolean(result.rows[0].totp_enabled) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const beginMfaSetup = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator setup requires the database.' });
+    const secret = createTotpSecret();
+    await pool.query(
+      'UPDATE users SET totp_pending_secret_encrypted = $1 WHERE id = $2 AND deleted_at IS NULL',
+      [encryptTotpSecret(secret), req.user?.id]
+    );
+    return res.json({ success: true, secret, otpauthUrl: createTotpUri(req.user?.email || '', secret) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const confirmMfaSetup = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator setup requires the database.' });
+    const { code } = req.body || {};
+    const result = await pool.query(
+      'SELECT totp_pending_secret_encrypted FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [req.user?.id]
+    );
+    const encryptedPendingSecret = result.rows[0]?.totp_pending_secret_encrypted;
+    if (!encryptedPendingSecret) {
+      return res.status(400).json({ success: false, message: 'Start authenticator setup before confirming it.' });
+    }
+
+    const secret = decryptTotpSecret(encryptedPendingSecret);
+    if (!verifyTotp(secret, String(code || ''))) {
+      return res.status(400).json({ success: false, message: 'Code did not match. Check your phone time and try the current code again.' });
+    }
+
+    const backupCodes = createBackupCodes();
+    await pool.query(`
+      UPDATE users
+      SET totp_secret_encrypted = totp_pending_secret_encrypted,
+          totp_pending_secret_encrypted = NULL,
+          totp_backup_codes = $1::jsonb,
+          totp_enabled = TRUE,
+          totp_failed_attempts = 0,
+          totp_locked_until = NULL,
+          updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(backupCodes.map(hashBackupCode)), req.user?.id]);
+    return res.json({ success: true, backupCodes, message: 'Authenticator enabled. Save these one-time backup codes now.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const disableMfa = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!getDbStatus()) return res.status(503).json({ success: false, message: 'Authenticator management requires the database.' });
+    const { password, code } = req.body || {};
+    if (!password || !code) return res.status(400).json({ success: false, message: 'Password and current authenticator code are required.' });
+    const result = await pool.query(
+      'SELECT password_hash, totp_secret_encrypted FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [req.user?.id]
+    );
+    const user = result.rows[0];
+    if (!user || !(await bcrypt.compare(String(password).trim(), user.password_hash))) {
+      return res.status(401).json({ success: false, message: 'Password is incorrect.' });
+    }
+    if (!user.totp_secret_encrypted || !verifyTotp(decryptTotpSecret(user.totp_secret_encrypted), String(code))) {
+      return res.status(401).json({ success: false, message: 'Authenticator code is incorrect.' });
+    }
+    await pool.query(`
+      UPDATE users
+      SET totp_enabled = FALSE,
+          totp_secret_encrypted = NULL,
+          totp_pending_secret_encrypted = NULL,
+          totp_backup_codes = '[]'::jsonb,
+          totp_failed_attempts = 0,
+          totp_locked_until = NULL,
+          updated_at = NOW()
+      WHERE id = $1
+    `, [req.user?.id]);
+    return res.json({ success: true, message: 'Authenticator disabled.' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }

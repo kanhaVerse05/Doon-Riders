@@ -7,13 +7,15 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLoginPage() {
-  const { login } = useAuth();
+  const { login, verifyMfaLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [mfaStep, setMfaStep] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
   const router = useRouter();
 
   React.useEffect(() => {
@@ -31,7 +33,23 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
-      const success = await login(email, password);
+      let success = false;
+      let loginMessage = '';
+      if (mfaStep) {
+        const result = await verifyMfaLogin(mfaCode);
+        success = result.success;
+        loginMessage = result.message || '';
+      } else {
+        const result = await login(email, password);
+        if (result.mfaRequired) {
+          setMfaStep(true);
+          setPassword('');
+          return;
+        }
+        success = result.success;
+        loginMessage = result.message || '';
+      }
+
       if (success) {
         const saved = localStorage.getItem('dr_admin_user');
         const parsed = saved ? JSON.parse(saved) : null;
@@ -85,7 +103,7 @@ export default function AdminLoginPage() {
           router.push('/admin/no-access');
         }
       } else {
-        setError('Invalid credentials. Please check your email and password.');
+        setError(loginMessage || (mfaStep ? 'Authenticator code verification failed.' : 'Invalid credentials. Please check your email and password.'));
       }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');
@@ -229,6 +247,7 @@ export default function AdminLoginPage() {
               LOGIN FORM
               ===================================================================== */}
           <form onSubmit={handleSubmit} className="relative z-10 mt-6 sm:mt-7 space-y-4 sm:space-y-4.5">
+            {!mfaStep ? <>
             {/* Email Field */}
             <div className="space-y-1.5">
               <label className="block text-[12px] sm:text-[12.5px] font-medium text-[#94A3B8]">
@@ -276,6 +295,26 @@ export default function AdminLoginPage() {
                 </button>
               </div>
             </div>
+            </> : <div className="space-y-2">
+              <label className="block text-[12px] sm:text-[12.5px] font-medium text-[#94A3B8]">
+                Authenticator code or one-time backup code
+              </label>
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="one-time-code"
+                maxLength={20}
+                required
+                autoFocus
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value.replace(/[^a-fA-F0-9]/g, '').slice(0, 20).toUpperCase())}
+                placeholder="6-digit code or backup code"
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[20px] px-4 py-3.5 text-[16px] tracking-[0.2em] text-center text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#00D96B] focus:bg-white focus:ring-2 focus:ring-[#00D96B]/20 transition-all font-bold"
+              />
+              <button type="button" onClick={() => { setMfaStep(false); setMfaCode(''); setError(null); }} className="text-xs font-semibold text-[#008F46] hover:underline">
+                Back to email and password
+              </button>
+            </div>}
 
             {/* Login Button with Centered Label and Right Circular Arrow */}
             <div className="pt-2 sm:pt-3">
@@ -285,7 +324,7 @@ export default function AdminLoginPage() {
                 className="w-full h-[52px] sm:h-[54px] rounded-full bg-gradient-to-r from-[#00D96B] via-[#00CC64] to-[#00B859] hover:brightness-105 active:scale-[0.99] text-white font-extrabold text-[15px] sm:text-[16px] shadow-[0_12px_28px_rgba(0,217,107,0.42)] transition-all relative flex items-center justify-center cursor-pointer disabled:opacity-70 group"
               >
                 <span className="font-bold tracking-wide">
-                  {loading ? 'Logging in...' : 'Login'}
+                  {loading ? 'Please wait...' : mfaStep ? 'Verify code' : 'Login'}
                 </span>
                 <div className="absolute right-2 w-[38px] h-[38px] rounded-full bg-[#008F46] flex items-center justify-center text-white shadow-inner transition-transform group-hover:translate-x-0.5">
                   <ArrowRight className="w-[18px] h-[18px] stroke-[2.5]" />

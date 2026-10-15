@@ -26,7 +26,8 @@ interface AuthContextType {
   user: AdminUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<boolean>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; mfaRequired?: boolean; message?: string }>;
+  verifyMfaLogin: (code: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   switchRoleDemo: (role: 'SUPER_ADMIN' | 'MANAGER' | 'SALES_EXECUTIVE' | 'HUB_INCHARGE' | 'TECHNICIAN') => Promise<void>;
   hasPermission: (permissionCode: string, requiredScope?: string) => boolean;
@@ -87,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AdminUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -120,27 +122,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { active = false; };
   }, []);
 
-  const login = async (emailInput: string, passwordInput = ''): Promise<boolean> => {
+  const login = async (emailInput: string, passwordInput = ''): Promise<{ success: boolean; mfaRequired?: boolean; message?: string }> => {
     const emailClean = (emailInput || '').toLowerCase().trim();
     const passClean = (passwordInput || '').trim();
 
     // Only a server-verified account may create an authenticated session.
     try {
       const res = await adminApi.post('/admin/auth/login', { email: emailClean, password: passClean });
+      if (res?.success && res?.mfaRequired && res?.challengeToken) {
+        setMfaChallengeToken(res.challengeToken);
+        return { success: false, mfaRequired: true, message: res.message };
+      }
       if (res && res.success && res.token && res.user) {
+        setMfaChallengeToken(null);
         setToken(res.token);
         setUser(res.user);
         localStorage.setItem('dr_admin_token', res.token);
         localStorage.setItem('dr_admin_user', JSON.stringify(res.user));
-        return true;
+        return { success: true };
       }
+      return { success: false, message: res?.message || 'Invalid email or password.' };
     } catch (apiErr) {
       console.warn('Login request failed:', apiErr);
+      return { success: false, message: 'Login request failed. Please try again.' };
     }
-    return false;
+  };
+
+  const verifyMfaLogin = async (code: string): Promise<{ success: boolean; message?: string }> => {
+    if (!mfaChallengeToken) return { success: false, message: 'Sign in again to restart verification.' };
+    try {
+      const res = await adminApi.post('/admin/auth/login/mfa', { challengeToken: mfaChallengeToken, code });
+      if (!res?.success || !res.token || !res.user) {
+        return { success: false, message: res?.message || 'Authenticator verification failed.' };
+      }
+      setMfaChallengeToken(null);
+      setToken(res.token);
+      setUser(res.user);
+      localStorage.setItem('dr_admin_token', res.token);
+      localStorage.setItem('dr_admin_user', JSON.stringify(res.user));
+      return { success: true };
+    } catch (_) {
+      return { success: false, message: 'Authenticator verification request failed.' };
+    }
   };
 
   const logout = (redirectUrl?: string | any) => {
+    setMfaChallengeToken(null);
     const isTech = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
     const isTechPath = typeof window !== 'undefined' && (
       window.location.pathname.startsWith('/technician') ||
@@ -247,6 +274,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         login,
+        verifyMfaLogin,
         logout,
         switchRoleDemo,
         hasPermission,
