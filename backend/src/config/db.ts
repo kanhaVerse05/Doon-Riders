@@ -632,6 +632,12 @@ function normalizePostgresSql(sql: string): string {
 
 // Wrapper around PostgreSQL pool
 export const pool = {
+  async connect(): Promise<any> {
+    if (!pgPool || !isPostgresConnected) {
+      throw new Error('PostgreSQL Database is not connected');
+    }
+    return pgPool.connect();
+  },
   async query(text: string, params: any[] = []): Promise<QueryResult> {
     if (!pgPool || !isPostgresConnected) {
       throw new Error('PostgreSQL Database is not connected');
@@ -641,9 +647,10 @@ export const pool = {
 
     // Junction tables such as role_permissions have composite keys and no `id` column.
     // Only append RETURNING id to tables that use the conventional serial id.
-    const insertTable = queryText.match(/^\s*INSERT\s+INTO\s+([\w.]+)/i)?.[1]?.split('.').pop()?.replace(/"/g, '').toLowerCase();
+    const insertTable = queryText.match(/^\s*INSERT\s+INTO\s+([\w."]+)/i)?.[1]?.split('.').pop()?.replace(/"/g, '').toLowerCase();
+    const tablesWithoutId = ['role_permissions'];
     if (
-      insertTable !== 'role_permissions' &&
+      !tablesWithoutId.includes(insertTable || '') &&
       /^\s*INSERT\s+INTO/i.test(queryText) &&
       !/RETURNING/i.test(queryText)
     ) {
@@ -839,6 +846,8 @@ export const checkDbConnection = async (): Promise<boolean> => {
         scope VARCHAR(50) DEFAULT 'ALL',
         PRIMARY KEY (role_id, permission_id)
       );
+
+      ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS id BIGSERIAL;
 
       CREATE TABLE IF NOT EXISTS audit_logs (
         id SERIAL PRIMARY KEY,

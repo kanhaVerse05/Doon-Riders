@@ -347,12 +347,12 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
           });
         }
       }
-      if (role) role.permissions_configured = true;
+      if (role) (role as any).permissions_configured = true;
       const targetUserId = userId ? Number(userId) : null;
       const user = targetUserId && memoryStore.users.find(u => u.id === targetUserId);
       if (user) {
         if (targetRoleId) user.role_id = targetRoleId;
-        user.custom_permissions = permissions;
+        (user as any).custom_permissions = permissions;
       }
     }
     return res.json({ success: true, message: 'Permission updated successfully (Memory Store).' });

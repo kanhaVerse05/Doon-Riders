@@ -396,7 +396,7 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
       }
       if (status) user.status = status;
       if (targetRoleId) user.role_id = Number(targetRoleId);
-      if (customPermsPayload) user.custom_permissions = JSON.parse(customPermsPayload);
+      if (customPermsPayload) (user as any).custom_permissions = JSON.parse(customPermsPayload);
       appendOrUpdateUserBackup({ id: Number(id), status: user.status, role_id: user.role_id });
       return res.json({ success: true, message: 'User updated successfully.' });
     }

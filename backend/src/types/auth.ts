@@ -16,6 +16,7 @@ export interface AuthenticatedUser {
   roleName: string;
   roleDisplayName: string;
   permissions: UserPermission[];
+  customPermissions?: any;
   avatarUrl?: string;
   hub_id?: number;
   hubId?: number;
