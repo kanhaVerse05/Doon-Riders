@@ -279,6 +279,7 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
             await client.query(`
               INSERT INTO role_permissions (role_id, permission_id, scope)
               VALUES ($1, $2, $3)
+              RETURNING role_id, permission_id
             `, [role.id, permission.id, normalizeScope(value.scope)]);
           }
           await client.query('UPDATE roles SET permissions_configured = TRUE, updated_at = NOW() WHERE id = $1', [role.id]);
@@ -301,6 +302,7 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
               INSERT INTO role_permissions (role_id, permission_id, scope)
               VALUES ($1, $2, $3)
               ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+              RETURNING role_id, permission_id
             `, [role.id, permissionId, normalizeScope(scope)]);
           } else {
             await client.query('DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2', [role.id, permissionId]);
