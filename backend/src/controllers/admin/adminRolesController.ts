@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { logAuditEvent } from '../../helpers/auditLogger';
+import { normalizeScope } from '../../helpers/rbacHelper';
 
 export const getRolesAndPermissions = async (req: AuthRequest, res: Response) => {
   try {
@@ -197,120 +198,123 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
     const { roleId, roleName, userId, permissionId, enabled, scope, permissions } = req.body;
 
     if (getDbStatus()) {
-      // 1. Batch permissions update mode
-      if (permissions && typeof permissions === 'object') {
-        let targetRoleId = roleId ? Number(roleId) : null;
-        let targetRoleName = roleName || '';
+      const client = await pool.connect();
+      let auditNote = '';
+      try {
+        await client.query('BEGIN');
 
-        if (!targetRoleId && targetRoleName) {
-          const rRes = await pool.query('SELECT id, name FROM roles WHERE name = $1 OR LOWER(display_name) = LOWER($1)', [targetRoleName]);
-          if (rRes.rows.length > 0) {
-            targetRoleId = rRes.rows[0].id;
-            targetRoleName = rRes.rows[0].name;
+        if (permissions !== undefined) {
+          if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: 'Permissions must be a permission-code map.' });
           }
-        }
 
-        if (!targetRoleId && userId) {
-          const uRes = await pool.query('SELECT role_id FROM users WHERE id = $1', [userId]);
-          if (uRes.rows.length > 0 && uRes.rows[0].role_id) {
-            targetRoleId = uRes.rows[0].role_id;
-            const rRes = await pool.query('SELECT name FROM roles WHERE id = $1', [targetRoleId]);
-            if (rRes.rows.length > 0) targetRoleName = rRes.rows[0].name;
+          const targetUserId = userId ? Number(userId) : null;
+          let targetRoleId = roleId ? Number(roleId) : null;
+          if (targetUserId) {
+            const userRes = await client.query(`
+              SELECT u.role_id, r.name AS role_name
+              FROM users u LEFT JOIN roles r ON r.id = u.role_id
+              WHERE u.id = $1 AND u.deleted_at IS NULL FOR UPDATE OF u
+            `, [targetUserId]);
+            if (!userRes.rows.length) {
+              await client.query('ROLLBACK');
+              return res.status(404).json({ success: false, message: 'User not found.' });
+            }
+            if (userRes.rows[0].role_name === 'SUPER_ADMIN') {
+              await client.query('ROLLBACK');
+              return res.status(403).json({ success: false, message: 'Super Admin accounts cannot be changed here.' });
+            }
+            targetRoleId = targetRoleId || userRes.rows[0].role_id;
           }
-        }
 
-        let targetUserId = userId ? Number(userId) : null;
+          const roleRes = targetRoleId
+            ? await client.query('SELECT id, name FROM roles WHERE id = $1 FOR UPDATE', [targetRoleId])
+            : { rows: [] };
+          if (!roleRes.rows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Role not found.' });
+          }
+          const role = roleRes.rows[0];
+          if (role.name === 'SUPER_ADMIN') {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be changed.' });
+          }
 
-        if (targetUserId) {
-          // If a role was selected or changed, resolve targetRoleId
-          if (!targetRoleId && targetRoleName) {
-            const rRes = await pool.query('SELECT id, name FROM roles WHERE name = $1 OR LOWER(display_name) = LOWER($1)', [targetRoleName]);
-            if (rRes.rows.length > 0) {
-              targetRoleId = rRes.rows[0].id;
-              targetRoleName = rRes.rows[0].name;
+          const enabledEntries = Object.entries(permissions as Record<string, any>)
+            .filter(([, value]) => value && value.enabled === true);
+          const enabledCodes = enabledEntries.map(([code]) => code);
+          const knownPermissions: Array<{ id: number; code: string }> = [];
+          for (const code of enabledCodes) {
+            if (code.length > 100 || !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(code)) {
+              await client.query('ROLLBACK');
+              return res.status(400).json({ success: false, message: `Invalid permission code: ${code}` });
+            }
+            const module = code.split('.')[0].replace(/_/g, ' ');
+            const permissionRes = await client.query(`
+              INSERT INTO permissions (code, module, description)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
+              RETURNING id, code
+            `, [code, module, `Access controlled by ${code}`]);
+            knownPermissions.push(permissionRes.rows[0]);
+          }
+
+          if (targetUserId) {
+            const updateUser = await client.query(`
+              UPDATE users
+              SET role_id = COALESCE($1, role_id), custom_permissions = $2::jsonb, updated_at = NOW()
+              WHERE id = $3 AND deleted_at IS NULL
+              RETURNING id
+            `, [role.id, JSON.stringify(permissions), targetUserId]);
+            if (!updateUser.rows.length) {
+              await client.query('ROLLBACK');
+              return res.status(404).json({ success: false, message: 'User not found.' });
             }
           }
 
-          // If role alias provided
-          if (!targetRoleId && targetRoleName) {
-            if (targetRoleName.includes('RECOVERY')) {
-              const r = await pool.query("SELECT id, name FROM roles WHERE name = 'RECOVERY_AGENT' LIMIT 1");
-              if (r.rows.length > 0) targetRoleId = r.rows[0].id;
-            } else if (targetRoleName.includes('TECH')) {
-              const r = await pool.query("SELECT id, name FROM roles WHERE name = 'TECHNICIAN' LIMIT 1");
-              if (r.rows.length > 0) targetRoleId = r.rows[0].id;
-            }
+          await client.query('DELETE FROM role_permissions WHERE role_id = $1', [role.id]);
+          for (const [code, value] of enabledEntries) {
+            const permission = knownPermissions.find(row => row.code === code)!;
+            await client.query(`
+              INSERT INTO role_permissions (role_id, permission_id, scope)
+              VALUES ($1, $2, $3)
+            `, [role.id, permission.id, normalizeScope(value.scope)]);
           }
-
-          // Update user's role and custom_permissions directly in PostgreSQL
-          await pool.query(`
-            UPDATE users 
-            SET role_id = COALESCE($1, role_id),
-                custom_permissions = $2::jsonb,
-                updated_at = NOW()
-            WHERE id = $3
-          `, [targetRoleId, JSON.stringify(permissions), targetUserId]);
-
-          // Update memoryStore user if present
-          const mUser = (memoryStore.users || []).find(u => u.id === targetUserId);
-          if (mUser) {
-            if (targetRoleId) mUser.role_id = targetRoleId;
-            mUser.custom_permissions = permissions;
+          await client.query('UPDATE roles SET permissions_configured = TRUE, updated_at = NOW() WHERE id = $1', [role.id]);
+          auditNote = targetUserId
+            ? `Updated role and custom permissions for user ID ${targetUserId}`
+            : `Updated permissions for role ${role.name}`;
+        } else {
+          const roleRes = await client.query('SELECT id, name FROM roles WHERE id = $1 FOR UPDATE', [roleId]);
+          if (!roleRes.rows.length) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Role not found.' });
           }
-
-          await logAuditEvent({
-            userId: req.user?.id,
-            userName: req.user?.name,
-            userRole: req.user?.roleName,
-            action: 'UPDATE',
-            module: 'USERS',
-            notes: `Updated role and custom permissions for user ID ${targetUserId}`
-          });
+          const role = roleRes.rows[0];
+          if (role.name === 'SUPER_ADMIN' && !enabled) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be revoked.' });
+          }
+          if (enabled) {
+            await client.query(`
+              INSERT INTO role_permissions (role_id, permission_id, scope)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+            `, [role.id, permissionId, normalizeScope(scope)]);
+          } else {
+            await client.query('DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2', [role.id, permissionId]);
+          }
+          await client.query('UPDATE roles SET permissions_configured = TRUE, updated_at = NOW() WHERE id = $1', [role.id]);
+          auditNote = `Updated permissions for role ${role.name}`;
         }
 
-        // If targetRoleId is present, update role_permissions template as well
-        if (targetRoleId && targetRoleName !== 'SUPER_ADMIN') {
-          // Clear existing role permissions
-          await pool.query('DELETE FROM role_permissions WHERE role_id = $1', [targetRoleId]);
-
-          // Insert each enabled permission
-          for (const [code, val] of enabledEntries) {
-            const pRes = await pool.query('SELECT id FROM permissions WHERE code = $1', [code]);
-            if (pRes.rows.length > 0) {
-              const permId = pRes.rows[0].id;
-              const permScope = val.scope || 'ALL';
-              await pool.query(`
-                INSERT INTO role_permissions (role_id, permission_id, scope)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
-              `, [targetRoleId, permId, permScope]);
-            }
-          }
-        }
-
-        return res.json({ success: true, message: 'Role and permissions saved successfully!' });
-      }
-
-      // 2. Single permission update mode
-      const roleRes = await pool.query('SELECT name FROM roles WHERE id = $1', [roleId]);
-      if (roleRes.rows.length === 0) {
-        return res.status(404).json({ success: false, message: 'Role not found.' });
-      }
-
-      if (roleRes.rows[0].name === 'SUPER_ADMIN' && !enabled) {
-        return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be revoked.' });
-      }
-
-      if (enabled) {
-        await pool.query(`
-          INSERT INTO role_permissions (role_id, permission_id, scope)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
-        `, [roleId, permissionId, scope || 'ALL']);
-      } else {
-        await pool.query(`
-          DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2
-        `, [roleId, permissionId]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
       }
 
       await logAuditEvent({
@@ -319,14 +323,17 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
         userRole: req.user?.roleName,
         action: 'UPDATE',
         module: 'ROLES',
-        notes: `Updated permissions for role ${roleRes.rows[0].name}`
-      });
-
-      return res.json({ success: true, message: 'Permission updated successfully.' });
+        notes: auditNote
+      }).catch(error => console.error('Permission save audit log failed:', error));
+      return res.json({ success: true, message: 'Role and permissions saved successfully.' });
     }
 
     if (permissions && typeof permissions === 'object') {
       const targetRoleId = Number(roleId) || 1;
+      const role = memoryStore.roles.find(r => r.id === targetRoleId);
+      if (role?.name === 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'Super Admin permissions cannot be changed.' });
+      }
       if (!memoryStore.rolePermissions) memoryStore.rolePermissions = [];
       memoryStore.rolePermissions = memoryStore.rolePermissions.filter((rp: any) => rp.role_id !== targetRoleId);
       for (const [code, val] of Object.entries(permissions as Record<string, any>)) {
@@ -337,6 +344,13 @@ export const updateRolePermission = async (req: AuthRequest, res: Response) => {
             scope: val.scope || 'ALL'
           });
         }
+      }
+      if (role) role.permissions_configured = true;
+      const targetUserId = userId ? Number(userId) : null;
+      const user = targetUserId && memoryStore.users.find(u => u.id === targetUserId);
+      if (user) {
+        if (targetRoleId) user.role_id = targetRoleId;
+        user.custom_permissions = permissions;
       }
     }
     return res.json({ success: true, message: 'Permission updated successfully (Memory Store).' });

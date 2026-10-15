@@ -6,18 +6,17 @@ import { logAuditEvent } from '../../helpers/auditLogger';
 import { AuthRequest } from '../../types/auth';
 import { loadUsersBackup } from '../../helpers/userStorage';
 
-import { getPermissionsForRole } from '../../helpers/rbacHelper';
+import { getPermissionsForRole, resolveRolePermissions } from '../../helpers/rbacHelper';
 export { getPermissionsForRole };
 
 export async function computeUserPermissions(u: any): Promise<Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }>> {
-  let permissions: Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }> = [];
   const roleName = (u.role_name || '').toUpperCase();
 
   if (roleName === 'SUPER_ADMIN') {
     return getPermissionsForRole('SUPER_ADMIN');
   }
 
-  // 1. Fetch base role permissions from DB
+  let storedPermissions: Array<{ code: string; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' }> = [];
   if (getDbStatus() && u.role_id) {
     try {
       const permRes = await pool.query(`
@@ -26,45 +25,25 @@ export async function computeUserPermissions(u: any): Promise<Array<{ code: stri
         JOIN permissions p ON rp.permission_id = p.id
         WHERE rp.role_id = $1
       `, [u.role_id]);
-      if (permRes.rows.length > 0) {
-        permissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
-      }
+      storedPermissions = permRes.rows.map((row: any) => ({ code: row.code, scope: row.scope }));
     } catch (_) {}
   }
 
-  // Fallback to role standard defaults if role_permissions was not in DB
-  if (permissions.length === 0 && roleName) {
-    permissions = getPermissionsForRole(roleName);
-  }
-
-  // 2. Apply user-specific custom_permissions overrides if present
-  if (u.custom_permissions && typeof u.custom_permissions === 'object') {
-    const customMap = u.custom_permissions as Record<string, { enabled?: boolean; scope?: any }>;
-
-    // Remove permissions explicitly set to false/disabled
-    permissions = permissions.filter(p => {
-      const override = customMap[p.code];
-      if (override && override.enabled === false) {
-        return false;
-      }
-      return true;
-    });
-
-    // Add or update permissions explicitly set to true/enabled
-    Object.entries(customMap).forEach(([code, conf]) => {
-      if (conf && conf.enabled) {
-        const existingIdx = permissions.findIndex(p => p.code === code);
-        if (existingIdx !== -1) {
-          permissions[existingIdx].scope = conf.scope || permissions[existingIdx].scope || 'ALL';
-        } else {
-          permissions.push({ code, scope: conf.scope || 'ALL' });
-        }
-      }
-    });
-  }
-
-  return permissions;
+  const roleIsConfigured = Boolean(u.role_permissions_configured);
+  return resolveRolePermissions(roleName, storedPermissions, roleIsConfigured, u.custom_permissions);
 }
+
+const computeMemoryPermissions = (role: any, user: any) => {
+  const storedPermissions = (memoryStore.rolePermissions || [])
+    .filter((permission: any) => Number(permission.role_id) === Number(role.id))
+    .map((permission: any) => ({ code: permission.code, scope: permission.scope }));
+  return resolveRolePermissions(
+    role.name,
+    storedPermissions,
+    Boolean(role.permissions_configured),
+    user?.custom_permissions
+  );
+};
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -79,7 +58,8 @@ export const login = async (req: Request, res: Response) => {
     if (getDbStatus()) {
       const userRes = await pool.query(`
         SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url, u.custom_permissions,
-               r.id as role_id, r.name as role_name, r.display_name as role_display_name
+               r.id as role_id, r.name as role_name, r.display_name as role_display_name,
+               r.permissions_configured as role_permissions_configured
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE LOWER(u.email) = $1 AND u.deleted_at IS NULL
@@ -162,7 +142,7 @@ export const login = async (req: Request, res: Response) => {
       display_name: u.role_display_name || 'Sales Executive'
     };
 
-    const permissions = getPermissionsForRole(roleObj.name);
+    const permissions = computeMemoryPermissions(roleObj, u);
 
     const authUser = {
       id: u.id,
@@ -244,7 +224,7 @@ export const switchRoleDemo = async (req: Request, res: Response) => {
 
     const targetRole = memoryStore.roles.find(r => r.name === role) || memoryStore.roles[0];
     const demoUser = memoryStore.users.find(u => u.role_id === targetRole.id) || memoryStore.users[0];
-    const permissions = getPermissionsForRole(targetRole.name);
+    const permissions = computeMemoryPermissions(targetRole, demoUser);
 
     const authUser = {
       id: demoUser.id,
@@ -280,7 +260,8 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     if (getDbStatus()) {
       const userRes = await pool.query(`
         SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.custom_permissions,
-               r.id as role_id, r.name as role_name, r.display_name as role_display_name
+               r.id as role_id, r.name as role_name, r.display_name as role_display_name,
+               r.permissions_configured as role_permissions_configured
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.id = $1 AND u.deleted_at IS NULL

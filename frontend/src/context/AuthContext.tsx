@@ -269,10 +269,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Load custom permissions if saved in matrix
           let userPerms: UserPermission[] = [];
           const storedPerms = localStorage.getItem('dr_user_custom_permissions');
+          let hasSavedPermissionConfig = false;
           if (storedPerms) {
             try {
               const permMap = JSON.parse(storedPerms);
-              if (permMap[matchedMember.id]) {
+              if (permMap[matchedMember.id] && typeof permMap[matchedMember.id] === 'object') {
+                hasSavedPermissionConfig = true;
                 userPerms = Object.entries(permMap[matchedMember.id])
                   .filter(([_, val]: any) => val?.enabled)
                   .map(([code, val]: any) => ({
@@ -283,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (e) {}
           }
 
-          if (userPerms.length === 0) {
+          if (!hasSavedPermissionConfig) {
             userPerms = getDefaultRolePermissions(matchedMember.role_name || matchedMember.role || 'SALES_EXECUTIVE');
           }
 
@@ -370,28 +372,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. Check local custom permission overrides if set by Admin in UI
-    if (typeof window !== 'undefined') {
-      try {
-        const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
-        if (storedUserPerms) {
-          const uMap = JSON.parse(storedUserPerms);
-          const userEntry = uMap[user.id] || uMap[String(user.id)] || uMap[Number(user.id)];
-          if (userEntry && typeof userEntry === 'object') {
-            const p = userEntry[permissionCode];
-            if (p !== undefined) {
-              if (!p.enabled) return false;
-              if (requiredScope && p.scope && p.scope !== requiredScope && p.scope !== 'ALL') {
-                return false;
-              }
-              return true;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 3. Check user.permissions from database
+    // Check the permission list returned by the backend (or the local-only login fallback).
     if (user.permissions && Array.isArray(user.permissions)) {
       const perm = user.permissions.find(p => p.code === permissionCode || p.code?.toLowerCase() === permissionCode.toLowerCase());
       if (perm) {
@@ -404,7 +385,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
 
-    // 4. Fallback to default role permissions ONLY if user.permissions was never loaded
+    // Fallback only if permissions were never loaded.
     const defaults = getDefaultRolePermissions(user.roleName || user.roleDisplayName);
     const defPerm = defaults.find(p => p.code === permissionCode || p.code?.toLowerCase() === permissionCode.toLowerCase());
     if (defPerm) {
@@ -432,38 +413,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const modPrefix = `${module.toLowerCase()}.`;
 
-    // 1. Check local custom overrides
-    if (typeof window !== 'undefined') {
-      try {
-        const storedUserPerms = localStorage.getItem('dr_user_custom_permissions');
-        if (storedUserPerms) {
-          const uMap = JSON.parse(storedUserPerms);
-          const userEntry = uMap[user.id] || uMap[String(user.id)] || uMap[Number(user.id)];
-          if (userEntry && typeof userEntry === 'object') {
-            return Object.entries(userEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
-          }
-        }
-
-        const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
-        if (storedRolePerms) {
-          const rMap = JSON.parse(storedRolePerms);
-          const roleKey = normRole.replace(/[^A-Z0-9]+/g, '_');
-          const roleEntry = rMap[roleKey] || (user.roleDisplayName ? rMap[user.roleDisplayName] : null);
-          if (roleEntry && typeof roleEntry === 'object') {
-            return Object.entries(roleEntry).some(([code, p]: [string, any]) => code.startsWith(modPrefix) && p?.enabled);
-          }
-        }
-      } catch (e) {}
+    // A module is available for navigation only when the user has a view permission in it.
+    if (user.permissions && Array.isArray(user.permissions)) {
+      return user.permissions.some(p => p.code.startsWith(modPrefix) && /\.view(?:_|$)/.test(p.code));
     }
 
-    // 2. Check user.permissions from DB
-    if (user.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
-      return user.permissions.some(p => p.code.startsWith(modPrefix));
-    }
-
-    // 3. Fallback
+    // Fallback only if permissions were never loaded.
     const defaults = getDefaultRolePermissions(user.roleName || user.roleDisplayName);
-    return defaults.some(p => p.code.startsWith(modPrefix));
+    return defaults.some(p => p.code.startsWith(modPrefix) && /\.view(?:_|$)/.test(p.code));
   };
 
   return (

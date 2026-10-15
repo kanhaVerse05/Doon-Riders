@@ -54,6 +54,9 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
 export const createUser = async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, phone, roleId, role_name, roleName, custom_role_name, password } = req.body;
+    if ((roleId || role_name || roleName || custom_role_name) && req.user?.roleName !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, message: 'Only Super Admin can assign roles or create custom roles.' });
+    }
     const finalAvatar = req.body.avatar_url || req.body.avatarUrl || req.body.avatar || null;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
@@ -328,6 +331,10 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
 
       const targetUser = userRes.rows[0];
 
+      if ((hasCustomPerms || roleId || role_name || roleName) && req.user?.roleName !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'Only Super Admin can change role assignments or permissions.' });
+      }
+
       if (!canModifyUser(req.user!, targetUser.role_id, targetUser.role_name)) {
         return res.status(403).json({ success: false, message: 'Forbidden: You cannot modify a Super Admin user.' });
       }
@@ -384,6 +391,9 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
     // Memory Store
     const user = memoryStore.users.find(u => u.id === Number(id));
     if (user) {
+      if ((hasCustomPerms || roleId || role_name || roleName) && req.user?.roleName !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'Only Super Admin can change role assignments or permissions.' });
+      }
       if (status) user.status = status;
       if (targetRoleId) user.role_id = Number(targetRoleId);
       if (customPermsPayload) user.custom_permissions = JSON.parse(customPermsPayload);

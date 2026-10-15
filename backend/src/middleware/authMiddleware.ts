@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool, getDbStatus } from '../config/db';
 import { AuthRequest, AuthenticatedUser } from '../types/auth';
-import { getPermissionsForRole } from '../helpers/rbacHelper';
+import { getPermissionsForRole, resolveRolePermissions } from '../helpers/rbacHelper';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'doon_riders_rbac_super_secret_jwt_key_2026';
 
@@ -40,7 +40,8 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
     if (getDbStatus()) {
       const userRes = await pool.query(`
         SELECT u.id, u.name, u.email, u.phone, u.status, u.avatar_url, u.custom_permissions,
-               r.id as role_id, r.name as role_name, r.display_name as role_display_name
+               r.id as role_id, r.name as role_name, r.display_name as role_display_name,
+               r.permissions_configured as role_permissions_configured
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.id = $1 AND u.deleted_at IS NULL
@@ -60,35 +61,16 @@ export const authenticateJwt = async (req: AuthRequest, res: Response, next: Nex
         WHERE rp.role_id = $1
       `, [u.role_id]);
 
-      let permissions = permRes.rows.map(row => ({
+      const storedPermissions = permRes.rows.map(row => ({
         code: row.code,
         scope: row.scope
       }));
-
-      // Fallback: If no explicit permissions exist in DB, fallback to role defaults
-      if (permissions.length === 0) {
-        permissions = getPermissionsForRole(u.role_name);
-      }
-
-      // Apply user-specific custom_permissions overrides if present
-      if (u.custom_permissions && typeof u.custom_permissions === 'object') {
-        const customMap = u.custom_permissions as Record<string, { enabled?: boolean; scope?: any }>;
-        permissions = permissions.filter(p => {
-          const override = customMap[p.code];
-          if (override && override.enabled === false) return false;
-          return true;
-        });
-        Object.entries(customMap).forEach(([code, conf]) => {
-          if (conf && conf.enabled) {
-            const existingIdx = permissions.findIndex(p => p.code === code);
-            if (existingIdx !== -1) {
-              permissions[existingIdx].scope = conf.scope || permissions[existingIdx].scope || 'ALL';
-            } else {
-              permissions.push({ code, scope: conf.scope || 'ALL' });
-            }
-          }
-        });
-      }
+      const permissions = resolveRolePermissions(
+        u.role_name,
+        storedPermissions,
+        Boolean(u.role_permissions_configured),
+        u.custom_permissions
+      );
 
       req.user = {
         id: u.id,

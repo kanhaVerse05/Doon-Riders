@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
+    "test:rbac": "tsx --test src/helpers/rbacHelper.test.ts",
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/migrate_postgres.ts",

@@ -1,6 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types/auth';
 
+export const requireSuperAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (req.user?.roleName !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Forbidden: Super Admin access is required.' });
+  }
+  return next();
+};
+
 export const requirePermission = (permissionCode: string) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {

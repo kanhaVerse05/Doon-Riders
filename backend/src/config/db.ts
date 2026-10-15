@@ -797,9 +797,12 @@ export const checkDbConnection = async (): Promise<boolean> => {
         display_name VARCHAR(150) NOT NULL,
         description TEXT,
         is_system BOOLEAN DEFAULT FALSE,
+        permissions_configured BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      ALTER TABLE roles ADD COLUMN IF NOT EXISTS permissions_configured BOOLEAN NOT NULL DEFAULT FALSE;
 
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -1318,13 +1321,13 @@ export const checkDbConnection = async (): Promise<boolean> => {
       CREATE POLICY "pre_bookings_anon_select" ON pre_bookings FOR SELECT TO anon USING (true);
       
       DROP POLICY IF EXISTS "pre_bookings_auth_manage" ON pre_bookings;
-      CREATE POLICY "pre_bookings_auth_manage" ON pre_bookings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+      CREATE POLICY "pre_bookings_auth_manage" ON pre_bookings FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
 
       DROP POLICY IF EXISTS "scooty_recoveries_auth_manage" ON scooty_recoveries;
-      CREATE POLICY "scooty_recoveries_auth_manage" ON scooty_recoveries FOR ALL TO authenticated, postgres, service_role USING (true) WITH CHECK (true);
+      CREATE POLICY "scooty_recoveries_auth_manage" ON scooty_recoveries FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
 
       DROP POLICY IF EXISTS "scooty_recovery_events_auth_manage" ON scooty_recovery_events;
-      CREATE POLICY "scooty_recovery_events_auth_manage" ON scooty_recovery_events FOR ALL TO authenticated, postgres, service_role USING (true) WITH CHECK (true);
+      CREATE POLICY "scooty_recovery_events_auth_manage" ON scooty_recovery_events FOR ALL TO postgres, service_role USING (true) WITH CHECK (true);
     `).catch(() => {});
 
     // 1. Seed Roles idempotently
@@ -1392,31 +1395,31 @@ export const checkDbConnection = async (): Promise<boolean> => {
       INSERT INTO role_permissions (role_id, permission_id, scope)
       SELECT r.id, p.id, 'ASSIGNED'
       FROM roles r, permissions p
-      WHERE r.name = 'RECOVERY_AGENT' AND p.code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
+      WHERE r.name = 'RECOVERY_AGENT' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
 
       INSERT INTO role_permissions (role_id, permission_id, scope)
       SELECT r.id, p.id, 'TEAM'
       FROM roles r, permissions p
-      WHERE r.name = 'HUB_INCHARGE' AND p.code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
+      WHERE r.name = 'HUB_INCHARGE' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
 
       INSERT INTO role_permissions (role_id, permission_id, scope)
       SELECT r.id, p.id, 'ALL'
       FROM roles r, permissions p
-      WHERE r.name = 'SUPER_ADMIN' AND p.code LIKE 'recoveries.%'
+      WHERE r.name = 'SUPER_ADMIN' AND r.permissions_configured = FALSE AND p.code LIKE 'recoveries.%'
       ON CONFLICT (role_id, permission_id) DO NOTHING;
 
       INSERT INTO role_permissions (role_id, permission_id, scope)
       SELECT r.id, p.id, 'ALL'
       FROM roles r, permissions p
-      WHERE r.name = 'MANAGER' AND p.code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
+      WHERE r.name = 'MANAGER' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
 
       INSERT INTO role_permissions (role_id, permission_id, scope)
       SELECT r.id, p.id, 'ASSIGNED'
       FROM roles r, permissions p
-      WHERE r.name = 'TECHNICIAN' AND p.code IN ('recoveries.view', 'recoveries.inspect')
+      WHERE r.name = 'TECHNICIAN' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.inspect')
       ON CONFLICT (role_id, permission_id) DO NOTHING;
     `).catch(() => {});
 

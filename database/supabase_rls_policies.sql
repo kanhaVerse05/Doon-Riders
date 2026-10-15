@@ -81,7 +81,7 @@ END $$;
 
 -- =============================================================================
 -- TIER 1: PUBLIC READ-ONLY CONTENT (Website Display)
--- Public visitors (anon) & staff (authenticated) can view public marketing content.
+-- Public visitors can read marketing content; protected writes use the backend.
 -- =============================================================================
 
 -- 1. Pricing Plans (Public can view active subscription plans)
@@ -91,7 +91,7 @@ CREATE POLICY "pricing_plans_public_read" ON pricing_plans
   FOR SELECT TO anon, authenticated
   USING (is_active = true);
 CREATE POLICY "pricing_plans_auth_manage" ON pricing_plans
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 2. Vehicle Gallery Images (Public can view gallery photos)
@@ -101,7 +101,7 @@ CREATE POLICY "gallery_public_read" ON gallery_images
   FOR SELECT TO anon, authenticated
   USING (true);
 CREATE POLICY "gallery_auth_manage" ON gallery_images
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 3. Fleet Models (Public can view available scooter models & specifications)
@@ -111,7 +111,7 @@ CREATE POLICY "fleet_public_read" ON fleet
   FOR SELECT TO anon, authenticated
   USING (true);
 CREATE POLICY "fleet_auth_manage" ON fleet
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 4. Repair Hubs & Swap Stations (Public can find hub locations)
@@ -121,7 +121,7 @@ CREATE POLICY "hubs_public_read" ON repair_hubs
   FOR SELECT TO anon, authenticated
   USING (is_active = true);
 CREATE POLICY "hubs_auth_manage" ON repair_hubs
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 5. UPI QR Settings (Public booking receipt can read payment QR & prefix)
@@ -131,7 +131,7 @@ CREATE POLICY "upi_qr_public_read" ON upi_qr_settings
   FOR SELECT TO anon, authenticated
   USING (true);
 CREATE POLICY "upi_qr_auth_manage" ON upi_qr_settings
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- =============================================================================
@@ -147,7 +147,7 @@ CREATE POLICY "leads_public_insert" ON leads
   FOR INSERT TO anon, authenticated
   WITH CHECK (true);
 CREATE POLICY "leads_auth_manage" ON leads
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 7. Pre-Bookings (EV Pre-Order Reservations & Vouchers)
@@ -157,7 +157,7 @@ CREATE POLICY "pre_bookings_public_insert" ON pre_bookings
   FOR INSERT TO anon, authenticated
   WITH CHECK (true);
 CREATE POLICY "pre_bookings_auth_manage" ON pre_bookings
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 8. Customer Breakdown Complaints (Roadside Assistance Tickets)
@@ -167,138 +167,138 @@ CREATE POLICY "complaints_public_insert" ON complaints
   FOR INSERT TO anon, authenticated
   WITH CHECK (true);
 CREATE POLICY "complaints_auth_manage" ON complaints
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- =============================================================================
--- TIER 3: OPERATIONS, INVENTORY & FLEET CRM (Authenticated Staff Only)
--- Anonymous public access is strictly DENIED. Only authenticated staff can access.
+-- TIER 3: OPERATIONS, INVENTORY & FLEET CRM (Backend Only)
+-- Anonymous and direct authenticated access is denied; the API uses the privileged DB role.
 -- =============================================================================
 
 -- 9. Inventory & Spare Parts
 DROP POLICY IF EXISTS "inventory_auth_all" ON inventory;
 CREATE POLICY "inventory_auth_all" ON inventory
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 10. Technicians Directory
 DROP POLICY IF EXISTS "technicians_auth_all" ON technicians;
 CREATE POLICY "technicians_auth_all" ON technicians
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 11. Customers Directory
 DROP POLICY IF EXISTS "customers_auth_all" ON customers;
 CREATE POLICY "customers_auth_all" ON customers
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 12. Repair Jobs & Workshop Tracking
 DROP POLICY IF EXISTS "repair_jobs_auth_all" ON repair_jobs;
 CREATE POLICY "repair_jobs_auth_all" ON repair_jobs
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 13. Repair Inspections
 DROP POLICY IF EXISTS "repair_inspections_auth_all" ON repair_inspections;
 CREATE POLICY "repair_inspections_auth_all" ON repair_inspections
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 14. Repair Parts Requisition
 DROP POLICY IF EXISTS "repair_parts_auth_all" ON repair_parts;
 CREATE POLICY "repair_parts_auth_all" ON repair_parts
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 15. Repair Timing & Diagnostic Clock
 DROP POLICY IF EXISTS "repair_timing_auth_all" ON repair_timing;
 CREATE POLICY "repair_timing_auth_all" ON repair_timing
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 16. Repair Audit Logs
 DROP POLICY IF EXISTS "repair_audit_auth_read" ON repair_audit_logs;
 DROP POLICY IF EXISTS "repair_audit_auth_insert" ON repair_audit_logs;
 CREATE POLICY "repair_audit_auth_read" ON repair_audit_logs
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (true);
 CREATE POLICY "repair_audit_auth_insert" ON repair_audit_logs
-  FOR INSERT TO authenticated
+  FOR INSERT TO service_role, postgres
   WITH CHECK (true);
 
 -- 17. Complaint Event History
 DROP POLICY IF EXISTS "complaint_events_auth_all" ON complaint_events;
 CREATE POLICY "complaint_events_auth_all" ON complaint_events
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 18. Scooty Return Inspections & Settlements
 DROP POLICY IF EXISTS "scooty_returns_auth_all" ON scooty_returns;
 CREATE POLICY "scooty_returns_auth_all" ON scooty_returns
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 19. Scooty Return Event Log
 DROP POLICY IF EXISTS "scooty_return_events_auth_all" ON scooty_return_events;
 CREATE POLICY "scooty_return_events_auth_all" ON scooty_return_events
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 20. Scooty Recoveries (Field In-pound & Impound Settlement)
 DROP POLICY IF EXISTS "scooty_recoveries_auth_all" ON scooty_recoveries;
 CREATE POLICY "scooty_recoveries_auth_all" ON scooty_recoveries
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- 21. Scooty Recovery Event History
 DROP POLICY IF EXISTS "scooty_recovery_events_auth_all" ON scooty_recovery_events;
 CREATE POLICY "scooty_recovery_events_auth_all" ON scooty_recovery_events
-  FOR ALL TO authenticated
+  FOR ALL TO service_role, postgres
   USING (true) WITH CHECK (true);
 
 -- =============================================================================
--- TIER 4: USERS, ROLES, RBAC & SYSTEM SECURITY (Staff Authenticated / Admin Only)
--- Sensitive security tables: passwords and permissions protected from public leaks.
+-- TIER 4: USERS, ROLES, RBAC & SYSTEM SECURITY (Backend Only)
+-- Sensitive security tables remain inaccessible to direct client database sessions.
 -- =============================================================================
 
 -- 22. Roles Table
 DROP POLICY IF EXISTS "roles_auth_read" ON roles;
 CREATE POLICY "roles_auth_read" ON roles
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (true);
 
 -- 23. Permissions Table
 DROP POLICY IF EXISTS "permissions_auth_read" ON permissions;
 CREATE POLICY "permissions_auth_read" ON permissions
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (true);
 
 -- 24. Role Permissions Mapping Table
 DROP POLICY IF EXISTS "role_permissions_auth_read" ON role_permissions;
 CREATE POLICY "role_permissions_auth_read" ON role_permissions
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (true);
 
 -- 25. Users Table (Staff & Super Admin Directory)
--- Anonymous public access is strictly DENIED (protects password hashes).
+-- Direct client access is denied (protects password hashes).
 DROP POLICY IF EXISTS "users_auth_select" ON users;
 DROP POLICY IF EXISTS "users_auth_update" ON users;
 CREATE POLICY "users_auth_select" ON users
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (deleted_at IS NULL);
 CREATE POLICY "users_auth_update" ON users
-  FOR UPDATE TO authenticated
+  FOR UPDATE TO service_role, postgres
   USING (true) WITH CHECK (true);
 
--- 26. Audit Logs Table (Strictly Super Admin / Authenticated read only)
+-- 26. Audit Logs Table
 DROP POLICY IF EXISTS "audit_logs_auth_select" ON audit_logs;
 DROP POLICY IF EXISTS "audit_logs_auth_insert" ON audit_logs;
 CREATE POLICY "audit_logs_auth_select" ON audit_logs
-  FOR SELECT TO authenticated
+  FOR SELECT TO service_role, postgres
   USING (true);
 CREATE POLICY "audit_logs_auth_insert" ON audit_logs
-  FOR INSERT TO authenticated
+  FOR INSERT TO service_role, postgres
   WITH CHECK (true);
 
 -- =============================================================================

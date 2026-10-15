@@ -60,6 +60,7 @@ interface RoleItem {
   display_name: string;
   description?: string;
   is_system?: boolean;
+  permissions_configured?: boolean;
 }
 
 const DEFAULT_SYSTEM_ROLES: RoleItem[] = [
@@ -93,6 +94,8 @@ function RolesAndPermissionsContent() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const [permissionSaveError, setPermissionSaveError] = useState<string | null>(null);
   const [activeModuleTab, setActiveModuleTab] = useState('ALL');
   const [searchFilter, setSearchFilter] = useState('');
   
@@ -272,15 +275,17 @@ function RolesAndPermissionsContent() {
         if (res && res.success && res.data) {
           if (Array.isArray(res.data.roles)) {
             res.data.roles.forEach((br: any) => {
-              if (!combinedRoles.some(c => c.name === br.name || c.id === br.id)) {
-                combinedRoles.push({
+                const existingIndex = combinedRoles.findIndex(c => c.name === br.name || Number(c.id) === Number(br.id));
+                const dbRole = {
                   id: br.id,
                   name: br.name,
                   display_name: br.display_name,
                   description: br.description,
-                  is_system: br.is_system
-                });
-              }
+                  is_system: br.is_system,
+                  permissions_configured: Boolean(br.permissions_configured)
+                };
+                if (existingIndex >= 0) combinedRoles[existingIndex] = { ...combinedRoles[existingIndex], ...dbRole };
+                else combinedRoles.push(dbRole);
             });
           }
           if (Array.isArray(res.data.rolePermissions)) {
@@ -316,7 +321,8 @@ function RolesAndPermissionsContent() {
               role_name: bu.role_name || 'SALES_EXECUTIVE',
               roleDisplayName: bu.role_display_name || 'Team Member',
               role_display_name: bu.role_display_name || 'Team Member',
-              avatar: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : ''
+              avatar: bu.avatar_url && !bu.avatar_url.includes('avt-') ? bu.avatar_url : '',
+              role_permissions_configured: Boolean(combinedRoles.find(r => Number(r.id) === Number(bu.role_id))?.permissions_configured)
             };
             customList.push(userObj);
           });
@@ -342,7 +348,7 @@ function RolesAndPermissionsContent() {
         // Check if DB has saved role_permissions for this role
         const rolePermsFromDb = rolePermissionsList.filter(rp => Number(rp.role_id) === uRoleId);
 
-        if (rolePermsFromDb.length > 0) {
+        if (u.role_permissions_configured || rolePermsFromDb.length > 0) {
           const map: any = {};
           allPermissions.forEach(p => {
             const matched = rolePermsFromDb.find(rp => rp.code === p.code);
@@ -493,7 +499,8 @@ function RolesAndPermissionsContent() {
           role: targetRole.name,
           role_name: targetRole.name,
           role_display_name: targetRole.display_name,
-          roleDisplayName: targetRole.display_name
+          roleDisplayName: targetRole.display_name,
+          role_permissions_configured: Boolean(targetRole.permissions_configured)
         };
       }
       return u;
@@ -542,7 +549,8 @@ function RolesAndPermissionsContent() {
             role: matchedRole.name,
             role_name: matchedRole.name,
             role_display_name: matchedRole.display_name,
-            roleDisplayName: matchedRole.display_name
+            roleDisplayName: matchedRole.display_name,
+            role_permissions_configured: Boolean(matchedRole.permissions_configured)
           };
         }
         return u;
@@ -557,52 +565,44 @@ function RolesAndPermissionsContent() {
   };
 
   const handleSavePermissions = async () => {
-    if (!selectedUser) return;
-    
-    // 1. Save user-specific permissions map
-    localStorage.setItem('dr_user_custom_permissions', JSON.stringify(userPermissions));
-
-    // 2. Persist template in dr_role_custom_permissions so that any subsequent user with this role automatically gets these exact permissions
-    const roleKey = (selectedUser.role_name || selectedUser.role || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-    if (roleKey && roleKey !== 'SUPER_ADMIN') {
-      try {
-        const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
-        const rolePermMap = storedRolePerms ? JSON.parse(storedRolePerms) : {};
-        rolePermMap[roleKey] = userPermissions[selectedUser.id];
-        if (selectedUser.role_display_name || selectedUser.roleDisplayName) {
-          rolePermMap[selectedUser.role_display_name || selectedUser.roleDisplayName] = userPermissions[selectedUser.id];
-        }
-        localStorage.setItem('dr_role_custom_permissions', JSON.stringify(rolePermMap));
-      } catch (e) {}
-    }
-
+    if (!selectedUser || savingPermissions) return;
+    setSavingPermissions(true);
+    setPermissionSaveError(null);
+    setSavedSuccess(false);
     try {
-      await adminApi.post('/admin/roles/permission', {
+      const response = await adminApi.post('/admin/roles/permission', {
         userId: selectedUser.id,
         roleId: selectedUser.role_id,
         roleName: selectedUser.role_name || selectedUser.role,
         permissions: userPermissions[selectedUser.id]
       });
-
-      // Synchronize with user status/role endpoint to guarantee PostgreSQL users table has updated role_id and custom_permissions
-      let statusRes = await adminApi.patch(`/admin/users/${selectedUser.id}/status`, {
-        roleId: selectedUser.role_id,
-        roleName: selectedUser.role_name || selectedUser.role,
-        custom_permissions: userPermissions[selectedUser.id]
-      });
-      if (!statusRes?.success) {
-        await adminApi.put(`/admin/users/${selectedUser.id}/status`, {
-          roleId: selectedUser.role_id,
-          roleName: selectedUser.role_name || selectedUser.role,
-          custom_permissions: userPermissions[selectedUser.id]
-        }).catch(() => {});
+      if (!response?.success) {
+        throw new Error(response?.message || 'Permission save failed. Please try again.');
       }
-    } catch (e) {
-      console.warn('Backend sync notice:', e);
-    }
 
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+      localStorage.setItem('dr_user_custom_permissions', JSON.stringify(userPermissions));
+      const roleKey = (selectedUser.role_name || selectedUser.role || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+      if (roleKey && roleKey !== 'SUPER_ADMIN') {
+        try {
+          const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
+          const rolePermMap = storedRolePerms ? JSON.parse(storedRolePerms) : {};
+          rolePermMap[roleKey] = userPermissions[selectedUser.id];
+          if (selectedUser.role_display_name || selectedUser.roleDisplayName) {
+            rolePermMap[selectedUser.role_display_name || selectedUser.roleDisplayName] = userPermissions[selectedUser.id];
+          }
+          localStorage.setItem('dr_role_custom_permissions', JSON.stringify(rolePermMap));
+        } catch (storageError) {
+          console.warn('Could not cache role permissions locally:', storageError);
+        }
+      }
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (e: any) {
+      setPermissionSaveError(e?.message || 'Permission save failed. Please try again.');
+      console.error('Permission save failed:', e);
+    } finally {
+      setSavingPermissions(false);
+    }
   };
 
   const modules = ['ALL', 'Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports', 'Team Directory'];
@@ -625,6 +625,11 @@ function RolesAndPermissionsContent() {
         <div className="bg-[#EAFBF2] border border-[#00D96B] text-[#00A854] p-4 rounded-2xl flex items-center gap-2.5 shadow-sm text-xs font-bold animate-fadeIn">
           <Check className="w-4 h-4 stroke-[3]" />
           <span>{roleSuccessToast}</span>
+        </div>
+      )}
+      {permissionSaveError && (
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl text-xs font-bold">
+          {permissionSaveError}
         </div>
       )}
 
@@ -651,13 +656,16 @@ function RolesAndPermissionsContent() {
           {selectedUser && (
             <button
               onClick={handleSavePermissions}
-              className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-white font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition transform active:scale-95 cursor-pointer flex-shrink-0"
+              disabled={savingPermissions}
+              className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl shadow-[0_4px_14px_rgba(0,217,107,0.35)] transition transform active:scale-95 cursor-pointer flex-shrink-0"
             >
               {savedSuccess ? (
                 <>
                   <Check className="w-4 h-4 stroke-[3]" />
                   <span>Permissions Saved!</span>
                 </>
+              ) : savingPermissions ? (
+                <><Save className="w-4 h-4 animate-pulse" /><span>Saving…</span></>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
@@ -1021,10 +1029,11 @@ function RolesAndPermissionsContent() {
             </p>
             <button
               onClick={handleSavePermissions}
-              className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-md transition cursor-pointer"
+              disabled={savingPermissions}
+              className="inline-flex items-center gap-2 bg-[#00D96B] hover:bg-[#00A854] disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-md transition cursor-pointer"
             >
-              <Save className="w-4 h-4" />
-              <span>{savedSuccess ? 'Changes Saved!' : 'Save Permissions'}</span>
+              {savedSuccess ? <Check className="w-4 h-4" /> : <Save className={`w-4 h-4 ${savingPermissions ? 'animate-pulse' : ''}`} />}
+              <span>{savedSuccess ? 'Changes Saved!' : savingPermissions ? 'Saving…' : 'Save Permissions'}</span>
             </button>
           </div>
         </>

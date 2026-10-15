@@ -3,6 +3,53 @@ export interface UserRolePermission {
   scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN';
 }
 
+export type CustomPermissionMap = Record<string, { enabled?: boolean; scope?: string }>;
+
+const VALID_SCOPES = new Set(['ALL', 'TEAM', 'ASSIGNED', 'OWN']);
+
+export const normalizeScope = (scope: unknown): UserRolePermission['scope'] =>
+  typeof scope === 'string' && VALID_SCOPES.has(scope)
+    ? scope as UserRolePermission['scope']
+    : 'ALL';
+
+export const applyCustomPermissionOverrides = (
+  basePermissions: UserRolePermission[],
+  customPermissions?: CustomPermissionMap | null
+): UserRolePermission[] => {
+  if (!customPermissions || typeof customPermissions !== 'object' || Array.isArray(customPermissions)) {
+    return basePermissions.map(permission => ({ ...permission }));
+  }
+
+  const result = basePermissions
+    .filter(permission => customPermissions[permission.code]?.enabled !== false)
+    .map(permission => {
+      const override = customPermissions[permission.code];
+      return override?.enabled
+        ? { ...permission, scope: normalizeScope(override.scope || permission.scope) }
+        : { ...permission, scope: normalizeScope(permission.scope) };
+    });
+
+  for (const [code, config] of Object.entries(customPermissions)) {
+    if (!config?.enabled || result.some(permission => permission.code === code)) continue;
+    result.push({ code, scope: normalizeScope(config.scope) });
+  }
+
+  return result;
+};
+
+export const resolveRolePermissions = (
+  roleName: string,
+  storedPermissions: UserRolePermission[],
+  explicitlyConfigured: boolean,
+  customPermissions?: CustomPermissionMap | null
+): UserRolePermission[] => {
+  const hasStoredPermissions = storedPermissions.length > 0;
+  const basePermissions = explicitlyConfigured || hasStoredPermissions
+    ? storedPermissions
+    : getPermissionsForRole(roleName);
+  return applyCustomPermissionOverrides(basePermissions, customPermissions);
+};
+
 export const getPermissionsForRole = (roleName: string): UserRolePermission[] => {
   const norm = (roleName || '').toUpperCase();
 
