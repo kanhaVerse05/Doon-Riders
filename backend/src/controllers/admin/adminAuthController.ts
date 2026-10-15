@@ -91,7 +91,15 @@ export const login = async (req: Request, res: Response) => {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
 
-      if (u.role_name === 'SUPER_ADMIN' && !u.totp_enabled) {
+      const devMfaExemptEmails = (process.env.DEV_MFA_EXEMPT_EMAILS || '')
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+      const isDevMfaExempt = process.env.APP_ENV === 'development'
+        && process.env.NODE_ENV !== 'production'
+        && devMfaExemptEmails.includes(cleanEmail);
+
+      if (u.role_name === 'SUPER_ADMIN' && !u.totp_enabled && !isDevMfaExempt) {
         const setupToken = jwt.sign(
           { id: u.id, purpose: 'totp_initial_setup' },
           getJwtSecret(),
