@@ -278,7 +278,7 @@ export default function AdminLoginPage() {
             {setupComplete ? <div className="space-y-4">
               <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left">
                 <h3 className="text-sm font-extrabold text-amber-900">Save these one-time backup codes</h3>
-                <p className="mt-1 text-xs text-amber-800">Authenticator phone kho jaaye toh har code ek baar login ke liye use ho sakta hai. Is screen ke baad dobara nahi dikhayenge.</p>
+                <p className="mt-1 text-xs text-amber-800">If you lose access to your authenticator, each backup code can be used once to sign in. These codes will not be shown again after you leave this screen.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {backupCodes.map((code) => <code key={code} className="rounded-lg bg-white px-2 py-1.5 text-center text-xs font-bold">{code}</code>)}
                 </div>
@@ -288,14 +288,14 @@ export default function AdminLoginPage() {
             </div> : mfaSetupStep && setupInfo ? <div className="space-y-4 text-left">
               <div className="flex flex-col items-center gap-2 rounded-2xl border bg-white p-4">
                 <QRCodeSVG value={setupInfo.otpauthUrl} size={190} level="M" />
-                <span className="text-xs font-semibold text-slate-500">Google Authenticator se QR scan karo</span>
+                <span className="text-xs font-semibold text-slate-500">Scan this QR code with Google Authenticator.</span>
               </div>
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-slate-600">Scan nahi ho raha? App mein setup key manually enter karo:</p>
+                <p className="text-xs font-semibold text-slate-600">Can't scan the code? Enter this setup key manually in your authenticator app:</p>
                 <code className="block break-all rounded-xl bg-slate-100 p-3 text-center text-sm font-bold tracking-wider">{setupInfo.secret}</code>
               </div>
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[#64748B]">App ka 6-digit code</label>
+                <label className="block text-xs font-semibold text-[#64748B]">6-digit code from your authenticator app</label>
                 <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" className="w-full rounded-[20px] border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3.5 text-center text-lg tracking-[0.35em] font-bold focus:border-[#00D96B] focus:outline-none" />
               </div>
             </div> : !mfaStep ? <>
