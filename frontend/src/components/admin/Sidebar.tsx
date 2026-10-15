@@ -90,7 +90,7 @@ export const Sidebar: React.FC = () => {
           name: 'Technician Tasks',
           href: '/admin/technician/jobs',
           icon: CheckCircle2,
-          anyPermission: ['technician_tasks.workshop.view', 'technician_tasks.field.view', 'technician_tasks.returns.view', 'technician_tasks.recoveries.view', 'repairs.view', 'complaints.view', 'returns.view', 'recoveries.view'],
+          anyPermission: ['technician_tasks.workshop.view', 'technician_tasks.field.view', 'technician_tasks.returns.view', 'technician_tasks.recoveries.view'],
           badge: 'Tasks'
         },
         {

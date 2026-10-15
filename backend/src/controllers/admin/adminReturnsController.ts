@@ -66,6 +66,29 @@ export function computeSettlement(securityDeposit: number, damageItems: any[] = 
   };
 }
 
+const getDatabaseTechnicians = async () => {
+  const result = await pool.query(`
+    SELECT
+      tech.id, tech.technician_code, tech.name, tech.phone, tech.email,
+      tech.hub_id, COALESCE(tech.hub_name, hub.hub_name, '') AS hub_name,
+      tech.specialization, tech.status, tech.rating,
+      (SELECT COUNT(*)::int FROM repair_jobs job
+       WHERE job.technician_id = tech.id AND job.status NOT IN ('Closed', 'Cancelled')) AS active_jobs_count
+    FROM technicians tech
+    JOIN users app_user
+      ON LOWER(app_user.email) = LOWER(tech.email)
+     AND app_user.status = 'active'
+     AND app_user.deleted_at IS NULL
+    JOIN roles app_role
+      ON app_role.id = app_user.role_id
+     AND UPPER(app_role.name) = 'TECHNICIAN'
+    LEFT JOIN repair_hubs hub ON hub.id = tech.hub_id
+    WHERE COALESCE(tech.status, 'Available') NOT IN ('Inactive', 'Disabled')
+    ORDER BY tech.name
+  `);
+  return result.rows;
+};
+
 // 1. GET ALL RETURNS (LIST WITH STATS & FILTERS)
 export const getAllReturns = async (req: AuthRequest, res: Response) => {
   try {
@@ -167,6 +190,7 @@ export const getAllReturns = async (req: AuthRequest, res: Response) => {
         `);
 
         const st = statsRes.rows[0] || {};
+        const technicians = await getDatabaseTechnicians();
         const stats = {
           total: Number(st.total || 0),
           pendingInspection: Number(st.pending_inspection || 0),
@@ -182,7 +206,7 @@ export const getAllReturns = async (req: AuthRequest, res: Response) => {
           data: result.rows,
           stats,
           hubs: memoryStore.repairHubs,
-          technicians: memoryStore.technicians,
+          technicians,
           inventoryParts: memoryStore.inventory
         });
       } catch (dbErr) {
@@ -267,13 +291,14 @@ export const getReturnById = async (req: AuthRequest, res: Response) => {
             `SELECT * FROM scooty_return_events WHERE return_id = $1 ORDER BY created_at ASC`,
             [scootyReturn.id]
           );
+          const technicians = await getDatabaseTechnicians();
 
           return res.json({
             success: true,
             data: scootyReturn,
             timeline: eventsRes.rows,
             hubs: memoryStore.repairHubs,
-            technicians: memoryStore.technicians,
+            technicians,
             inventoryParts: memoryStore.inventory
           });
         }
@@ -332,8 +357,45 @@ export const createReturn = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const targetHub = (memoryStore.repairHubs || []).find(h => h.id === Number(hub_id)) || memoryStore.repairHubs[0];
-    const assignedTech = technician_id ? (memoryStore.technicians || []).find(t => t.id === Number(technician_id)) : null;
+    let targetHub = (memoryStore.repairHubs || []).find(h => h.id === Number(hub_id)) || memoryStore.repairHubs[0];
+    let assignedTech = technician_id ? (memoryStore.technicians || []).find(t => t.id === Number(technician_id)) : null;
+
+    if (getDbStatus()) {
+      const [hubResult, technicianResult] = await Promise.all([
+        hub_id
+          ? pool.query('SELECT id, hub_name, incharge_name FROM repair_hubs WHERE id = $1 AND is_active IS DISTINCT FROM FALSE', [Number(hub_id)])
+          : Promise.resolve({ rows: [] as any[] }),
+        technician_id
+          ? pool.query(`
+              SELECT tech.id, tech.technician_code, tech.name, tech.phone, tech.email,
+                     tech.hub_id, COALESCE(tech.hub_name, hub.hub_name, '') AS hub_name,
+                     tech.specialization, tech.status
+              FROM technicians tech
+              JOIN users app_user
+                ON LOWER(app_user.email) = LOWER(tech.email)
+               AND app_user.status = 'active'
+               AND app_user.deleted_at IS NULL
+              JOIN roles app_role
+                ON app_role.id = app_user.role_id
+               AND UPPER(app_role.name) = 'TECHNICIAN'
+              LEFT JOIN repair_hubs hub ON hub.id = tech.hub_id
+              WHERE tech.id = $1 AND COALESCE(tech.status, 'Available') NOT IN ('Inactive', 'Disabled')
+            `, [Number(technician_id)])
+          : Promise.resolve({ rows: [] as any[] })
+      ]);
+      if (hub_id) {
+        if (!hubResult.rows.length) {
+          return res.status(400).json({ success: false, message: 'Selected receiving hub is unavailable.' });
+        }
+        targetHub = hubResult.rows[0];
+      }
+      if (technician_id) {
+        if (!technicianResult.rows.length) {
+          return res.status(400).json({ success: false, message: 'Selected technician is not an active technician account.' });
+        }
+        assignedTech = technicianResult.rows[0];
+      }
+    }
 
     const returnNumber = `DR-RET-${1000 + (memoryStore.scootyReturns?.length || 0) + 1}`;
     const now = new Date().toISOString();
@@ -504,6 +566,77 @@ export const assignTechnicianForReturn = async (req: AuthRequest, res: Response)
 
     if (!technician_id) {
       return res.status(400).json({ success: false, message: 'Please select a technician to assign' });
+    }
+
+    if (getDbStatus()) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const techResult = await client.query(`
+          SELECT tech.id, tech.technician_code, tech.name, tech.phone
+          FROM technicians tech
+          JOIN users app_user
+            ON LOWER(app_user.email) = LOWER(tech.email)
+           AND app_user.status = 'active'
+           AND app_user.deleted_at IS NULL
+          JOIN roles app_role
+            ON app_role.id = app_user.role_id
+           AND UPPER(app_role.name) = 'TECHNICIAN'
+          WHERE tech.id = $1 AND COALESCE(tech.status, 'Available') NOT IN ('Inactive', 'Disabled')
+        `, [Number(technician_id)]);
+        if (!techResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Selected technician not found.' });
+        }
+        const tech = techResult.rows[0];
+        const returnResult = await client.query(
+          'SELECT * FROM scooty_returns WHERE id = $1 OR return_number = $2 FOR UPDATE',
+          [returnId || 0, id]
+        );
+        if (!returnResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Return record not found.' });
+        }
+        const scootyReturn = returnResult.rows[0];
+        const now = new Date().toISOString();
+        const updated = await client.query(`
+          UPDATE scooty_returns SET technician_id = $1, technician_name = $2,
+            technician_phone = $3, technician_code = $4, updated_at = $5
+          WHERE id = $6 RETURNING *
+        `, [tech.id, tech.name, tech.phone, tech.technician_code, now, scootyReturn.id]);
+        await client.query(`
+          INSERT INTO scooty_return_events
+            (return_id, event_type, title, description, status, performed_by_id,
+             performed_by_name, performed_by_role, created_at)
+          VALUES ($1, 'TECHNICIAN_ASSIGNED', 'Technician Assigned for Inspection', $2,
+                  $3, $4, $5, $6, $7)
+        `, [scootyReturn.id,
+          `Hub Incharge assigned technician ${tech.name} to perform physical and mechanical damage inspection.`,
+          scootyReturn.status, req.user?.id || null, req.user?.name || 'Hub Incharge',
+          req.user?.roleDisplayName || 'Hub Incharge', now]);
+        await client.query('COMMIT');
+
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'ASSIGN_RETURN_INSPECTION',
+          module: 'Returns',
+          recordId: scootyReturn.id,
+          newValues: { technician_id: tech.id, technician_name: tech.name },
+          notes: `Assigned technician ${tech.name} to return ticket ${scootyReturn.return_number}`
+        });
+        return res.json({
+          success: true,
+          message: `Technician ${tech.name} assigned for return inspection.`,
+          data: updated.rows[0]
+        });
+      } catch (dbError) {
+        await client.query('ROLLBACK');
+        throw dbError;
+      } finally {
+        client.release();
+      }
     }
 
     const tech = (memoryStore.technicians || []).find(t => t.id === Number(technician_id));

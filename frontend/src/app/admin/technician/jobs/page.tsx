@@ -206,15 +206,15 @@ export default function TechnicianJobsSummaryPage() {
   };
 
   const isTechnicianRole = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
-  const canWorkshopView = hasPermission('technician_tasks.workshop.view') || hasPermission('repairs.view');
-  const canFieldView = hasPermission('technician_tasks.field.view') || hasPermission('complaints.view');
-  const canReturnsView = hasPermission('technician_tasks.returns.view') || hasPermission('returns.view');
-  const canRecoveriesView = hasPermission('technician_tasks.recoveries.view') || hasPermission('recoveries.view');
-  const canFieldStatus = hasPermission('technician_tasks.field.update_status') || hasPermission('complaints.update');
-  const canFieldComplete = hasPermission('technician_tasks.field.complete') || hasPermission('complaints.update');
-  const canTrackField = hasPermission('technician_tasks.field.track') || hasPermission('complaints.track');
-  const canReturnInspect = hasPermission('technician_tasks.returns.inspect') || hasPermission('returns.inspect');
-  const canRecoveryInspect = hasPermission('technician_tasks.recoveries.inspect') || hasPermission('recoveries.inspect');
+  const canWorkshopView = hasPermission('technician_tasks.workshop.view');
+  const canFieldView = hasPermission('technician_tasks.field.view');
+  const canReturnsView = hasPermission('technician_tasks.returns.view');
+  const canRecoveriesView = hasPermission('technician_tasks.recoveries.view');
+  const canFieldStatus = hasPermission('technician_tasks.field.update_status');
+  const canFieldComplete = hasPermission('technician_tasks.field.complete');
+  const canTrackField = hasPermission('technician_tasks.field.track');
+  const canReturnInspect = hasPermission('technician_tasks.returns.inspect');
+  const canRecoveryInspect = hasPermission('technician_tasks.recoveries.inspect');
   const hasInventoryAccess = hasPermission('inventory.view') || hasPermission('technician_tasks.workshop.inspect') || hasPermission('technician_tasks.workshop.request_parts') || canReturnInspect || canRecoveryInspect;
   const availableWorkspaceModes = [
     ...(canWorkshopView ? ['WORKSHOP' as const] : []),
@@ -1754,7 +1754,7 @@ export default function TechnicianJobsSummaryPage() {
                           {/* Action Button */}
                           <div>
                             {job.status === 'Pending Inspection' || job.status === 'Technician Assigned' ? (
-                              hasPermission('technician_tasks.workshop.inspect') || hasPermission('repairs.update') ? (
+                              hasPermission('technician_tasks.workshop.inspect') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=inspect`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
@@ -1772,7 +1772,7 @@ export default function TechnicianJobsSummaryPage() {
                                 <ChevronRight className="w-3.5 h-3.5" />
                               </Link>
                             ) : job.status === 'Repair Approved' ? (
-                              hasPermission('technician_tasks.workshop.start') || hasPermission('repairs.update') ? (
+                              hasPermission('technician_tasks.workshop.start') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=start`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#0066FF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
@@ -1782,7 +1782,7 @@ export default function TechnicianJobsSummaryPage() {
                               </Link>
                               ) : <span className="text-xs text-slate-400">View only</span>
                             ) : job.status === 'Repairing' ? (
-                              hasPermission('technician_tasks.workshop.complete') || hasPermission('repairs.update') ? (
+                              hasPermission('technician_tasks.workshop.complete') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=complete`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#00A854] hover:bg-[#008744] text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"

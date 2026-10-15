@@ -85,8 +85,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (pathname?.startsWith('/admin/technician/jobs') && ![
           'technician_tasks.workshop.view', 'technician_tasks.field.view',
-          'technician_tasks.returns.view', 'technician_tasks.recoveries.view',
-          'repairs.view', 'complaints.view', 'returns.view', 'recoveries.view'
+          'technician_tasks.returns.view', 'technician_tasks.recoveries.view'
         ].some(code => hasPermission(code))) {
           router.replace('/admin/no-access');
           return;

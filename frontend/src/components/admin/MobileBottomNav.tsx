@@ -44,7 +44,7 @@ export const MobileBottomNav: React.FC = () => {
           name: 'My Tasks',
           href: '/admin/technician/jobs',
           icon: Home,
-          show: ['technician_tasks.workshop.view', 'technician_tasks.field.view', 'technician_tasks.returns.view', 'technician_tasks.recoveries.view', 'repairs.view', 'complaints.view', 'returns.view', 'recoveries.view'].some(code => hasPermission(code))
+          show: ['technician_tasks.workshop.view', 'technician_tasks.field.view', 'technician_tasks.returns.view', 'technician_tasks.recoveries.view'].some(code => hasPermission(code))
         },
         {
           name: 'Profile',
