@@ -305,8 +305,8 @@ export default function ComplaintOverviewPage() {
   const isWorkDone = complaint.status === 'Work Done';
   const isClosed = complaint.status === 'Closed';
 
-  let custLat = parseFloat(String(complaint.latitude || ''));
-  let custLng = parseFloat(String(complaint.longitude || ''));
+  let custLat = parseFloat(String(complaint.latitude ?? ''));
+  let custLng = parseFloat(String(complaint.longitude ?? ''));
 
   if (!isValidLatLng(custLat, custLng) && complaint.location_url) {
     const parsed = extractCoordsFromUrl(complaint.location_url);
@@ -316,8 +316,8 @@ export default function ComplaintOverviewPage() {
     }
   }
 
-  const techLat = parseFloat(String(complaint.technician_latitude || ''));
-  const techLng = parseFloat(String(complaint.technician_longitude || ''));
+  const techLat = parseFloat(String(complaint.technician_latitude ?? ''));
+  const techLng = parseFloat(String(complaint.technician_longitude ?? ''));
 
   const mapsDirectionsUrl = buildNavigationUrl(custLat, custLng, techLat, techLng, complaint.location_url);
   const exactPinUrl = getExactLocationUrl(complaint.location_url, custLat, custLng);
@@ -752,7 +752,7 @@ export default function ComplaintOverviewPage() {
 
         {/* Modal: Assign / Reassign Technician */}
         {showAssignModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
@@ -777,7 +777,12 @@ export default function ComplaintOverviewPage() {
                   Select Field Technician for Hub: {complaint.hub_name}
                 </label>
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {technicians.map(t => {
+                  {technicians.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                      <p className="text-sm font-bold text-slate-800">No active technicians available</p>
+                      <p className="mt-1 text-xs text-slate-500">Create or activate a technician account assigned to this service hub, then refresh this page.</p>
+                    </div>
+                  ) : technicians.map(t => {
                     const isSelected = selectedTechId === t.id;
                     return (
                       <div

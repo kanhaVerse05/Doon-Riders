@@ -35,74 +35,49 @@ export function isValidLatLng(lat: any, lng: any): boolean {
 // Helper to extract GPS coordinates from any Maps URL or coordinate string
 export function extractCoordsFromUrl(input: string | null | undefined): { lat: number; lng: number } | null {
   if (!input || typeof input !== 'string') return null;
-  const str = decodeURIComponent(input.trim());
+  let str = input.trim();
+  try { str = decodeURIComponent(str); } catch { /* Keep the original URL if encoding is malformed. */ }
 
-  // 1. Google Maps @lat,lng e.g. /@30.3702123,78.1042456,17z
-  const atMatch = str.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (atMatch) {
-    const lat = parseFloat(atMatch[1]);
-    const lng = parseFloat(atMatch[2]);
+  const patterns = [
+    // Google Maps place pin. Prefer this over @lat,lng, which is often only the map viewport center.
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i,
+    /[?&](?:q|query|ll|daddr|destination|loc|point)=(-?\d+(?:\.\d+)?)[,\s+]+(-?\d+(?:\.\d+)?)/i,
+    /\/place\/(-?\d+(?:\.\d+)?)[,\s+]+(-?\d+(?:\.\d+)?)/i,
+    /[?&]mlat=(-?\d+(?:\.\d+)?).*?[?&]mlon=(-?\d+(?:\.\d+)?)/i,
+    /#map=\d+\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)/i,
+    /geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+    // Camera center is a last-resort fallback for links without a pin or destination.
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+    /^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/,
+    /(-?\d{1,2}\.\d{3,})[,\s+]+(-?\d{1,3}\.\d{3,})/
+  ];
+
+  for (const pattern of patterns) {
+    const match = str.match(pattern);
+    if (!match) continue;
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
     if (isValidLatLng(lat, lng)) return { lat, lng };
   }
-
-  // 2. Query param style: q=lat,lng, query=lat,lng, ll=lat,lng, daddr=lat,lng, destination=lat,lng, loc=lat,lng
-  const qMatch = str.match(/[?&](?:q|query|ll|daddr|destination|loc|point)=(-?\d+\.\d+)[,\s%20]+(-?\d+\.\d+)/i);
-  if (qMatch) {
-    const lat = parseFloat(qMatch[1]);
-    const lng = parseFloat(qMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 3. OpenStreetMap / mlat & mlon query parameters
-  const osmMatch = str.match(/[?&]mlat=(-?\d+\.\d+).*?[?&]mlo[ng]{1,2}=(-?\d+\.\d+)/i);
-  if (osmMatch) {
-    const lat = parseFloat(osmMatch[1]);
-    const lng = parseFloat(osmMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 4. OpenStreetMap hash format: #map=16/30.3702/78.1042
-  const osmHashMatch = str.match(/#map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/i);
-  if (osmHashMatch) {
-    const lat = parseFloat(osmHashMatch[1]);
-    const lng = parseFloat(osmHashMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 5. Google Maps place coordinates: /place/30.3702,78.1042 or /place/30.3702+78.1042
-  const placeMatch = str.match(/\/place\/(-?\d+\.\d+)[,\s+%20]+(-?\d+\.\d+)/i);
-  if (placeMatch) {
-    const lat = parseFloat(placeMatch[1]);
-    const lng = parseFloat(placeMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 6. geo: URI scheme e.g. geo:30.3702,78.1042
-  const geoMatch = str.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/i);
-  if (geoMatch) {
-    const lat = parseFloat(geoMatch[1]);
-    const lng = parseFloat(geoMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 7. Plain string coordinate pattern: "30.3702, 78.1042" or "30.3702,78.1042"
-  const rawCoordMatch = str.match(/^(-?\d{1,2}\.\d+)[,\s]+(-?\d{1,3}\.\d+)$/);
-  if (rawCoordMatch) {
-    const lat = parseFloat(rawCoordMatch[1]);
-    const lng = parseFloat(rawCoordMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 8. General coordinate pattern inside any text
-  const genericMatch = str.match(/(-?\d{1,2}\.\d{3,})[,\s%20]+(-?\d{1,3}\.\d{3,})/);
-  if (genericMatch) {
-    const lat = parseFloat(genericMatch[1]);
-    const lng = parseFloat(genericMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
   return null;
 }
+
+const getAvailableFieldTechnicians = async (hubId?: number | null) => {
+  const result = await pool.query(`
+    SELECT t.id, t.technician_code, t.name, t.phone, t.hub_id, t.hub_name,
+           t.specialization, t.status, t.rating
+    FROM technicians t
+    JOIN users u ON LOWER(u.email) = LOWER(t.email)
+    JOIN roles r ON r.id = u.role_id
+    WHERE u.status = 'active'
+      AND u.deleted_at IS NULL
+      AND r.name ILIKE '%TECH%'
+      AND LOWER(COALESCE(t.status, 'available')) NOT IN ('inactive', 'disabled', 'deleted')
+      AND ($1::int IS NULL OR t.hub_id IS NULL OR t.hub_id = $1)
+    ORDER BY t.name ASC
+  `, [hubId || null]);
+  return result.rows;
+};
 
 // Helper to resolve short links and extract coordinates
 export const resolveCoordinatesFromUrl = async (
@@ -214,8 +189,12 @@ export const getAllComplaints = async (req: AuthRequest, res: Response) => {
           params.push((req.user as any).hub_id);
           pIndex++;
         } else if (userRole.includes('TECH')) {
-          whereClauses.push(`c.technician_id = $${pIndex}`);
-          params.push(userId);
+          whereClauses.push(`c.technician_id = (
+            SELECT t.id FROM technicians t
+            WHERE LOWER(t.email) = LOWER($${pIndex})
+            LIMIT 1
+          )`);
+          params.push(req.user?.email || '');
           pIndex++;
         }
 
@@ -280,6 +259,7 @@ export const getAllComplaints = async (req: AuthRequest, res: Response) => {
         `;
 
         const result = await pool.query(sql, params);
+        const technicians = await getAvailableFieldTechnicians();
 
         const statsRes = await pool.query(`
           SELECT status, COUNT(*) as count 
@@ -315,7 +295,7 @@ export const getAllComplaints = async (req: AuthRequest, res: Response) => {
           data: result.rows,
           stats,
           hubs: memoryStore.repairHubs,
-          technicians: memoryStore.technicians
+          technicians
         });
       } catch (dbErr) {
         console.warn('[getAllComplaints] DB query error, falling back to memoryStore:', dbErr);
@@ -407,7 +387,8 @@ export const getComplaintById = async (req: AuthRequest, res: Response) => {
     if (getDbStatus()) {
       try {
         const cRes = await pool.query(
-          `SELECT c.*, tech.phone as technician_phone, tech.technician_code, tech.specialization as technician_specialization, tech.rating as technician_rating
+          `SELECT c.*, tech.phone as technician_phone, tech.technician_code, tech.email as assigned_technician_email,
+                  tech.specialization as technician_specialization, tech.rating as technician_rating
            FROM complaints c
            LEFT JOIN technicians tech ON c.technician_id = tech.id
            WHERE c.id = $1 OR c.complaint_number = $2`,
@@ -416,17 +397,23 @@ export const getComplaintById = async (req: AuthRequest, res: Response) => {
 
         if (cRes.rows.length > 0) {
           const complaint = cRes.rows[0];
+          if (String(req.user?.roleName || '').toUpperCase().includes('TECH') &&
+              String(complaint.assigned_technician_email || '').toLowerCase() !== String(req.user?.email || '').toLowerCase()) {
+            return res.status(404).json({ success: false, message: 'Complaint not found' });
+          }
+          delete complaint.assigned_technician_email;
           const eventsRes = await pool.query(
             `SELECT * FROM complaint_events WHERE complaint_id = $1 ORDER BY created_at ASC`,
             [complaint.id]
           );
+          const technicians = await getAvailableFieldTechnicians(Number(complaint.hub_id) || null);
 
           return res.json({
             success: true,
             data: complaint,
             timeline: eventsRes.rows,
             hubs: memoryStore.repairHubs,
-            technicians: memoryStore.technicians
+            technicians
           });
         }
       } catch (dbErr) {
@@ -693,18 +680,41 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Please select a technician to assign' });
     }
 
-    const tech = memoryStore.technicians.find(t => t.id === Number(technician_id));
-    if (!tech) {
-      return res.status(404).json({ success: false, message: 'Selected technician not found' });
-    }
-
     const now = new Date().toISOString();
     const performerName = req.user?.name || 'Hub Incharge';
     const performerRole = req.user?.roleDisplayName || 'Hub Incharge';
 
     if (getDbStatus()) {
+      const targetComplaint = await pool.query(
+        `SELECT id, hub_id FROM complaints WHERE id = $1 OR complaint_number = $2 LIMIT 1`,
+        [complaintId || 0, id]
+      );
+      if (!targetComplaint.rows[0]) {
+        return res.status(404).json({ success: false, message: 'Complaint not found' });
+      }
+      const targetHubId = Number(hub_id) || Number(targetComplaint.rows[0].hub_id) || null;
+      const techResult = await pool.query(
+        `SELECT t.id, t.technician_code, t.name, t.phone, t.hub_id, t.hub_name,
+                t.specialization, t.status
+         FROM technicians t
+         JOIN users u ON LOWER(u.email) = LOWER(t.email)
+         JOIN roles r ON r.id = u.role_id
+         WHERE t.id = $1 AND u.status = 'active' AND u.deleted_at IS NULL
+           AND r.name ILIKE '%TECH%'
+           AND LOWER(COALESCE(t.status, 'available')) NOT IN ('inactive', 'disabled', 'deleted')
+           AND ($2::int IS NULL OR t.hub_id IS NULL OR t.hub_id = $2)
+         LIMIT 1`,
+        [Number(technician_id), targetHubId]
+      );
+      const tech = techResult.rows[0];
+      if (!tech) {
+        return res.status(404).json({ success: false, message: 'Selected active technician was not found for this service hub' });
+      }
+
+      const client = await pool.connect();
       try {
-        await pool.query(
+        await client.query('BEGIN');
+        const complaintResult = await client.query(
           `UPDATE complaints SET
             technician_id = $1,
             technician_name = $2,
@@ -712,16 +722,21 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
             technician_code = $4,
             status = 'Assigned',
             updated_at = $5
-           WHERE id = $6 OR complaint_number = $7`,
+           WHERE id = $6 OR complaint_number = $7
+           RETURNING *`,
           [tech.id, tech.name, tech.phone, tech.technician_code, now, complaintId || 0, id]
         );
+        if (!complaintResult.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Complaint not found' });
+        }
 
-        await pool.query(
+        await client.query(
           `INSERT INTO complaint_events (
             complaint_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, metadata, created_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
-            complaintId,
+            complaintResult.rows[0].id,
             'TECHNICIAN_ASSIGNED',
             'Technician Assigned',
             `${performerName} assigned Field Technician ${tech.name} (${tech.technician_code}).`,
@@ -733,11 +748,32 @@ export const assignTechnician = async (req: AuthRequest, res: Response) => {
             now
           ]
         );
+        await client.query('COMMIT');
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: req.user?.name,
+          userRole: req.user?.roleName,
+          action: 'ASSIGN_TECHNICIAN',
+          module: 'Complaints',
+          recordId: complaintResult.rows[0].id,
+          newValues: { technician_id: tech.id, technician_name: tech.name, status: 'Assigned' },
+          notes: `Assigned technician ${tech.name} to complaint ${complaintResult.rows[0].complaint_number || id}`
+        });
+        return res.json({
+          success: true,
+          message: `Technician ${tech.name} assigned successfully. Job now visible in Technician App.`,
+          data: complaintResult.rows[0]
+        });
       } catch (dbErr) {
-        console.warn('[assignTechnician] DB update error, falling back to memoryStore:', dbErr);
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw dbErr;
+      } finally {
+        client.release();
       }
     }
 
+    const tech = memoryStore.technicians.find(t => t.id === Number(technician_id));
+    if (!tech) return res.status(404).json({ success: false, message: 'Selected technician not found' });
     const complaint = (memoryStore.complaints || []).find(
       c => c.id === complaintId || c.complaint_number.toLowerCase() === id.toLowerCase()
     );
@@ -812,18 +848,34 @@ export const updateTechnicianLocation = async (req: AuthRequest, res: Response) 
     const now = new Date().toISOString();
 
     if (getDbStatus()) {
-      try {
-        await pool.query(
+      const result = await pool.query(
           `UPDATE complaints SET
             technician_latitude = $1,
             technician_longitude = $2,
             technician_location_updated_at = $3
-           WHERE id = $4 OR complaint_number = $5`,
-          [lat, lng, now, complaintId || 0, id]
-        );
-      } catch (dbErr) {
-        console.warn('[updateTechnicianLocation] DB ping error:', dbErr);
+           WHERE (id = $4 OR complaint_number = $5)
+             AND ($6::boolean = FALSE OR technician_id = (
+               SELECT t.id FROM technicians t WHERE LOWER(t.email) = LOWER($7) LIMIT 1
+             ))
+           RETURNING id, technician_id`,
+          [lat, lng, now, complaintId || 0, id,
+            String(req.user?.roleName || '').toUpperCase().includes('TECH'), req.user?.email || '']
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ success: false, message: 'Assigned complaint not found' });
       }
+      return res.json({
+        success: true,
+        data: {
+          complaint_id: result.rows[0].id,
+          latitude: lat,
+          longitude: lng,
+          accuracy: accuracy ?? null,
+          speed: speed ?? null,
+          heading: heading ?? null,
+          updated_at: now
+        }
+      });
     }
 
     const complaint = (memoryStore.complaints || []).find(
@@ -884,9 +936,26 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
     const performerName = req.user?.name || 'Technician';
     const performerRole = req.user?.roleDisplayName || 'Technician';
 
-    const complaint = (memoryStore.complaints || []).find(
+    let complaint: any;
+    if (getDbStatus()) {
+      const complaintResult = await pool.query(
+        `SELECT c.*, tech.email AS assigned_technician_email
+         FROM complaints c LEFT JOIN technicians tech ON tech.id = c.technician_id
+         WHERE c.id = $1 OR c.complaint_number = $2 LIMIT 1`,
+        [complaintId || 0, id]
+      );
+      complaint = complaintResult.rows[0];
+      if (!complaint) return res.status(404).json({ success: false, message: 'Complaint not found' });
+      if (String(req.user?.roleName || '').toUpperCase().includes('TECH') &&
+          String(complaint.assigned_technician_email || '').toLowerCase() !== String(req.user?.email || '').toLowerCase()) {
+        return res.status(404).json({ success: false, message: 'Complaint not found' });
+      }
+      delete complaint.assigned_technician_email;
+    } else {
+      complaint = (memoryStore.complaints || []).find(
       c => c.id === complaintId || c.complaint_number.toLowerCase() === id.toLowerCase()
-    );
+      );
+    }
 
     if (!complaint) {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
@@ -900,7 +969,7 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
     if (status === 'En Route') {
       complaint.status = 'En Route';
       complaint.journey_started_at = now;
-      if (latitude && longitude) {
+      if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
         complaint.technician_latitude = Number(latitude);
         complaint.technician_longitude = Number(longitude);
         complaint.technician_location_updated_at = now;
@@ -914,7 +983,7 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
     else if (status === 'Reached') {
       complaint.status = 'Reached';
       complaint.reached_at = now;
-      if (latitude && longitude) {
+      if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
         complaint.reached_latitude = Number(latitude);
         complaint.reached_longitude = Number(longitude);
         complaint.technician_latitude = Number(latitude);
@@ -948,7 +1017,7 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
     else if (status === 'Work Done') {
       complaint.status = 'Work Done';
       complaint.work_completed_at = now;
-      if (latitude && longitude) {
+      if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
         complaint.final_latitude = Number(latitude);
         complaint.final_longitude = Number(longitude);
       }
@@ -1068,7 +1137,8 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
           ]
         );
       } catch (dbErr) {
-        console.warn('[updateComplaintStatus] DB update error:', dbErr);
+        console.error('[updateComplaintStatus] DB update error:', dbErr);
+        throw dbErr;
       }
     }
 

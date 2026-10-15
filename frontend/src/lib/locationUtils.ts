@@ -29,72 +29,30 @@ export function isValidLatLng(lat: any, lng: any): boolean {
  */
 export function extractCoordsFromUrl(input: string | null | undefined): LatLng | null {
   if (!input || typeof input !== 'string') return null;
-  const str = decodeURIComponent(input.trim());
+  let str = input.trim();
+  try { str = decodeURIComponent(str); } catch { /* Keep the original URL if encoding is malformed. */ }
 
-  // 1. Google Maps @lat,lng e.g. /@30.3702123,78.1042456,17z
-  const atMatch = str.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (atMatch) {
-    const lat = parseFloat(atMatch[1]);
-    const lng = parseFloat(atMatch[2]);
+  const patterns = [
+    // Google Maps place pin. Prefer this over @lat,lng, which is often only the map viewport center.
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i,
+    /[?&](?:q|query|ll|daddr|destination|loc|point)=(-?\d+(?:\.\d+)?)[,\s+]+(-?\d+(?:\.\d+)?)/i,
+    /\/place\/(-?\d+(?:\.\d+)?)[,\s+]+(-?\d+(?:\.\d+)?)/i,
+    /[?&]mlat=(-?\d+(?:\.\d+)?).*?[?&]mlon=(-?\d+(?:\.\d+)?)/i,
+    /#map=\d+\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)/i,
+    /geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,
+    // Camera center is a last-resort fallback for links without a pin or destination.
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+    /^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/,
+    /(-?\d{1,2}\.\d{3,})[,\s+]+(-?\d{1,3}\.\d{3,})/
+  ];
+
+  for (const pattern of patterns) {
+    const match = str.match(pattern);
+    if (!match) continue;
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
     if (isValidLatLng(lat, lng)) return { lat, lng };
   }
-
-  // 2. Query param style: q=lat,lng, query=lat,lng, ll=lat,lng, daddr=lat,lng, destination=lat,lng, loc=lat,lng
-  const qMatch = str.match(/[?&](?:q|query|ll|daddr|destination|loc|point)=(-?\d+\.\d+)[,\s%20]+(-?\d+\.\d+)/i);
-  if (qMatch) {
-    const lat = parseFloat(qMatch[1]);
-    const lng = parseFloat(qMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 3. OpenStreetMap / mlat & mlon query parameters
-  const osmMatch = str.match(/[?&]mlat=(-?\d+\.\d+).*?[?&]mlo[ng]{1,2}=(-?\d+\.\d+)/i);
-  if (osmMatch) {
-    const lat = parseFloat(osmMatch[1]);
-    const lng = parseFloat(osmMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 4. OpenStreetMap hash format: #map=16/30.3702/78.1042
-  const osmHashMatch = str.match(/#map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/i);
-  if (osmHashMatch) {
-    const lat = parseFloat(osmHashMatch[1]);
-    const lng = parseFloat(osmHashMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 5. Google Maps place coordinates: /place/30.3702,78.1042 or /place/30.3702+78.1042
-  const placeMatch = str.match(/\/place\/(-?\d+\.\d+)[,\s+%20]+(-?\d+\.\d+)/i);
-  if (placeMatch) {
-    const lat = parseFloat(placeMatch[1]);
-    const lng = parseFloat(placeMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 6. geo: URI scheme e.g. geo:30.3702,78.1042
-  const geoMatch = str.match(/geo:(-?\d+\.\d+),(-?\d+\.\d+)/i);
-  if (geoMatch) {
-    const lat = parseFloat(geoMatch[1]);
-    const lng = parseFloat(geoMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 7. Plain string coordinate pattern: "30.3702, 78.1042" or "30.3702,78.1042"
-  const rawCoordMatch = str.match(/^(-?\d{1,2}\.\d+)[,\s]+(-?\d{1,3}\.\d+)$/);
-  if (rawCoordMatch) {
-    const lat = parseFloat(rawCoordMatch[1]);
-    const lng = parseFloat(rawCoordMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
-  // 8. General coordinate pattern inside any text (at least 3 decimal digits)
-  const genericMatch = str.match(/(-?\d{1,2}\.\d{3,})[,\s%20]+(-?\d{1,3}\.\d{3,})/);
-  if (genericMatch) {
-    const lat = parseFloat(genericMatch[1]);
-    const lng = parseFloat(genericMatch[2]);
-    if (isValidLatLng(lat, lng)) return { lat, lng };
-  }
-
   return null;
 }
 
@@ -128,8 +86,10 @@ export function buildNavigationUrl(
     return fallbackUrl;
   }
 
-  // Ultimate fallback to Dehradun center
-  return `https://www.google.com/maps/dir/?api=1&destination=30.3256,78.0436&travelmode=driving`;
+  // Do not invent a destination when the complaint has no verified coordinates.
+  return fallbackUrl && (fallbackUrl.startsWith('http://') || fallbackUrl.startsWith('https://'))
+    ? fallbackUrl
+    : 'https://www.google.com/maps';
 }
 
 /**
@@ -148,5 +108,5 @@ export function getExactLocationUrl(
   if (isValidLatLng(parsedLat, parsedLng)) {
     return `https://maps.google.com/?q=${parsedLat},${parsedLng}`;
   }
-  return 'https://maps.google.com/?q=30.3256,78.0436';
+  return 'https://www.google.com/maps';
 }

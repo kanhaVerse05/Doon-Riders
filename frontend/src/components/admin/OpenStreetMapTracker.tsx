@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Navigation, MapPin, ExternalLink, RotateCw, ZoomIn, ZoomOut, Crosshair, Sparkles, Bike, Eye } from 'lucide-react';
+import { MapPin, ExternalLink, RotateCw, ZoomIn, ZoomOut, Crosshair } from 'lucide-react';
 
 interface OpenStreetMapTrackerProps {
-  technicianLat: number;
-  technicianLng: number;
-  customerLat: number;
-  customerLng: number;
+  technicianLat: number | null;
+  technicianLng: number | null;
+  customerLat: number | null;
+  customerLng: number | null;
   technicianName?: string;
   scooterNumber?: string;
   customerName?: string;
@@ -28,6 +28,10 @@ function calculateStraightDistanceKm(lat1: number, lon1: number, lat2: number, l
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(R * c * 10) / 10;
 }
+
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]!));
 
 export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   technicianLat,
@@ -62,12 +66,17 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   });
 
   const [loadingRoute, setLoadingRoute] = useState(false);
-  const [lastMovedAt, setLastMovedAt] = useState<Date>(new Date());
+  const isLocationFresh = !!lastUpdated && Number.isFinite(new Date(lastUpdated).getTime()) &&
+    Date.now() - new Date(lastUpdated).getTime() <= 2 * 60 * 1000;
 
-  const validTechLat = typeof technicianLat === 'number' && !isNaN(technicianLat) && technicianLat !== 0 ? technicianLat : 30.2863;
-  const validTechLng = typeof technicianLng === 'number' && !isNaN(technicianLng) && technicianLng !== 0 ? technicianLng : 78.0069;
-  const validCustLat = typeof customerLat === 'number' && !isNaN(customerLat) && customerLat !== 0 ? customerLat : 30.3256;
-  const validCustLng = typeof customerLng === 'number' && !isNaN(customerLng) && customerLng !== 0 ? customerLng : 78.0436;
+  const hasTechLocation = Number.isFinite(technicianLat) && Number.isFinite(technicianLng) &&
+    technicianLat! >= -90 && technicianLat! <= 90 && technicianLng! >= -180 && technicianLng! <= 180;
+  const hasCustomerLocation = Number.isFinite(customerLat) && Number.isFinite(customerLng) &&
+    customerLat! >= -90 && customerLat! <= 90 && customerLng! >= -180 && customerLng! <= 180;
+  const validTechLat = hasTechLocation ? technicianLat! : null;
+  const validTechLng = hasTechLocation ? technicianLng! : null;
+  const validCustLat = hasCustomerLocation ? customerLat! : null;
+  const validCustLng = hasCustomerLocation ? customerLng! : null;
 
   // Fetch real road route geometry from OSRM
   const fetchRealRoadRoute = useCallback(async (
@@ -76,6 +85,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
     endLat: number,
     endLng: number
   ): Promise<[number, number][] | null> => {
+    if (!hasTechLocation || !hasCustomerLocation) return null;
     try {
       setLoadingRoute(true);
       const controller = new AbortController();
@@ -116,7 +126,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       setLoadingRoute(false);
     }
     return null;
-  }, []);
+  }, [hasTechLocation, hasCustomerLocation]);
 
   // Initialize Map
   useEffect(() => {
@@ -124,6 +134,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
 
     const initMap = async () => {
       if (typeof window === 'undefined' || !mapContainerRef.current) return;
+      if (!hasCustomerLocation || validCustLat === null || validCustLng === null) return;
 
       const L = (await import('leaflet')).default;
 
@@ -160,6 +171,10 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       }
 
       // 1. Delivery Rider Pulse Marker (Live GPS)
+      const safeTechnicianName = escapeHtml(technicianName);
+      const safeCustomerName = escapeHtml(customerName);
+      const safeScooterNumber = escapeHtml(scooterNumber);
+      const safeCustomerAddress = escapeHtml(customerAddress);
       const techIcon = L.divIcon({
         className: 'delivery-tech-marker',
         html: `
@@ -170,7 +185,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
             </div>
             <div style="background: #0A0F1D; color: #FFFFFF; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 20px; margin-top: 4px; white-space: nowrap; border: 1.5px solid #00D96B; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 3; display: flex; align-items: center; gap: 4px;">
               <span style="width: 6px; height: 6px; border-radius: 50%; background: #00D96B; display: inline-block;"></span>
-              <span>${technicianName}</span>
+              <span>${safeTechnicianName}</span>
             </div>
           </div>
         `,
@@ -191,7 +206,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
               </svg>
             </div>
             <div style="background: #111827; color: #FFFFFF; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 20px; margin-top: 4px; white-space: nowrap; border: 1px solid #EF4444; box-shadow: 0 4px 10px rgba(0,0,0,0.4); z-index: 3;">
-              📍 ${scooterNumber} (${customerName})
+              📍 ${safeScooterNumber} (${safeCustomerName})
             </div>
           </div>
         `,
@@ -201,11 +216,12 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
 
       // Initialize Leaflet Map
       const map = L.map(mapContainerRef.current, {
-        center: [(validTechLat + validCustLat) / 2, (validTechLng + validCustLng) / 2],
-        zoom: 13,
+        center: hasTechLocation ? [(validTechLat! + validCustLat) / 2, (validTechLng! + validCustLng) / 2] : [validCustLat, validCustLng],
+        zoom: hasTechLocation ? 13 : 15,
         zoomControl: false,
         attributionControl: false
       });
+      mapInstanceRef.current = map;
 
       // Free High-Resolution OpenStreetMap Tiles
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -217,62 +233,63 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       L.control.attribution({ position: 'bottomright', prefix: false }).addTo(map);
 
       // Add Technician Marker
-      const techMarker = L.marker([validTechLat, validTechLng], { icon: techIcon })
-        .addTo(map)
-        .bindPopup(`
+      if (hasTechLocation && validTechLat !== null && validTechLng !== null) {
+        const techMarker = L.marker([validTechLat, validTechLng], { icon: techIcon })
+          .addTo(map)
+          .bindPopup(`
           <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
-            <strong style="color: #00A854;">🏍️ Technician: ${technicianName}</strong><br/>
+            <strong style="color: #00A854;">🏍️ Technician: ${safeTechnicianName}</strong><br/>
             <span>Status: <b>${status}</b></span><br/>
             <span style="font-size: 10px; color: #64748B;">GPS: ${Number(validTechLat).toFixed(4)}, ${Number(validTechLng).toFixed(4)}</span>
           </div>
-        `);
-      techMarkerRef.current = techMarker;
+          `);
+        techMarkerRef.current = techMarker;
+      }
 
       // Add Customer Marker
       const custMarker = L.marker([validCustLat, validCustLng], { icon: customerIcon })
         .addTo(map)
         .bindPopup(`
           <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
-            <strong style="color: #DC2626;">📍 Breakdown Spot: ${scooterNumber}</strong><br/>
-            <span>Customer: <b>${customerName}</b></span><br/>
-            <span style="font-size: 11px; color: #475569;">${customerAddress}</span><br/>
+            <strong style="color: #DC2626;">📍 Breakdown Spot: ${safeScooterNumber}</strong><br/>
+            <span>Customer: <b>${safeCustomerName}</b></span><br/>
+            <span style="font-size: 11px; color: #475569;">${safeCustomerAddress}</span><br/>
             <span style="font-size: 10px; color: #64748B;">GPS: ${Number(validCustLat).toFixed(4)}, ${Number(validCustLng).toFixed(4)}</span>
           </div>
         `);
       custMarkerRef.current = custMarker;
 
       // Fetch Initial Real Road Route
-      const roadCoords = await fetchRealRoadRoute(validTechLat, validTechLng, validCustLat, validCustLng);
-      const pointsToDraw: [number, number][] = roadCoords && roadCoords.length > 0 ? roadCoords : [
-        [validTechLat, validTechLng],
-        [validCustLat, validCustLng]
-      ];
+      if (!isMounted) return;
+      const roadCoords = hasTechLocation && validTechLat !== null && validTechLng !== null
+        ? await fetchRealRoadRoute(validTechLat, validTechLng, validCustLat, validCustLng)
+        : null;
+      const pointsToDraw: [number, number][] = roadCoords && roadCoords.length > 0 ? roadCoords : [];
 
       // Outer Ambient Glow Polyline
-      const glowLine = L.polyline(pointsToDraw as any, {
+      const glowLine = pointsToDraw.length ? L.polyline(pointsToDraw as any, {
         color: '#00D96B',
         weight: 9,
         opacity: 0.35,
         lineCap: 'round',
         lineJoin: 'round'
-      }).addTo(map);
+      }).addTo(map) : null;
       glowLineRef.current = glowLine;
 
       // Inner Sharp Driving Road Polyline
-      const routeLine = L.polyline(pointsToDraw as any, {
+      const routeLine = pointsToDraw.length ? L.polyline(pointsToDraw as any, {
         color: '#00B85C',
         weight: 5,
         opacity: 0.95,
         lineCap: 'round',
         lineJoin: 'round'
-      }).addTo(map);
+      }).addTo(map) : null;
       routeLineRef.current = routeLine;
 
       // Fit map view bounds with padding
-      const bounds = L.latLngBounds(pointsToDraw as any);
-      map.fitBounds(bounds, { padding: [55, 55], maxZoom: 16 });
+      if (pointsToDraw.length > 1) map.fitBounds(L.latLngBounds(pointsToDraw as any), { padding: [55, 55], maxZoom: 16 });
+      else map.setView([validCustLat, validCustLng], 15);
 
-      mapInstanceRef.current = map;
     };
 
     initMap();
@@ -284,24 +301,22 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [validCustLat, validCustLng, fetchRealRoadRoute]);
+  }, [validCustLat, validCustLng, hasCustomerLocation, hasTechLocation, fetchRealRoadRoute]);
 
   // Dynamic Realtime Position Updates: When technician GPS changes dynamically
   useEffect(() => {
-    if (!mapInstanceRef.current || !techMarkerRef.current) return;
+    if (!mapInstanceRef.current || !techMarkerRef.current || validTechLat === null || validTechLng === null || validCustLat === null || validCustLng === null) return;
 
     // 1. Smoothly update technician marker position
     techMarkerRef.current.setLatLng([validTechLat, validTechLng]);
     techMarkerRef.current.setPopupContent(`
       <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4;">
-        <strong style="color: #00A854;">🏍️ Technician: ${technicianName}</strong><br/>
+        <strong style="color: #00A854;">🏍️ Technician: ${escapeHtml(technicianName)}</strong><br/>
         <span>Status: <b>${status}</b></span><br/>
         <span style="font-size: 10px; color: #00A854; font-weight: 700;">GPS: ${Number(validTechLat).toFixed(4)}, ${Number(validTechLng).toFixed(4)}</span><br/>
         ${lastUpdated ? `<span style="font-size: 9px; color: #64748B;">Synced: ${new Date(lastUpdated).toLocaleTimeString('en-IN')}</span>` : ''}
       </div>
     `);
-
-    setLastMovedAt(new Date());
 
     // 2. Auto-follow camera if enabled: smoothly pans along with rider
     if (autoFollow) {
@@ -319,16 +334,15 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
 
     if (movedSignificant) {
       fetchRealRoadRoute(validTechLat, validTechLng, validCustLat, validCustLng).then((newCoords) => {
-        const updatedPoints = newCoords && newCoords.length > 0 ? newCoords : [
-          [validTechLat, validTechLng],
-          [validCustLat, validCustLng]
-        ];
-
-        if (routeLineRef.current) {
-          routeLineRef.current.setLatLngs(updatedPoints as any);
-        }
-        if (glowLineRef.current) {
-          glowLineRef.current.setLatLngs(updatedPoints as any);
+        const updatedPoints = newCoords && newCoords.length > 0 ? newCoords : [];
+        if (updatedPoints.length) {
+          if (routeLineRef.current) routeLineRef.current.setLatLngs(updatedPoints as any);
+          if (glowLineRef.current) glowLineRef.current.setLatLngs(updatedPoints as any);
+        } else {
+          routeLineRef.current?.remove();
+          glowLineRef.current?.remove();
+          routeLineRef.current = null;
+          glowLineRef.current = null;
         }
       });
     }
@@ -340,13 +354,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
       if (routeLineRef.current && routeLineRef.current.getLatLngs().length > 0) {
         const bounds = routeLineRef.current.getBounds();
         mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55], maxZoom: 16, animate: true });
-      } else {
-        const bounds = [
-          [validTechLat, validTechLng],
-          [validCustLat, validCustLng]
-        ];
-        mapInstanceRef.current.fitBounds(bounds, { padding: [55, 55], animate: true });
-      }
+      } else if (validCustLat !== null && validCustLng !== null) mapInstanceRef.current.setView([validCustLat, validCustLng], 15, { animate: true });
     }
   };
 
@@ -364,29 +372,29 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
   const osmDirectionsUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${validTechLat}%2C${validTechLng}%3B${validCustLat}%2C${validCustLng}`;
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-[#E5E7EB] bg-white shadow-sm flex flex-col">
+    <div className="relative isolate rounded-3xl overflow-hidden border border-[#E5E7EB] bg-white shadow-sm flex flex-col">
       {/* Top Floating Control Bar */}
       <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between pointer-events-none gap-2 flex-wrap">
         <div className="bg-[#0A0F1D]/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-700 text-xs font-mono text-white flex items-center gap-2.5 shadow-xl pointer-events-auto">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#00D96B] animate-ping flex-shrink-0" />
+          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${hasTechLocation && isLocationFresh && isEnRoute ? 'bg-[#00D96B] animate-pulse' : 'bg-amber-400'}`} />
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
-                Live Road Navigation
+                {hasTechLocation ? (isLocationFresh && isEnRoute ? 'Live Technician Location' : 'Last Known Technician Location') : 'Waiting for Technician GPS'}
               </span>
               {loadingRoute && (
                 <span className="w-2 h-2 rounded-full bg-[#00D96B] animate-spin" />
               )}
             </div>
             <span className="font-black text-[#00D96B] text-[11px]">
-              {Number(validTechLat).toFixed(4)}° N, {Number(validTechLng).toFixed(4)}° E
+              {hasTechLocation ? `${validTechLat!.toFixed(5)}, ${validTechLng!.toFixed(5)}` : 'Location appears after technician starts sharing'}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto flex-wrap">
           {/* Auto-Follow Toggle */}
-          <button
+          {hasTechLocation && <button
             type="button"
             onClick={() => setAutoFollow(!autoFollow)}
             className={`px-3 py-1.5 rounded-2xl text-xs font-bold border transition flex items-center gap-1.5 shadow-md cursor-pointer ${
@@ -398,11 +406,11 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
           >
             <Crosshair className={`w-3.5 h-3.5 ${autoFollow ? 'text-[#00D96B]' : 'text-slate-400'}`} />
             <span className="text-[11px] font-extrabold">{autoFollow ? 'Auto-Follow: ON' : 'Auto-Follow: OFF'}</span>
-          </button>
+          </button>}
 
           {/* Live ETA / Distance */}
-          <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-slate-200 shadow-lg flex items-center gap-2 text-xs">
-            <span className="text-slate-500 font-bold">ETA:</span>
+          {hasTechLocation && hasCustomerLocation && <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-slate-200 shadow-lg flex items-center gap-2 text-xs">
+            <span className="text-slate-500 font-bold">{routeInfo.isRealRoad ? 'ETA:' : 'Approx.:'}</span>
             <span className="text-emerald-700 font-black font-mono">
               ~ {routeInfo.durationMins} Mins
             </span>
@@ -410,9 +418,9 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
             <span className="text-slate-900 font-black font-mono">
               {routeInfo.distanceKm} KM
             </span>
-          </div>
+          </div>}
 
-          <a
+          {hasTechLocation && hasCustomerLocation && <a
             href={osmDirectionsUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -421,23 +429,32 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
           >
             <span>OSM Map</span>
             <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
-          </a>
+          </a>}
         </div>
       </div>
 
       {/* Map Container Element */}
-      <div ref={mapContainerRef} className="w-full h-[400px] sm:h-[460px] z-0 bg-[#F7F9FA]" />
+      <div className="relative">
+        <div ref={mapContainerRef} className="w-full h-[400px] sm:h-[460px] z-0 bg-[#F7F9FA]" />
+        {!hasCustomerLocation && <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-50 p-6 text-center">
+          <div className="max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <MapPin className="mx-auto mb-2 h-6 w-6 text-amber-500" />
+            <p className="text-sm font-bold text-slate-900">Customer pin is unavailable</p>
+            <p className="mt-1 text-xs text-slate-500">Add a precise map link or coordinates to show the correct breakdown location.</p>
+          </div>
+        </div>}
+      </div>
 
       {/* Floating Bottom Right Controls: Zoom, Focus Rider, Fit Route */}
-      <div className="absolute bottom-16 right-3 z-[400] flex flex-col gap-1.5 shadow-md">
-        <button
+      {hasCustomerLocation && <div className="absolute bottom-16 right-3 z-[20] flex flex-col gap-1.5 shadow-md">
+        {hasTechLocation && <button
           type="button"
           onClick={handleFocusRider}
           title="Focus on Delivery Rider (Technician)"
           className="w-9 h-9 rounded-xl bg-slate-900 hover:bg-black text-white flex items-center justify-center transition cursor-pointer shadow-sm border border-slate-700 active:scale-95"
         >
           <Crosshair className="w-4 h-4 text-[#00D96B]" />
-        </button>
+        </button>}
         <button
           type="button"
           onClick={handleFitRoute}
@@ -462,7 +479,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
         >
           <ZoomOut className="w-4 h-4 text-[#475467]" />
         </button>
-      </div>
+      </div>}
 
       {/* Bottom Live Route Telemetry Banner */}
       <div className="bg-[#F9FAFB] border-t border-[#E5E7EB] p-3.5 sm:p-4 z-10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#111827]">
@@ -472,7 +489,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
               🏍️
             </div>
             <span className="text-[#111827] font-bold truncate">
-              {technicianName}
+              {hasTechLocation ? technicianName : 'Waiting for technician GPS'}
             </span>
           </div>
           <span className="text-[#98A2B3] font-black">&rarr;</span>
@@ -487,7 +504,7 @@ export const OpenStreetMapTracker: React.FC<OpenStreetMapTrackerProps> = ({
         </div>
 
         <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-[#00D96B]/30 font-mono text-[11px] self-end sm:self-auto shadow-xs">
-          <span className="text-[#667085] font-semibold">Live Road Route:</span>
+          <span className="text-[#667085] font-semibold">{!hasTechLocation ? 'Customer pin:' : routeInfo.isRealRoad ? 'Road route:' : 'Direct distance:'}</span>
           <span className="font-black text-[#00A854]">{routeInfo.distanceKm} KM</span>
           <span className="text-slate-300">&bull;</span>
           <span className="text-amber-700 font-extrabold">~ {routeInfo.durationMins} mins ETA</span>

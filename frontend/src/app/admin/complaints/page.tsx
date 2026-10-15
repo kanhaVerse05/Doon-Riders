@@ -1139,7 +1139,7 @@ export default function ComplaintsListPage() {
 
         {/* Modal: Hub Incharge Assign Technician */}
         {assigningComplaint && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
@@ -1181,7 +1181,12 @@ export default function ComplaintsListPage() {
                   Select Field Technician for Dispatch:
                 </label>
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {technicians.map(t => {
+                  {technicians.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                      <p className="text-sm font-bold text-slate-800">No active technicians available</p>
+                      <p className="mt-1 text-xs text-slate-500">Create or activate a technician account assigned to this service hub, then refresh this page.</p>
+                    </div>
+                  ) : technicians.map(t => {
                     const isSelected = selectedTechId === t.id;
                     return (
                       <div
