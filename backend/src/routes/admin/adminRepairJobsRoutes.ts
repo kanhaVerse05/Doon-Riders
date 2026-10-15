@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateJwt } from '../../middleware/authMiddleware';
-import { requirePermission } from '../../middleware/rbacMiddleware';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbacMiddleware';
 import {
   getAllRepairJobs,
   getRepairJobById,
@@ -35,15 +35,15 @@ router.patch('/notifications/:id/read', authenticateJwt, requirePermission('repa
 router.delete('/clear-all', authenticateJwt, requirePermission('repairs.delete'), clearAllRepairJobs);
 
 // CRUD & Core Workflow Operations
-router.get('/', authenticateJwt, requirePermission('repairs.view'), getAllRepairJobs);
-router.get('/:id', authenticateJwt, requirePermission('repairs.view'), getRepairJobById);
+router.get('/', authenticateJwt, requireAnyPermission('repairs.view', 'technician_tasks.workshop.view'), getAllRepairJobs);
+router.get('/:id', authenticateJwt, requireAnyPermission('repairs.view', 'technician_tasks.workshop.view'), getRepairJobById);
 router.post('/', authenticateJwt, requirePermission('repairs.create'), createRepairJob);
 router.patch('/:id/assign-technician', authenticateJwt, requirePermission('repairs.update'), assignTechnician);
-router.post('/:id/inspection', authenticateJwt, requirePermission('repairs.update'), submitInspection);
+router.post('/:id/inspection', authenticateJwt, requireAnyPermission('repairs.update', 'technician_tasks.workshop.inspect'), submitInspection);
 router.post('/:id/approve-parts', authenticateJwt, requirePermission('repairs.update'), approveParts);
-router.post('/:id/start-repair', authenticateJwt, requirePermission('repairs.update'), startRepair);
-router.post('/:id/add-part', authenticateJwt, requirePermission('repairs.update'), addAdditionalPart);
-router.post('/:id/complete-repair', authenticateJwt, requirePermission('repairs.update'), completeRepair);
+router.post('/:id/start-repair', authenticateJwt, requireAnyPermission('repairs.update', 'technician_tasks.workshop.start'), startRepair);
+router.post('/:id/add-part', authenticateJwt, requireAnyPermission('repairs.update', 'technician_tasks.workshop.request_parts'), addAdditionalPart);
+router.post('/:id/complete-repair', authenticateJwt, requireAnyPermission('repairs.update', 'technician_tasks.workshop.complete'), completeRepair);
 router.post('/:id/generate-bill', authenticateJwt, requirePermission('repairs.update'), generateFinalBill);
 router.post('/:id/record-payment', authenticateJwt, requirePermission('repairs.update'), recordPayment);
 router.post('/:id/close-job', authenticateJwt, requirePermission('repairs.update'), closeRepairJob);

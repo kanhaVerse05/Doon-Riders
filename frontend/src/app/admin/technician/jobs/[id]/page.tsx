@@ -42,8 +42,13 @@ export default function TechnicianJobDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const jobId = params?.id as string;
+  const canInspectWorkshop = hasPermission('technician_tasks.workshop.inspect') || hasPermission('repairs.update');
+  const canStartWorkshop = hasPermission('technician_tasks.workshop.start') || hasPermission('repairs.update');
+  const canRequestWorkshopParts = hasPermission('technician_tasks.workshop.request_parts') || hasPermission('repairs.update');
+  const canCompleteWorkshop = hasPermission('technician_tasks.workshop.complete') || hasPermission('repairs.update');
+  const canAccessWorkshopInventory = hasPermission('inventory.view') || canInspectWorkshop || canRequestWorkshopParts;
 
   const [jobData, setJobData] = useState<any>(null);
   const [inventoryList, setInventoryList] = useState<any[]>([]);
@@ -131,6 +136,7 @@ export default function TechnicianJobDetailsPage() {
   };
 
   const fetchInventory = async () => {
+    if (!canAccessWorkshopInventory) return;
     try {
       const res = await adminApi.get('/admin/inventory');
       if (res && res.success && res.data) {
@@ -146,21 +152,21 @@ export default function TechnicianJobDetailsPage() {
       fetchJobDetails();
       fetchInventory();
     }
-  }, [jobId]);
+  }, [jobId, canAccessWorkshopInventory]);
 
   const hasAutoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     const action = searchParams?.get('action');
-    if (action === 'inspect' && jobData && hasAutoOpenedRef.current !== 'inspect') {
+    if (action === 'inspect' && canInspectWorkshop && jobData && hasAutoOpenedRef.current !== 'inspect') {
       if (jobData.job?.status === 'Pending Inspection' || jobData.job?.status === 'Technician Assigned') {
         setShowInspectModal(true);
         hasAutoOpenedRef.current = 'inspect';
       }
-    } else if (action === 'complete' && jobData && jobData.job?.status === 'Repairing' && hasAutoOpenedRef.current !== 'complete') {
+    } else if (action === 'complete' && canCompleteWorkshop && jobData && jobData.job?.status === 'Repairing' && hasAutoOpenedRef.current !== 'complete') {
       setShowCompleteModal(true);
       hasAutoOpenedRef.current = 'complete';
     }
-  }, [searchParams, jobData]);
+  }, [searchParams, jobData, canInspectWorkshop, canCompleteWorkshop]);
 
   const handleCloseInspectModal = () => {
     setShowInspectModal(false);
@@ -712,13 +718,13 @@ export default function TechnicianJobDetailsPage() {
               <p className="text-xs text-gray-500">Diagnose problem and request parts</p>
             </div>
 
-            <button
+            {canInspectWorkshop && <button
               onClick={() => setShowInspectModal(true)}
               className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
             >
               <Wrench className="w-3.5 h-3.5" />
               <span>Inspect Vehicle</span>
-            </button>
+            </button>}
           </div>
         )}
 
@@ -768,14 +774,14 @@ export default function TechnicianJobDetailsPage() {
               <p className="text-xs text-gray-500">Parts approved. Click to start live work timer.</p>
             </div>
 
-            <button
+            {canStartWorkshop && <button
               onClick={handleStartWork}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 bg-[#0066FF] hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{submitting ? 'Starting...' : 'Start Work'}</span>
-            </button>
+            </button>}
           </div>
         )}
 
@@ -795,22 +801,22 @@ export default function TechnicianJobDetailsPage() {
             </div>
 
             <div className="flex items-center gap-2.5 pt-2 border-t border-white/10">
-              <button
+              {canRequestWorkshopParts && <button
                 type="button"
                 onClick={() => setShowAddPartModal(true)}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-[#00A854]" />
                 <span>+ Request Part</span>
-              </button>
+              </button>}
 
-              <button
+              {canCompleteWorkshop && <button
                 onClick={() => setShowCompleteModal(true)}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#00A854] hover:bg-[#008744] text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-md transition transform active:scale-95 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5 stroke-[3]" />
                 <span>Complete Work</span>
-              </button>
+              </button>}
             </div>
           </div>
         )}

@@ -63,7 +63,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           ['/admin/dashboard', 'dashboard.view'],
           ['/admin/complaints', 'complaints.view'],
           ['/admin/repair-jobs', 'repairs.view'],
-          ['/admin/technician/jobs', 'repairs.view'],
           ['/admin/returns', 'returns.view'],
           ['/admin/recoveries', 'recoveries.view'],
           ['/admin/pre-bookings', 'pre_bookings.view'],
@@ -80,6 +79,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const protectedRoute = protectedRoutes.find(([prefix]) => pathname?.startsWith(prefix));
         if (protectedRoute && !hasPermission(protectedRoute[1])) {
+          router.replace('/admin/no-access');
+          return;
+        }
+
+        if (pathname?.startsWith('/admin/technician/jobs') && ![
+          'technician_tasks.workshop.view', 'technician_tasks.field.view',
+          'technician_tasks.returns.view', 'technician_tasks.recoveries.view',
+          'repairs.view', 'complaints.view', 'returns.view', 'recoveries.view'
+        ].some(code => hasPermission(code))) {
           router.replace('/admin/no-access');
           return;
         }

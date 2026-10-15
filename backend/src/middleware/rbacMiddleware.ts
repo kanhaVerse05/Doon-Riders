@@ -60,3 +60,24 @@ export const requireAnyPermission = (...permissionCodes: string[]) => {
     next();
   };
 };
+
+export const requireFieldTaskStatusPermission = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: User context missing.' });
+  }
+  if (req.user.roleName === 'SUPER_ADMIN') {
+    req.permissionScope = 'ALL';
+    return next();
+  }
+
+  const status = String(req.body?.status || '').trim().toLowerCase();
+  const taskPermission = status === 'work done'
+    ? 'technician_tasks.field.complete'
+    : 'technician_tasks.field.update_status';
+  const permission = req.user.permissions?.find(p => p.code === taskPermission || p.code === 'complaints.update');
+  if (!permission) {
+    return res.status(403).json({ success: false, message: `Forbidden: You lack the required permission [${taskPermission}] to perform this action.` });
+  }
+  req.permissionScope = permission.scope;
+  return next();
+};

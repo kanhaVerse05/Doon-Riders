@@ -143,7 +143,7 @@ interface Technician {
 
 export default function TechnicianJobsSummaryPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   // Top Workspace Mode: Workshop Jobs vs Field Complaints vs Return Inspections vs Recovery Inspections
   const [workspaceMode, setWorkspaceMode] = useState<'WORKSHOP' | 'FIELD_COMPLAINTS' | 'RETURN_INSPECTIONS' | 'RECOVERY_INSPECTIONS'>('WORKSHOP');
@@ -206,21 +206,47 @@ export default function TechnicianJobsSummaryPage() {
   };
 
   const isTechnicianRole = user?.roleName === 'TECHNICIAN' || user?.roleName?.includes('TECH');
+  const canWorkshopView = hasPermission('technician_tasks.workshop.view') || hasPermission('repairs.view');
+  const canFieldView = hasPermission('technician_tasks.field.view') || hasPermission('complaints.view');
+  const canReturnsView = hasPermission('technician_tasks.returns.view') || hasPermission('returns.view');
+  const canRecoveriesView = hasPermission('technician_tasks.recoveries.view') || hasPermission('recoveries.view');
+  const canFieldStatus = hasPermission('technician_tasks.field.update_status') || hasPermission('complaints.update');
+  const canFieldComplete = hasPermission('technician_tasks.field.complete') || hasPermission('complaints.update');
+  const canTrackField = hasPermission('technician_tasks.field.track') || hasPermission('complaints.track');
+  const canReturnInspect = hasPermission('technician_tasks.returns.inspect') || hasPermission('returns.inspect');
+  const canRecoveryInspect = hasPermission('technician_tasks.recoveries.inspect') || hasPermission('recoveries.inspect');
+  const hasInventoryAccess = hasPermission('inventory.view') || hasPermission('technician_tasks.workshop.inspect') || hasPermission('technician_tasks.workshop.request_parts') || canReturnInspect || canRecoveryInspect;
+  const availableWorkspaceModes = [
+    ...(canWorkshopView ? ['WORKSHOP' as const] : []),
+    ...(canFieldView ? ['FIELD_COMPLAINTS' as const] : []),
+    ...(canReturnsView ? ['RETURN_INSPECTIONS' as const] : []),
+    ...(canRecoveriesView ? ['RECOVERY_INSPECTIONS' as const] : [])
+  ];
+
+  useEffect(() => {
+    if (availableWorkspaceModes.length && !availableWorkspaceModes.includes(workspaceMode)) {
+      setWorkspaceMode(availableWorkspaceModes[0]);
+    }
+  }, [workspaceMode, canWorkshopView, canFieldView, canReturnsView, canRecoveriesView]);
 
   // Load Inventory for parts selector
   useEffect(() => {
+    if (!hasInventoryAccess) return;
     adminApi.get('/admin/inventory').then(res => {
       if (res && res.success) setInventoryList(res.data || []);
     }).catch(() => {});
-  }, []);
+  }, [hasInventoryAccess]);
 
   // Fetch Jobs, Field Complaints & Return Inspections
   const fetchData = async () => {
     try {
       // 1. Workshop Jobs
-      const jobsUrl = `/admin/repair-jobs?limit=100`;
-      const jobsRes = await adminApi.get(jobsUrl);
-      if (jobsRes && jobsRes.success) {
+      let jobsRes: any = null;
+      if (canWorkshopView) {
+        const jobsUrl = `/admin/repair-jobs?limit=100`;
+        jobsRes = await adminApi.get(jobsUrl);
+      }
+      if (jobsRes?.success) {
         let allJobs: RepairJob[] = jobsRes.data || [];
         if (jobsRes.technicians) setTechnicians(jobsRes.technicians);
 
@@ -243,7 +269,7 @@ export default function TechnicianJobsSummaryPage() {
       }
 
       // 2. Field Breakdown Complaints
-      const complaintsRes = await adminApi.get('/admin/complaints?limit=100');
+      const complaintsRes = canFieldView ? await adminApi.get('/admin/complaints?limit=100') : null;
       if (complaintsRes && complaintsRes.success) {
         let allComplaints: Complaint[] = complaintsRes.data || [];
         if (isTechnicianRole && user) {
@@ -265,7 +291,7 @@ export default function TechnicianJobsSummaryPage() {
       }
 
       // 3. Scooty Return Inspections
-      const returnsRes = await adminApi.get('/admin/returns?limit=100');
+      const returnsRes = canReturnsView ? await adminApi.get('/admin/returns?limit=100') : null;
       if (returnsRes && returnsRes.success) {
         let allReturns: any[] = returnsRes.data || [];
         if (isTechnicianRole && user) {
@@ -287,7 +313,7 @@ export default function TechnicianJobsSummaryPage() {
       }
 
       // 4. Scooty Recovery Inspections
-      const recoveriesRes = await adminApi.get('/admin/recoveries?limit=100');
+      const recoveriesRes = canRecoveriesView ? await adminApi.get('/admin/recoveries?limit=100') : null;
       if (recoveriesRes && recoveriesRes.success) {
         let allRecoveries: any[] = recoveriesRes.data || [];
         // The API applies technician assignment scoping using the technician
@@ -308,7 +334,7 @@ export default function TechnicianJobsSummaryPage() {
   useEffect(() => {
     setLoading(true);
     fetchData();
-  }, [selectedTechId, isTechnicianRole, user]);
+  }, [selectedTechId, isTechnicianRole, user, canWorkshopView, canFieldView, canReturnsView, canRecoveriesView]);
 
   // -------------------------------------------------------------
   // Live Continuous High-Accuracy GPS Broadcaster Engine
@@ -352,6 +378,7 @@ export default function TechnicianJobsSummaryPage() {
     speed?: number,
     heading?: number
   ) => {
+    if (!canTrackField) return;
     const activeComplaints = fieldComplaintsRef.current.filter(
       c => c.status === 'En Route' || c.status === 'Assigned' || c.status === 'Reached' || c.status === 'Work In Progress'
     );
@@ -387,11 +414,15 @@ export default function TechnicianJobsSummaryPage() {
       errorMessage: null,
       isTransmitting: false
     }));
-  }, []);
+  }, [canTrackField]);
 
   // Persistent Continuous Watcher with maximumAge: 0
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!canTrackField) {
+      setGpsTelemetry(prev => ({ ...prev, isWatching: false, isTransmitting: false }));
+      return;
+    }
 
     if (!navigator.geolocation) {
       setGpsTelemetry(prev => ({
@@ -453,7 +484,7 @@ export default function TechnicianJobsSummaryPage() {
       navigator.geolocation.clearWatch(watchId);
       clearInterval(heartbeatTimer);
     };
-  }, [broadcastCoordinates]);
+  }, [broadcastCoordinates, canTrackField]);
 
   const [sendingManualPing, setSendingManualPing] = useState(false);
 
@@ -1069,7 +1100,7 @@ export default function TechnicianJobsSummaryPage() {
 
         {/* Top Mode Switcher Tabs */}
         <div className="flex items-center gap-2 bg-[#F2F4F7] p-1.5 rounded-2xl border border-[#E5E7EB]">
-          <button
+          {canWorkshopView && <button
             onClick={() => setWorkspaceMode('WORKSHOP')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'WORKSHOP'
@@ -1084,9 +1115,9 @@ export default function TechnicianJobsSummaryPage() {
             }`}>
               {totalAssignedWorkshop}
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canFieldView && <button
             onClick={() => setWorkspaceMode('FIELD_COMPLAINTS')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'FIELD_COMPLAINTS'
@@ -1105,9 +1136,9 @@ export default function TechnicianJobsSummaryPage() {
             }`}>
               {activeFieldComplaints.length}
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canReturnsView && <button
             onClick={() => setWorkspaceMode('RETURN_INSPECTIONS')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'RETURN_INSPECTIONS'
@@ -1126,9 +1157,9 @@ export default function TechnicianJobsSummaryPage() {
             }`}>
               {pendingReturnsCount}
             </span>
-          </button>
+          </button>}
 
-          <button
+          {canRecoveriesView && <button
             onClick={() => setWorkspaceMode('RECOVERY_INSPECTIONS')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${
               workspaceMode === 'RECOVERY_INSPECTIONS'
@@ -1147,7 +1178,7 @@ export default function TechnicianJobsSummaryPage() {
             }`}>
               {pendingRecoveriesCount}
             </span>
-          </button>
+          </button>}
         </div>
 
         {/* ========================================================================= */}
@@ -1337,7 +1368,7 @@ export default function TechnicianJobsSummaryPage() {
                       {/* ================================================================= */}
                       {/* ACTIVE EN ROUTE / WIP LIVE TIMER & RADAR MAP */}
                       {/* ================================================================= */}
-                      {(isEnRoute || isWIP) && (
+      {(isEnRoute || isWIP) && canTrackField && (
                         <div className="bg-[#0A0F1D] text-white p-4 rounded-2xl border border-slate-800 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1365,7 +1396,7 @@ export default function TechnicianJobsSummaryPage() {
                           {/* Action Bar inside Live Card */}
                           <div className="flex items-center justify-between gap-2 pt-1">
                             <div className="flex items-center gap-2">
-                              <button
+                              {canTrackField && <button
                                 type="button"
                                 onClick={() => handleManualGPSPing(complaint.id)}
                                 disabled={sendingManualPing}
@@ -1373,7 +1404,7 @@ export default function TechnicianJobsSummaryPage() {
                               >
                                 <Radio className={`w-3 h-3 text-[#00D96B] ${sendingManualPing ? 'animate-spin' : ''}`} />
                                 <span>Broadcast GPS</span>
-                              </button>
+                              </button>}
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -1425,7 +1456,7 @@ export default function TechnicianJobsSummaryPage() {
                       {/* ================================================================= */}
                       <div className="pt-2">
                         {/* 1. START JOURNEY */}
-                        {isAssigned && (
+                        {isAssigned && canFieldStatus && (
                           <button
                             onClick={() => handleStartJourney(complaint.id)}
                             className="w-full py-4 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] text-sm font-black flex items-center justify-center gap-2 shadow-xl shadow-[#00D96B]/25 transition-all active:scale-98 cursor-pointer"
@@ -1436,7 +1467,7 @@ export default function TechnicianJobsSummaryPage() {
                         )}
 
                         {/* 2. REACHED LOCATION */}
-                        {isEnRoute && (
+                        {isEnRoute && canFieldStatus && (
                           <button
                             onClick={() => handleReachedLocation(complaint.id)}
                             className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/25 transition-all active:scale-98 cursor-pointer"
@@ -1447,7 +1478,7 @@ export default function TechnicianJobsSummaryPage() {
                         )}
 
                         {/* 3. START WORK */}
-                        {isReached && (
+                        {isReached && canFieldStatus && (
                           <button
                             onClick={() => handleStartWork(complaint.id)}
                             className="w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-sm font-black flex items-center justify-center gap-2 shadow-xl shadow-amber-500/25 transition-all active:scale-98 cursor-pointer"
@@ -1458,7 +1489,7 @@ export default function TechnicianJobsSummaryPage() {
                         )}
 
                         {/* 4. WORK DONE */}
-                        {isWIP && (
+                        {isWIP && canFieldComplete && (
                           <button
                             onClick={() => handleOpenWorkDoneModal(complaint)}
                             className="w-full py-4 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] text-sm font-black flex items-center justify-center gap-2 shadow-xl shadow-[#00D96B]/25 transition-all active:scale-98 cursor-pointer"
@@ -1471,7 +1502,7 @@ export default function TechnicianJobsSummaryPage() {
                         {/* 5. AFTER WORK DONE: NEXT COMPLAINT OR RETURN TO HUB */}
                         {isDone && (
                           <div className="space-y-2 pt-1">
-                            {nextComplaint ? (
+                            {nextComplaint && canFieldStatus ? (
                               <button
                                 onClick={() => handleStartJourney(nextComplaint.id)}
                                 className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all active:scale-98 cursor-pointer"
@@ -1723,6 +1754,7 @@ export default function TechnicianJobsSummaryPage() {
                           {/* Action Button */}
                           <div>
                             {job.status === 'Pending Inspection' || job.status === 'Technician Assigned' ? (
+                              hasPermission('technician_tasks.workshop.inspect') || hasPermission('repairs.update') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=inspect`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
@@ -1730,6 +1762,7 @@ export default function TechnicianJobsSummaryPage() {
                                 <span>Inspect</span>
                                 <ChevronRight className="w-3.5 h-3.5" />
                               </Link>
+                              ) : <span className="text-xs text-slate-400">View only</span>
                             ) : job.status === 'Inspection Completed' ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}`}
@@ -1739,6 +1772,7 @@ export default function TechnicianJobsSummaryPage() {
                                 <ChevronRight className="w-3.5 h-3.5" />
                               </Link>
                             ) : job.status === 'Repair Approved' ? (
+                              hasPermission('technician_tasks.workshop.start') || hasPermission('repairs.update') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=start`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#0066FF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
@@ -1746,7 +1780,9 @@ export default function TechnicianJobsSummaryPage() {
                                 <span>Start Work</span>
                                 <ChevronRight className="w-3.5 h-3.5" />
                               </Link>
+                              ) : <span className="text-xs text-slate-400">View only</span>
                             ) : job.status === 'Repairing' ? (
+                              hasPermission('technician_tasks.workshop.complete') || hasPermission('repairs.update') ? (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}?action=complete`}
                                 className="inline-flex items-center justify-center gap-1 px-4 py-2 bg-[#00A854] hover:bg-[#008744] text-white font-bold text-xs rounded-xl shadow-xs transition transform active:scale-95 whitespace-nowrap cursor-pointer"
@@ -1754,6 +1790,7 @@ export default function TechnicianJobsSummaryPage() {
                                 <span>Continue Work</span>
                                 <ChevronRight className="w-3.5 h-3.5" />
                               </Link>
+                              ) : <span className="text-xs text-slate-400">View only</span>
                             ) : (
                               <Link
                                 href={`/admin/technician/jobs/${job.id}`}
@@ -1991,7 +2028,7 @@ export default function TechnicianJobsSummaryPage() {
 
                       {/* Primary Action Button */}
                       <div className="pt-1">
-                        {isPending ? (
+                        {isPending && canReturnInspect ? (
                           <button
                             onClick={() => handleOpenInspectionModal(ret)}
                             className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-98"
@@ -1999,7 +2036,7 @@ export default function TechnicianJobsSummaryPage() {
                             <Wrench className="w-4 h-4 stroke-[2.5]" />
                             <span>INSPECT DAMAGED PARTS</span>
                           </button>
-                        ) : isInspected ? (
+                        ) : isInspected && canReturnInspect ? (
                           <button
                             onClick={() => handleOpenInspectionModal(ret)}
                             className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-700/20 transition cursor-pointer active:scale-98"
@@ -2192,7 +2229,7 @@ export default function TechnicianJobsSummaryPage() {
 
                       {/* Primary Action Button */}
                       <div className="pt-1">
-                        {isPending ? (
+                        {isPending && canRecoveryInspect ? (
                           <button
                             onClick={() => handleOpenInspectionModal(rec)}
                             className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-98"
@@ -2200,7 +2237,7 @@ export default function TechnicianJobsSummaryPage() {
                             <Wrench className="w-4 h-4 stroke-[2.5]" />
                             <span>INSPECT DAMAGED PARTS</span>
                           </button>
-                        ) : isInspected ? (
+                        ) : isInspected && canRecoveryInspect ? (
                           <button
                             onClick={() => handleOpenInspectionModal(rec)}
                             className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-700/20 transition cursor-pointer active:scale-98"

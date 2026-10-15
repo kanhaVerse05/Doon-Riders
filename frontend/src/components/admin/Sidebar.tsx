@@ -30,6 +30,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   permission?: string;
+  anyPermission?: string[];
   badge?: string;
 }
 
@@ -89,7 +90,7 @@ export const Sidebar: React.FC = () => {
           name: 'Technician Tasks',
           href: '/admin/technician/jobs',
           icon: CheckCircle2,
-          permission: 'repairs.view',
+          anyPermission: ['technician_tasks.workshop.view', 'technician_tasks.field.view', 'technician_tasks.returns.view', 'technician_tasks.recoveries.view', 'repairs.view', 'complaints.view', 'returns.view', 'recoveries.view'],
           badge: 'Tasks'
         },
         {
@@ -210,8 +211,8 @@ export const Sidebar: React.FC = () => {
           {navGroups.map((grp, gIdx) => {
             const visibleItems = grp.items.filter(item => {
               if (isSuperAdmin) return true;
-              if (!item.permission) return true;
-              return hasPermission(item.permission);
+              if (!item.permission && !item.anyPermission) return true;
+              return Boolean(item.permission && hasPermission(item.permission)) || Boolean(item.anyPermission?.some(code => hasPermission(code)));
             });
             if (visibleItems.length === 0) return null;
 

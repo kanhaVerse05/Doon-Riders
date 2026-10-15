@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateJwt } from '../../middleware/authMiddleware';
-import { requirePermission } from '../../middleware/rbacMiddleware';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbacMiddleware';
 import {
   getAllInventory,
   getInventoryById,
@@ -15,7 +15,7 @@ const router = Router();
 
 router.use(authenticateJwt);
 
-router.get('/', requirePermission('inventory.view'), getAllInventory);
+router.get('/', requireAnyPermission('inventory.view', 'technician_tasks.workshop.inspect', 'technician_tasks.workshop.request_parts', 'technician_tasks.returns.inspect', 'technician_tasks.recoveries.inspect'), getAllInventory);
 router.post('/bulk-upload', requirePermission('inventory.manage'), bulkUploadInventory);
 router.get('/:id', requirePermission('inventory.view'), getInventoryById);
 router.post('/', requirePermission('inventory.manage'), createInventoryItem);
