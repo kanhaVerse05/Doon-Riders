@@ -68,7 +68,7 @@ export const login = async (req: Request, res: Response) => {
     if (getDbStatus()) {
       const userRes = await pool.query(`
         SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.status, u.avatar_url, u.custom_permissions,
-               u.totp_enabled,
+               u.totp_enabled, u.mfa_exempt,
                r.id as role_id, r.name as role_name, r.display_name as role_display_name,
                r.permissions_configured as role_permissions_configured
         FROM users u
@@ -98,8 +98,9 @@ export const login = async (req: Request, res: Response) => {
       const isDevMfaExempt = process.env.APP_ENV === 'development'
         && process.env.NODE_ENV !== 'production'
         && devMfaExemptEmails.includes(cleanEmail);
+      const mfaExempt = u.role_name === 'SUPER_ADMIN' && Boolean(u.mfa_exempt);
 
-      if (u.role_name === 'SUPER_ADMIN' && !u.totp_enabled && !isDevMfaExempt) {
+      if (u.role_name === 'SUPER_ADMIN' && !u.totp_enabled && !mfaExempt && !isDevMfaExempt) {
         const setupToken = jwt.sign(
           { id: u.id, purpose: 'totp_initial_setup' },
           getJwtSecret(),
@@ -113,7 +114,7 @@ export const login = async (req: Request, res: Response) => {
         });
       }
 
-      if (u.totp_enabled) {
+      if (u.totp_enabled && !mfaExempt) {
         const challengeToken = jwt.sign(
           { id: u.id, purpose: 'totp_login' },
           getJwtSecret(),
