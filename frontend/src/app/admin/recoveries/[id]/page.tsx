@@ -792,11 +792,11 @@ export default function ScootyRecoveryDetailPage() {
               </div>
               <div>
                 <h2 className="text-sm font-black text-slate-900">Step 1: Recovery Request Pending Acceptance</h2>
-                <p className="text-[11px] text-slate-500">
-                  {canAcceptRecovery
-                    ? 'You are assigned to this recovery task. Please accept to proceed to the pickup location.'
-                    : `Assigned Recovery Agent (${recoveryRecord.recovery_agent_name || recoveryRecord.recovered_by || 'Agent'}) must accept the request.`}
-                </p>
+                {canAcceptRecovery && (
+                  <p className="text-[11px] text-slate-500">
+                    You are assigned to this recovery task. Please accept to proceed to the pickup location.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -839,9 +839,9 @@ export default function ScootyRecoveryDetailPage() {
                   <span>Accept Recovery Request</span>
                 </button>
               ) : (
-                <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
-                  <span>Waiting for Recovery Agent ({recoveryRecord.recovery_agent_name || recoveryRecord.recovered_by || 'Agent'}) to Accept</span>
+                <div role="status" className="px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-slate-500" />
+                  <span>You do not have permission to accept this recovery request.</span>
                 </div>
               )}
             </div>
