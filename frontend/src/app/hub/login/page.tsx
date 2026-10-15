@@ -30,8 +30,8 @@ export default function HubInchargeLoginPage() {
     setError(null);
 
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password, 'hub');
+      if (result.success) {
         const saved = localStorage.getItem('dr_admin_user');
         const parsed = saved ? JSON.parse(saved) : null;
         const isHub = parsed?.roleName === 'HUB_INCHARGE' || parsed?.roleName?.includes('HUB');
@@ -47,7 +47,7 @@ export default function HubInchargeLoginPage() {
 
         router.push('/admin/complaints');
       } else {
-        setError('Invalid credentials. Please verify your Hub Incharge email and password.');
+        setError(result.message || 'Invalid credentials. Please verify your Hub Incharge email and password.');
       }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');

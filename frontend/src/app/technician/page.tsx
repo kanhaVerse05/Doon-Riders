@@ -10,7 +10,7 @@ export default function TechnicianRootPage() {
 
   useEffect(() => {
     if (!isLoading) {
-      if (user && user.roleName === 'TECHNICIAN') {
+      if (user && user.roleName?.trim().toUpperCase() === 'TECHNICIAN') {
         router.replace('/admin/technician/jobs');
       } else {
         router.replace('/technician/login');

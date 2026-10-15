@@ -14,9 +14,9 @@ export default function TechnicianLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // If already logged in as technician, forward immediately
+  // If already logged in as a Technician, forward immediately.
   useEffect(() => {
-    if (user && user.roleName === 'TECHNICIAN') {
+    if (user && user.roleName?.trim().toUpperCase() === 'TECHNICIAN') {
       router.replace('/admin/technician/jobs');
     }
   }, [user, router]);
@@ -27,24 +27,24 @@ export default function TechnicianLoginPage() {
     setError(null);
 
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password, 'technician');
+      if (result.success) {
         const saved = localStorage.getItem('dr_admin_user');
         const parsed = saved ? JSON.parse(saved) : null;
-        const isTech = parsed?.roleName === 'TECHNICIAN' || parsed?.roleName?.includes('TECH');
+        const isTech = parsed?.roleName?.trim().toUpperCase() === 'TECHNICIAN';
 
         if (!isTech) {
-          // Clear credentials and reject
+          // Defensive client-side check; the API also validates the selected portal.
           localStorage.removeItem('dr_admin_token');
           localStorage.removeItem('dr_admin_user');
-          setError('This portal is reserved for Technicians only. Please use the Admin CRM portal.');
+          setError('This account is not assigned the Technician role. Please contact your administrator.');
           setLoading(false);
           return;
         }
 
         router.push('/admin/technician/jobs');
       } else {
-        setError('Invalid technician credentials. Please check your email and password.');
+        setError(result.message || 'Unable to sign in to the Technician Portal. Please check your credentials and role assignment.');
       }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');

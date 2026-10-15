@@ -58,6 +58,30 @@ const computeMemoryPermissions = (role: any, user: any) => {
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+    const portal = String(req.body?.portal || 'admin').trim().toLowerCase();
+    if (!['admin', 'technician', 'hub'].includes(portal)) {
+      return res.status(400).json({ success: false, message: 'Invalid sign-in portal.' });
+    }
+
+    const validatePortalRole = (roleName: string | null | undefined) => {
+      const normalizedRole = String(roleName || '').trim().toUpperCase();
+      const isTechnician = normalizedRole === 'TECHNICIAN';
+      const isHubIncharge = normalizedRole === 'HUB_INCHARGE';
+
+      if (portal === 'technician' && !isTechnician) {
+        return 'This account is not assigned the Technician role.';
+      }
+      if (portal === 'hub' && !isHubIncharge) {
+        return 'This account is not assigned the Hub Incharge role.';
+      }
+      if (portal === 'admin' && (isTechnician || isHubIncharge)) {
+        return isTechnician
+          ? 'Technician accounts must sign in through the Technician Portal.'
+          : 'Hub Incharge accounts must sign in through the Hub Portal.';
+      }
+      return null;
+    };
+
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
@@ -89,6 +113,11 @@ export const login = async (req: Request, res: Response) => {
       const isMatch = await bcrypt.compare(cleanPassword, u.password_hash);
       if (!isMatch) {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      }
+
+      const portalError = validatePortalRole(u.role_name);
+      if (portalError) {
+        return res.status(403).json({ success: false, message: portalError });
       }
 
       const devMfaExemptEmails = (process.env.DEV_MFA_EXEMPT_EMAILS || '')
@@ -182,6 +211,11 @@ export const login = async (req: Request, res: Response) => {
       name: u.role_name || 'SALES_EXECUTIVE',
       display_name: u.role_display_name || 'Sales Executive'
     };
+
+    const portalError = validatePortalRole(roleObj.name);
+    if (portalError) {
+      return res.status(403).json({ success: false, message: portalError });
+    }
 
     const permissions = computeMemoryPermissions(roleObj, u);
 

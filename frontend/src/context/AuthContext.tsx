@@ -26,7 +26,7 @@ interface AuthContextType {
   user: AdminUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }>;
+  login: (email: string, password?: string, portal?: 'admin' | 'technician' | 'hub') => Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }>;
   verifyMfaLogin: (code: string) => Promise<{ success: boolean; message?: string }>;
   startInitialMfaSetup: () => Promise<{ success: boolean; secret?: string; otpauthUrl?: string; message?: string }>;
   confirmInitialMfaSetup: (code: string) => Promise<{ success: boolean; message?: string; backupCodes?: string[] }>;
@@ -126,13 +126,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { active = false; };
   }, []);
 
-  const login = async (emailInput: string, passwordInput = ''): Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }> => {
+  const login = async (emailInput: string, passwordInput = '', portal: 'admin' | 'technician' | 'hub' = 'admin'): Promise<{ success: boolean; mfaRequired?: boolean; mfaSetupRequired?: boolean; message?: string }> => {
     const emailClean = (emailInput || '').toLowerCase().trim();
     const passClean = (passwordInput || '').trim();
 
     // Only a server-verified account may create an authenticated session.
     try {
-      const res = await adminApi.post('/admin/auth/login', { email: emailClean, password: passClean });
+      const res = await adminApi.post('/admin/auth/login', { email: emailClean, password: passClean, portal });
       if (res?.success && res?.mfaSetupRequired && res?.challengeToken) {
         initialSetupChallengeRef.current = res.challengeToken;
         return { success: false, mfaSetupRequired: true, message: res.message };

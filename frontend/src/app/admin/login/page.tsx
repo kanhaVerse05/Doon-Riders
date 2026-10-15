@@ -57,7 +57,7 @@ export default function AdminLoginPage() {
         success = result.success;
         loginMessage = result.message || '';
       } else {
-        const result = await login(email, password);
+        const result = await login(email, password, 'admin');
         if (result.mfaSetupRequired) {
           setMfaSetupStep(true);
           setPassword('');
