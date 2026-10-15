@@ -1360,6 +1360,24 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
     `).catch(() => {});
 
+    // Non-Super-Admin roles must never inherit legacy defaults. Clear only rows
+    // for roles that have not been explicitly configured, then mark them as an
+    // intentionally empty permission set so old fallbacks cannot restore grants.
+    await pgPool.query(`
+      DELETE FROM role_permissions rp
+      USING roles r
+      WHERE rp.role_id = r.id
+        AND r.name <> 'SUPER_ADMIN'
+        AND r.permissions_configured = FALSE;
+
+      UPDATE roles
+      SET permissions_configured = TRUE, updated_at = NOW()
+      WHERE name <> 'SUPER_ADMIN'
+        AND permissions_configured = FALSE;
+    `).catch((error) => {
+      console.warn('RBAC default-permission cleanup migration failed:', error.message);
+    });
+
     // Ensure Pre-Bookings permissions exist in permissions table
     await pgPool.query(`
       INSERT INTO permissions (code, module, description) VALUES
@@ -1403,39 +1421,6 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ;
       ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS reached_hub_at TIMESTAMPTZ;
       ALTER TABLE scooty_recoveries ADD COLUMN IF NOT EXISTS agent_notes TEXT;
-    `).catch(() => {});
-
-    // Seed default role permissions dynamically by role name
-    await pgPool.query(`
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT r.id, p.id, 'ASSIGNED'
-      FROM roles r, permissions p
-      WHERE r.name = 'RECOVERY_AGENT' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub')
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT r.id, p.id, 'TEAM'
-      FROM roles r, permissions p
-      WHERE r.name = 'HUB_INCHARGE' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle')
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT r.id, p.id, 'ALL'
-      FROM roles r, permissions p
-      WHERE r.name = 'SUPER_ADMIN' AND r.permissions_configured = FALSE AND p.code LIKE 'recoveries.%'
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT r.id, p.id, 'ALL'
-      FROM roles r, permissions p
-      WHERE r.name = 'MANAGER' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.view_all', 'recoveries.create', 'recoveries.settle')
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-      INSERT INTO role_permissions (role_id, permission_id, scope)
-      SELECT r.id, p.id, 'ASSIGNED'
-      FROM roles r, permissions p
-      WHERE r.name = 'TECHNICIAN' AND r.permissions_configured = FALSE AND p.code IN ('recoveries.view', 'recoveries.inspect')
-      ON CONFLICT (role_id, permission_id) DO NOTHING;
     `).catch(() => {});
 
     // 2. Synchronize Users with Supabase and disk backup

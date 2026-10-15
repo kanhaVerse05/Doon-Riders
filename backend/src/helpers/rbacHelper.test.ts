@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveRolePermissions } from './rbacHelper';
+import { getPermissionsForRole, resolveRolePermissions } from './rbacHelper';
 import { requireSuperAdmin } from '../middleware/rbacMiddleware';
 
 test('an explicitly configured empty role receives no default permissions', () => {
   assert.deepEqual(resolveRolePermissions('SALES_EXECUTIVE', [], true), []);
+});
+
+test('every non-Super-Admin role starts with no fixed permissions', () => {
+  for (const role of ['MANAGER', 'SALES_EXECUTIVE', 'TECHNICIAN', 'HUB_INCHARGE', 'PRE_BOOKING', 'CUSTOMER_SUPPORT', 'TEST1']) {
+    assert.deepEqual(resolveRolePermissions(role, [], false), [], `${role} should start empty`);
+    assert.deepEqual(getPermissionsForRole(role), [], `${role} should have no hard-coded defaults`);
+  }
+});
+
+test('Super Admin keeps its full system permissions', () => {
+  assert.ok(getPermissionsForRole('SUPER_ADMIN').some(permission => permission.code === 'dashboard.view'));
+  assert.ok(getPermissionsForRole('SUPER_ADMIN').some(permission => permission.code === 'roles.view'));
 });
 
 test('a role with one stored grant receives only that permission', () => {

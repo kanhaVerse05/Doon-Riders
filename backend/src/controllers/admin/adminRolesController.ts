@@ -84,8 +84,8 @@ export const createRole = async (req: AuthRequest, res: Response) => {
       }
 
       const result = await pool.query(`
-        INSERT INTO roles (name, display_name, description, is_system)
-        VALUES ($1, $2, $3, FALSE)
+        INSERT INTO roles (name, display_name, description, is_system, permissions_configured)
+        VALUES ($1, $2, $3, FALSE, TRUE)
         RETURNING id
       `, [cleanName, cleanDisplayName, description || `Custom ${cleanDisplayName} role`]);
 
@@ -96,7 +96,8 @@ export const createRole = async (req: AuthRequest, res: Response) => {
         name: cleanName,
         display_name: cleanDisplayName,
         description: description || `Custom ${cleanDisplayName} role`,
-        is_system: false
+        is_system: false,
+        permissions_configured: true
       };
 
       await logAuditEvent({
@@ -130,7 +131,8 @@ export const createRole = async (req: AuthRequest, res: Response) => {
       name: cleanName,
       display_name: cleanDisplayName,
       description: description || `Custom ${cleanDisplayName} role`,
-      is_system: false
+      is_system: false,
+      permissions_configured: true
     };
 
     memoryStore.roles.push(newRole);

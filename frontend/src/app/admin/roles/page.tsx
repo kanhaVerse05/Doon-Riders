@@ -193,77 +193,12 @@ function RolesAndPermissionsContent() {
     { id: 42, code: 'roles.view', module: 'Team Directory', description: 'Access Role and Granular Permission Matrix' }
   ];
 
-  const getSavedRolePermissions = (roleName: string) => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = localStorage.getItem('dr_role_custom_permissions');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const norm = (roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-        if (parsed[norm]) return parsed[norm];
-        if (parsed[roleName]) return parsed[roleName];
-      }
-    } catch (e) {}
-    return null;
-  };
-
   const getInitialUserPermissions = (roleName: string): { [code: string]: { enabled: boolean; scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' } } => {
-    // 1. Check if permissions were previously configured and saved for this custom or team role
-    const saved = getSavedRolePermissions(roleName);
-    if (saved) {
-      const map: any = {};
-      allPermissions.forEach(p => {
-        if (saved[p.code]) {
-          map[p.code] = { ...saved[p.code] };
-        } else {
-          map[p.code] = { enabled: false, scope: 'ALL' };
-        }
-      });
-      return map;
-    }
-
     const norm = (roleName || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
     const map: any = {};
-
+    const isSuperAdmin = norm === 'SUPER_ADMIN';
     allPermissions.forEach(p => {
-      let enabled = false;
-      let scope: 'ALL' | 'TEAM' | 'ASSIGNED' | 'OWN' = 'ALL';
-
-      if (norm === 'SUPER_ADMIN') {
-        enabled = true;
-        scope = 'ALL';
-      } else if (norm === 'PRE_BOOKING' || norm.includes('PRE_BOOK') || norm.includes('BOOKING')) {
-        enabled = ['pre_bookings.view', 'pre_bookings.create', 'pre_bookings.status_update'].includes(p.code);
-        scope = 'ALL';
-      } else if (norm === 'RECOVERY_AGENT' || norm.includes('RECOVERY')) {
-        enabled = ['recoveries.view', 'recoveries.accept', 'recoveries.pickup', 'recoveries.reached_hub'].includes(p.code);
-        scope = 'ASSIGNED';
-      } else if (norm === 'MANAGER') {
-        enabled = ['Dashboard', 'Pre-Bookings', 'Leads', 'Customers', 'Fleet & Rentals', 'Repairs & Workshop', 'Scooty Recovery', 'Reports'].includes(p.module) && !p.code.includes('.delete');
-        scope = 'ALL';
-      } else if (norm === 'SALES_EXECUTIVE') {
-        enabled = [
-          'dashboard.view', 'dashboard.view_sales',
-          'pre_bookings.view', 'pre_bookings.create', 'pre_bookings.status_update',
-          'leads.view', 'leads.view_assigned', 'leads.status_update', 'leads.notes', 'leads.followup',
-          'customers.view', 'fleet.view'
-        ].includes(p.code);
-        scope = 'ASSIGNED';
-      } else if (norm === 'TECHNICIAN' || norm.includes('TECH')) {
-        enabled = ['repairs.view', 'repairs.update', 'inventory.view', 'fleet.view', 'recoveries.view', 'recoveries.inspect'].includes(p.code);
-        scope = 'ASSIGNED';
-      } else if (norm === 'HUB_INCHARGE' || norm.includes('HUB')) {
-        enabled = [
-          'repairs.view', 'repairs.create', 'repairs.update', 'inventory.view', 'fleet.view', 'fleet.assign', 'fleet.maintenance',
-          'recoveries.view', 'recoveries.create', 'recoveries.assign_tech', 'recoveries.settle'
-        ].includes(p.code);
-        scope = 'TEAM';
-      } else {
-        // Any custom role: starts with 0 rights (all disabled) until explicitly configured & saved by admin
-        enabled = false;
-        scope = 'ALL';
-      }
-      map[p.code] = { enabled, scope };
+      map[p.code] = { enabled: isSuperAdmin, scope: 'ALL' };
     });
     return map;
   };
@@ -403,7 +338,8 @@ function RolesAndPermissionsContent() {
       name: cleanCode,
       display_name: cleanDisplayName,
       description: newRoleDesc.trim() || `Custom ${cleanDisplayName} role for DOON Riders staff`,
-      is_system: false
+      is_system: false,
+      permissions_configured: true
     };
 
     try {
@@ -586,20 +522,6 @@ function RolesAndPermissionsContent() {
       }
 
       localStorage.setItem('dr_user_custom_permissions', JSON.stringify(userPermissions));
-      const roleKey = (selectedUser.role_name || selectedUser.role || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-      if (roleKey && roleKey !== 'SUPER_ADMIN') {
-        try {
-          const storedRolePerms = localStorage.getItem('dr_role_custom_permissions');
-          const rolePermMap = storedRolePerms ? JSON.parse(storedRolePerms) : {};
-          rolePermMap[roleKey] = userPermissions[selectedUser.id];
-          if (selectedUser.role_display_name || selectedUser.roleDisplayName) {
-            rolePermMap[selectedUser.role_display_name || selectedUser.roleDisplayName] = userPermissions[selectedUser.id];
-          }
-          localStorage.setItem('dr_role_custom_permissions', JSON.stringify(rolePermMap));
-        } catch (storageError) {
-          console.warn('Could not cache role permissions locally:', storageError);
-        }
-      }
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (e: any) {
