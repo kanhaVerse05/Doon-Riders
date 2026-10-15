@@ -639,8 +639,14 @@ export const pool = {
 
     let queryText = normalizePostgresSql(text);
 
-    // If query is an INSERT and doesn't have RETURNING id, append RETURNING id to capture insertId
-    if (/^\s*INSERT\s+INTO/i.test(queryText) && !/RETURNING/i.test(queryText)) {
+    // Junction tables such as role_permissions have composite keys and no `id` column.
+    // Only append RETURNING id to tables that use the conventional serial id.
+    const insertTable = queryText.match(/^\s*INSERT\s+INTO\s+([\w.]+)/i)?.[1]?.split('.').pop()?.replace(/"/g, '').toLowerCase();
+    if (
+      insertTable !== 'role_permissions' &&
+      /^\s*INSERT\s+INTO/i.test(queryText) &&
+      !/RETURNING/i.test(queryText)
+    ) {
       queryText = queryText.replace(/;?\s*$/, ' RETURNING id;');
     }
 
