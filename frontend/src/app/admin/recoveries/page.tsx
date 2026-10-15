@@ -135,7 +135,13 @@ interface Technician {
 
 export default function ScootyRecoveriesListPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+
+  const userRoleName = (user?.roleName || user?.roleDisplayName || '').toUpperCase();
+  const isSuperAdmin = userRoleName.includes('SUPER') || userRoleName.includes('ADMIN');
+  const isRecoveryAgent = (userRoleName.includes('RECOVERY') || userRoleName.includes('AGENT')) && !isSuperAdmin;
+  const isHubIncharge = userRoleName.includes('HUB') && !isSuperAdmin;
+  const canCreateRecovery = hasPermission('recoveries.create');
 
   const [recoveries, setRecoveries] = useState<ScootyRecovery[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -295,7 +301,19 @@ export default function ScootyRecoveriesListPage() {
     } else if (statusTab === 'PICKED_UP') {
       if (item.status !== 'PICKED_UP') return false;
     } else if (statusTab === 'REACHED_HUB') {
-      if (item.status !== 'REACHED_HUB') return false;
+      if (isRecoveryAgent) {
+        const isDelivered = (
+          item.status === 'REACHED_HUB' ||
+          item.status === 'INSPECTION_IN_PROGRESS' ||
+          item.status === 'INSPECTION_COMPLETED' ||
+          item.status === 'Inspection in Progress' ||
+          item.status === 'Inspection Completed' ||
+          item.status === 'Completed'
+        );
+        if (!isDelivered) return false;
+      } else {
+        if (item.status !== 'REACHED_HUB') return false;
+      }
     } else if (statusTab === 'INSPECTED') {
       if (
         item.status !== 'INSPECTION_IN_PROGRESS' &&
@@ -314,11 +332,33 @@ export default function ScootyRecoveriesListPage() {
   });
 
   const getStatusBadge = (status: string) => {
+    if (isRecoveryAgent) {
+      if (
+        status === 'REACHED_HUB' ||
+        status === 'INSPECTION_IN_PROGRESS' ||
+        status === 'INSPECTION_COMPLETED' ||
+        status === 'Inspection in Progress' ||
+        status === 'Inspection Completed' ||
+        status === 'Completed'
+      ) {
+        return {
+          label: 'Delivered at Hub ✓',
+          style: 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold'
+        };
+      }
+      if (status === 'ASSIGNED' || status === 'Pending Inspection') {
+        return {
+          label: 'Assigned to You',
+          style: 'bg-amber-50 text-amber-800 border-amber-200 font-bold'
+        };
+      }
+    }
+
     switch (status) {
       case 'ASSIGNED':
       case 'Pending Inspection':
         return {
-          label: 'Assigned to Agent',
+          label: 'Pending Acceptance',
           style: 'bg-amber-50 text-amber-800 border-amber-200'
         };
       case 'ACCEPTED':
@@ -361,15 +401,46 @@ export default function ScootyRecoveriesListPage() {
     }
   };
 
-  const tabs = [
-    { key: 'ALL', label: 'All Recoveries', count: recoveries.length },
-    { key: 'ASSIGNED', label: 'Assigned', count: stats.assigned || recoveries.filter(r => r.status === 'ASSIGNED' || r.status === 'Pending Inspection').length },
-    { key: 'ACCEPTED', label: 'Accepted', count: stats.accepted || recoveries.filter(r => r.status === 'ACCEPTED').length },
-    { key: 'PICKED_UP', label: 'Picked Up', count: stats.pickedUp || recoveries.filter(r => r.status === 'PICKED_UP').length },
-    { key: 'REACHED_HUB', label: 'At Hub', count: stats.reachedHub || recoveries.filter(r => r.status === 'REACHED_HUB').length },
-    { key: 'INSPECTED', label: 'Inspection', count: (stats.inProgress || 0) + (stats.inspectionCompleted || 0) },
-    { key: 'COMPLETED', label: 'Settled', count: stats.completed || recoveries.filter(r => r.status === 'Completed').length }
-  ];
+  const tabs = isRecoveryAgent
+    ? [
+        { key: 'ALL', label: 'All My Tasks', count: recoveries.length },
+        {
+          key: 'ASSIGNED',
+          label: 'Assigned',
+          count: recoveries.filter(r => r.status === 'ASSIGNED' || r.status === 'Pending Inspection').length
+        },
+        {
+          key: 'ACCEPTED',
+          label: 'Accepted',
+          count: recoveries.filter(r => r.status === 'ACCEPTED').length
+        },
+        {
+          key: 'PICKED_UP',
+          label: 'Picked Up',
+          count: recoveries.filter(r => r.status === 'PICKED_UP').length
+        },
+        {
+          key: 'REACHED_HUB',
+          label: 'Delivered at Hub',
+          count: recoveries.filter(r =>
+            r.status === 'REACHED_HUB' ||
+            r.status === 'INSPECTION_IN_PROGRESS' ||
+            r.status === 'INSPECTION_COMPLETED' ||
+            r.status === 'Inspection in Progress' ||
+            r.status === 'Inspection Completed' ||
+            r.status === 'Completed'
+          ).length
+        }
+      ]
+    : [
+        { key: 'ALL', label: 'All Recoveries', count: recoveries.length },
+        { key: 'ASSIGNED', label: 'Assigned', count: stats.assigned || recoveries.filter(r => r.status === 'ASSIGNED' || r.status === 'Pending Inspection').length },
+        { key: 'ACCEPTED', label: 'Accepted', count: stats.accepted || recoveries.filter(r => r.status === 'ACCEPTED').length },
+        { key: 'PICKED_UP', label: 'Picked Up', count: stats.pickedUp || recoveries.filter(r => r.status === 'PICKED_UP').length },
+        { key: 'REACHED_HUB', label: 'At Hub', count: stats.reachedHub || recoveries.filter(r => r.status === 'REACHED_HUB').length },
+        { key: 'INSPECTED', label: 'Inspection', count: (stats.inProgress || 0) + (stats.inspectionCompleted || 0) },
+        { key: 'COMPLETED', label: 'Settled', count: stats.completed || recoveries.filter(r => r.status === 'Completed').length }
+      ];
 
   return (
     <AdminLayout>
@@ -382,11 +453,13 @@ export default function ScootyRecoveriesListPage() {
                 <Truck className="w-4 h-4" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Scooty Recovery
+                {isRecoveryAgent ? 'My Recovery Tasks' : 'Scooty Recovery'}
               </h1>
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              Hub Incharge &rarr; Recovery Agent &rarr; Scooty Pickup (GPS &amp; 4 Photos) &rarr; Hub Arrival &rarr; Technician Damage Check &rarr; Settlement
+              {isRecoveryAgent
+                ? 'Assigned Task → Accept Request → Vehicle Pickup (Live GPS & 4 Mandatory Photos) → Deliver at Hub'
+                : 'Hub Incharge → Recovery Agent → Scooty Pickup (GPS & 4 Photos) → Hub Arrival → Technician Damage Check → Settlement'}
             </p>
           </div>
 
@@ -400,78 +473,151 @@ export default function ScootyRecoveriesListPage() {
               <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00A854]' : ''}`} />
             </button>
 
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2.5 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Assign Recovery</span>
-            </button>
+            {canCreateRecovery && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2.5 rounded-2xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Assign Recovery</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* 4 Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Total Recoveries
+        {isRecoveryAgent ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Total Assigned
+                </span>
+                <Truck className="w-4 h-4 text-slate-500" />
+              </div>
+              <p className="text-2xl font-black text-slate-900 mt-1.5 font-mono">
+                {recoveries.length}
+              </p>
+              <span className="text-[11px] text-slate-500 mt-0.5 block font-medium">
+                My total recovery tasks
               </span>
-              <Truck className="w-4 h-4 text-slate-500" />
             </div>
-            <p className="text-2xl font-black text-slate-900 mt-1.5 font-mono">
-              {stats.total}
-            </p>
-            <span className="text-[11px] text-slate-500 mt-0.5 block font-medium">
-              All registered tickets
-            </span>
-          </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
-                Active In Transit
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                  Pending Accept
+                </span>
+                <Clock className="w-4 h-4 text-amber-600" />
+              </div>
+              <p className="text-2xl font-black text-amber-900 mt-1.5 font-mono">
+                {recoveries.filter(r => r.status === 'ASSIGNED' || r.status === 'Pending Inspection').length}
+              </p>
+              <span className="text-[11px] text-amber-700 mt-0.5 block font-medium">
+                New task assignments
               </span>
-              <Clock className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-2xl font-black text-blue-900 mt-1.5 font-mono">
-              {(stats.assigned || 0) + (stats.accepted || 0) + (stats.pickedUp || 0)}
-            </p>
-            <span className="text-[11px] text-blue-700 mt-0.5 block font-medium">
-              With recovery agent
-            </span>
-          </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
-                At Hub / Inspection
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                  In Transit
+                </span>
+                <Truck className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-2xl font-black text-blue-900 mt-1.5 font-mono">
+                {recoveries.filter(r => r.status === 'ACCEPTED' || r.status === 'PICKED_UP').length}
+              </p>
+              <span className="text-[11px] text-blue-700 mt-0.5 block font-medium">
+                Accepted &amp; on the way
               </span>
-              <Wrench className="w-4 h-4 text-purple-600" />
             </div>
-            <p className="text-2xl font-black text-purple-900 mt-1.5 font-mono">
-              {(stats.reachedHub || 0) + (stats.inProgress || 0) + (stats.inspectionCompleted || 0)}
-            </p>
-            <span className="text-[11px] text-purple-700 mt-0.5 block font-medium">
-              Ready for Hub settlement
-            </span>
-          </div>
 
-          <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                Settled &amp; Closed
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                  Delivered at Hub
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-black text-emerald-900 mt-1.5 font-mono">
+                {recoveries.filter(r =>
+                  r.status === 'REACHED_HUB' ||
+                  r.status === 'INSPECTION_IN_PROGRESS' ||
+                  r.status === 'INSPECTION_COMPLETED' ||
+                  r.status === 'Inspection in Progress' ||
+                  r.status === 'Inspection Completed' ||
+                  r.status === 'Completed'
+                ).length}
+              </p>
+              <span className="text-[11px] text-emerald-700 mt-0.5 block font-medium">
+                Safely delivered ✓
               </span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             </div>
-            <p className="text-2xl font-black text-emerald-900 mt-1.5 font-mono">
-              {stats.completed}
-            </p>
-            <span className="text-[11px] text-emerald-700 mt-0.5 block font-medium">
-              Security reconciled
-            </span>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Total Recoveries
+                </span>
+                <Truck className="w-4 h-4 text-slate-500" />
+              </div>
+              <p className="text-2xl font-black text-slate-900 mt-1.5 font-mono">
+                {stats.total}
+              </p>
+              <span className="text-[11px] text-slate-500 mt-0.5 block font-medium">
+                All registered tickets
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                  Active In Transit
+                </span>
+                <Clock className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-2xl font-black text-blue-900 mt-1.5 font-mono">
+                {(stats.assigned || 0) + (stats.accepted || 0) + (stats.pickedUp || 0)}
+              </p>
+              <span className="text-[11px] text-blue-700 mt-0.5 block font-medium">
+                With recovery agent
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                  At Hub / Inspection
+                </span>
+                <Wrench className="w-4 h-4 text-purple-600" />
+              </div>
+              <p className="text-2xl font-black text-purple-900 mt-1.5 font-mono">
+                {(stats.reachedHub || 0) + (stats.inProgress || 0) + (stats.inspectionCompleted || 0)}
+              </p>
+              <span className="text-[11px] text-purple-700 mt-0.5 block font-medium">
+                Ready for Hub settlement
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                  Settled &amp; Closed
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-black text-emerald-900 mt-1.5 font-mono">
+                {stats.completed}
+              </p>
+              <span className="text-[11px] text-emerald-700 mt-0.5 block font-medium">
+                Security reconciled
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Filter & Search Bar */}
         <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-3">
@@ -654,7 +800,7 @@ export default function ScootyRecoveriesListPage() {
                       <span>Recovery Fee: <b className="text-slate-800">₹{item.recovery_charge || 1000}</b></span>
                       <span>&bull;</span>
                       <span>Security: <b className="text-slate-800">₹{item.security_deposit_amount || 2000}</b></span>
-                      {Number(item.gross_damage_total) > 0 && (
+                      {!isRecoveryAgent && Number(item.gross_damage_total) > 0 && (
                         <>
                           <span>&bull;</span>
                           <span className="text-red-600 font-bold">Damages: ₹{item.gross_damage_total}</span>
@@ -667,17 +813,27 @@ export default function ScootyRecoveriesListPage() {
                       className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95 self-end sm:self-auto"
                     >
                       <span>
-                        {item.status === 'ASSIGNED'
-                          ? 'Agent Accept'
-                          : item.status === 'ACCEPTED'
-                          ? 'Pickup & Photos'
-                          : item.status === 'PICKED_UP'
-                          ? 'Reached Hub'
-                          : item.status === 'REACHED_HUB'
-                          ? 'Assign Tech'
-                          : item.status === 'Completed'
-                          ? 'View Slip'
-                          : 'Review & Settle'}
+                        {isRecoveryAgent ? (
+                          item.status === 'ASSIGNED' || item.status === 'Pending Inspection'
+                            ? 'Accept Task'
+                            : item.status === 'ACCEPTED'
+                            ? 'Pickup & Photos'
+                            : item.status === 'PICKED_UP'
+                            ? 'Submit Hub Arrival'
+                            : 'Delivered at Hub ✓'
+                        ) : (
+                          item.status === 'ASSIGNED' || item.status === 'Pending Inspection'
+                            ? 'Waiting for Agent'
+                            : item.status === 'ACCEPTED'
+                            ? 'Agent En Route'
+                            : item.status === 'PICKED_UP'
+                            ? 'In Transit'
+                            : item.status === 'REACHED_HUB'
+                            ? 'Assign Tech'
+                            : item.status === 'Completed'
+                            ? 'View Slip'
+                            : 'Review & Settle'
+                        )}
                       </span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>

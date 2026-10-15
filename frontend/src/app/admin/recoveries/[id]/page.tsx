@@ -180,7 +180,7 @@ const COMMON_PARTS = [
 export default function ScootyRecoveryDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const recoveryId = params?.id as string;
 
   const [recoveryRecord, setRecoveryRecord] = useState<ScootyRecovery | null>(null);
@@ -659,6 +659,27 @@ export default function ScootyRecoveryDetailPage() {
   const isInspected = status === 'INSPECTION_COMPLETED' || status === 'Inspection Completed';
   const isCompleted = status === 'Completed';
 
+  // Role booleans and permission gates
+  const userRoleName = (user?.roleName || user?.roleDisplayName || '').toUpperCase();
+  const isSuperAdmin = userRoleName.includes('SUPER') || userRoleName.includes('ADMIN');
+  const isRecoveryAgent = (userRoleName.includes('RECOVERY') || userRoleName.includes('AGENT')) && !isSuperAdmin;
+  const isHubIncharge = userRoleName.includes('HUB') && !isSuperAdmin;
+  const isTechnician = userRoleName.includes('TECH') && !isSuperAdmin;
+
+  // Check if current user is the recovery agent assigned to this recovery ticket
+  const isAssignedAgent = recoveryRecord && (
+    (user?.id && recoveryRecord.recovery_agent_id && Number(recoveryRecord.recovery_agent_id) === Number(user.id)) ||
+    (user?.name && recoveryRecord.recovery_agent_name && user.name.toLowerCase().trim() === recoveryRecord.recovery_agent_name.toLowerCase().trim()) ||
+    (user?.name && recoveryRecord.recovered_by && user.name.toLowerCase().trim() === recoveryRecord.recovered_by.toLowerCase().trim())
+  );
+
+  const canAcceptRecovery = hasPermission('recoveries.accept') && (isAssignedAgent || isSuperAdmin || !recoveryRecord.recovery_agent_id);
+  const canPickupScooty = hasPermission('recoveries.pickup') && (isAssignedAgent || isSuperAdmin);
+  const canMarkReachedHub = hasPermission('recoveries.reached_hub') && (isAssignedAgent || isSuperAdmin);
+  const canAssignTech = hasPermission('recoveries.assign_tech');
+  const canInspect = hasPermission('recoveries.inspect');
+  const canSettle = hasPermission('recoveries.settle');
+
   // Step Tracker indices
   const stepIdx = isAssigned ? 1 : isAccepted ? 2 : isPickedUp ? 3 : isReachedHub ? 4 : (isUnderInspection || isInspected) ? 5 : 6;
 
@@ -699,7 +720,7 @@ export default function ScootyRecoveryDetailPage() {
             >
               <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#00A854]' : ''}`} />
             </button>
-            {isCompleted && (
+            {isCompleted && !isRecoveryAgent && (
               <>
                 <button
                   onClick={() => window.print()}
@@ -722,17 +743,25 @@ export default function ScootyRecoveryDetailPage() {
 
         {/* Multi-Step Visual Progress Bar */}
         <div className="bg-white p-4 rounded-3xl border border-[#E5E7EB] shadow-xs">
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
-            {[
-              { num: 1, label: '1. Assigned' },
-              { num: 2, label: '2. Accepted' },
-              { num: 3, label: '3. Picked Up' },
-              { num: 4, label: '4. At Hub' },
-              { num: 5, label: '5. Inspection' },
-              { num: 6, label: '6. Settled' }
-            ].map((step) => {
-              const isPast = stepIdx > step.num;
-              const isCurrent = stepIdx === step.num;
+          <div className={`grid ${isRecoveryAgent ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-6'} gap-2 text-center text-xs`}>
+            {(isRecoveryAgent
+              ? [
+                  { num: 1, label: '1. Assigned' },
+                  { num: 2, label: '2. Accepted' },
+                  { num: 3, label: '3. Picked Up' },
+                  { num: 4, label: '4. Delivered to Hub' }
+                ]
+              : [
+                  { num: 1, label: '1. Assigned' },
+                  { num: 2, label: '2. Accepted' },
+                  { num: 3, label: '3. Picked Up' },
+                  { num: 4, label: '4. At Hub' },
+                  { num: 5, label: '5. Inspection' },
+                  { num: 6, label: '6. Settled' }
+                ]
+            ).map((step) => {
+              const isPast = isRecoveryAgent && step.num === 4 ? stepIdx >= 4 : stepIdx > step.num;
+              const isCurrent = isRecoveryAgent && step.num === 4 ? stepIdx >= 4 : stepIdx === step.num;
               return (
                 <div
                   key={step.num}
@@ -763,7 +792,11 @@ export default function ScootyRecoveryDetailPage() {
               </div>
               <div>
                 <h2 className="text-sm font-black text-slate-900">Step 1: Recovery Request Pending Acceptance</h2>
-                <p className="text-[11px] text-slate-500">Assigned agent must accept the request before pickup</p>
+                <p className="text-[11px] text-slate-500">
+                  {canAcceptRecovery
+                    ? 'You are assigned to this recovery task. Please accept to proceed to the pickup location.'
+                    : `Assigned Recovery Agent (${recoveryRecord.recovery_agent_name || recoveryRecord.recovered_by || 'Agent'}) must accept the request.`}
+                </p>
               </div>
             </div>
 
@@ -792,18 +825,25 @@ export default function ScootyRecoveryDetailPage() {
                 Fixed Recovery Charge: ₹1,000 &bull; Security Deposit: ₹2,000
               </div>
 
-              <button
-                onClick={handleAgentAccept}
-                disabled={isAccepting}
-                className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
-              >
-                {isAccepting ? (
-                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4 stroke-[3]" />
-                )}
-                <span>Accept Recovery Request</span>
-              </button>
+              {canAcceptRecovery ? (
+                <button
+                  onClick={handleAgentAccept}
+                  disabled={isAccepting}
+                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {isAccepting ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Accept Recovery Request</span>
+                </button>
+              ) : (
+                <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <span>Waiting for Recovery Agent ({recoveryRecord.recovery_agent_name || recoveryRecord.recovered_by || 'Agent'}) to Accept</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -980,21 +1020,30 @@ export default function ScootyRecoveryDetailPage() {
             </div>
 
             {/* Submit Pickup Button */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleConfirmPickup}
-                disabled={isPickingUp}
-                className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
-              >
-                {isPickingUp ? (
-                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4 stroke-[3]" />
-                )}
-                <span>Confirm Scooty Picked Up</span>
-              </button>
-            </div>
+            {canPickupScooty ? (
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleConfirmPickup}
+                  disabled={isPickingUp}
+                  className="px-6 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {isPickingUp ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Confirm Scooty Picked Up</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-900">
+                <span className="font-bold flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-blue-600 animate-pulse" />
+                  <span>Agent ({recoveryRecord.recovery_agent_name || 'Agent'}) is at pickup location capturing mandatory vehicle photos.</span>
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1051,30 +1100,105 @@ export default function ScootyRecoveryDetailPage() {
             )}
 
             {/* Reached Hub Button */}
-            <div className="p-4 bg-slate-900 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-black">Reached Service Hub?</h4>
-                <p className="text-[11px] text-slate-400">Click to notify Hub Incharge that scooty has safely arrived at hub.</p>
-              </div>
+            {canMarkReachedHub ? (
+              <div className="p-4 bg-slate-900 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-black">Reached Service Hub?</h4>
+                  <p className="text-[11px] text-slate-400">Click to notify Hub Incharge that scooty has safely arrived at hub.</p>
+                </div>
 
-              <button
-                onClick={handleAgentReachedHub}
-                disabled={isMarkingReachedHub}
-                className="px-5 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
-              >
-                {isMarkingReachedHub ? (
-                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Check className="w-4 h-4 stroke-[3]" />
-                )}
-                <span>Agent Reached Hub</span>
-              </button>
+                <button
+                  onClick={handleAgentReachedHub}
+                  disabled={isMarkingReachedHub}
+                  className="px-5 py-2.5 rounded-xl bg-[#00D96B] hover:bg-[#00BF5E] text-[#0A0F1D] font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#00D96B]/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {isMarkingReachedHub ? (
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  )}
+                  <span>Agent Reached Hub</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between text-xs text-indigo-900">
+                <span className="font-bold flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-indigo-600 animate-bounce" />
+                  <span>Agent is bringing vehicle to {recoveryRecord.hub_name}. Awaiting hub arrival.</span>
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RECOVERY AGENT COMPLETION BANNER (For Recovery Agent when Reached Hub or Beyond) */}
+        {isRecoveryAgent && stepIdx >= 4 && (
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-emerald-200 shadow-xs space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-emerald-100">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-slate-900">Scooty Safely Delivered to Hub</h2>
+                <p className="text-xs text-slate-500">
+                  Your recovery assignment is complete. Vehicle is now in {recoveryRecord.hub_name} possession.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Service Hub</span>
+                <p className="font-black text-slate-800 text-sm">{recoveryRecord.hub_name}</p>
+              </div>
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Hub Arrival Logged</span>
+                <p className="font-black text-slate-800 text-sm">
+                  {recoveryRecord.reached_hub_at
+                    ? new Date(recoveryRecord.reached_hub_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                    : 'Delivered at Hub'}
+                </p>
+              </div>
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Fixed Recovery Fee</span>
+                <p className="font-black text-emerald-700 text-sm">₹{recoveryRecord.recovery_charge || 1000}</p>
+              </div>
+            </div>
+
+            {/* Photos Uploaded by Agent */}
+            {recoveryRecord.pickup_photos && recoveryRecord.pickup_photos.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <span className="text-xs font-black text-slate-800 block">
+                  Your Uploaded Inspection Photos ({recoveryRecord.pickup_photos.length}):
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {recoveryRecord.pickup_photos.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => setPreviewImage(p.url)}
+                      className="relative h-28 rounded-2xl overflow-hidden border border-slate-200 cursor-pointer group shadow-xs"
+                    >
+                      <img src={p.url} alt={p.angle} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                      <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold">
+                        {p.angle}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-emerald-900 text-xs font-medium flex items-center gap-2">
+              <Check className="w-4 h-4 stroke-[3] text-emerald-600 flex-shrink-0" />
+              <span>
+                Task Completed: You have successfully picked up and delivered the vehicle to the hub. Damage inspection and rider settlement will be handled by the Hub Incharge.
+              </span>
             </div>
           </div>
         )}
 
         {/* STEP 4: AT HUB (Hub Incharge Assigns Technician) */}
-        {isReachedHub && (
+        {isReachedHub && !isRecoveryAgent && (
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
               <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center font-bold">
@@ -1130,7 +1254,7 @@ export default function ScootyRecoveryDetailPage() {
         )}
 
         {/* STEP 5: TECHNICIAN DAMAGE INSPECTION (Add parts changed & submit) */}
-        {isUnderInspection && (
+        {isUnderInspection && !isRecoveryAgent && (
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -1260,7 +1384,7 @@ export default function ScootyRecoveryDetailPage() {
         )}
 
         {/* STEP 6: HUB INCHARGE SETTLEMENT & MATHEMATICS */}
-        {(isInspected || isCompleted) && (
+        {(isInspected || isCompleted) && !isRecoveryAgent && (
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -1436,7 +1560,7 @@ export default function ScootyRecoveryDetailPage() {
         )}
 
         {/* Uploaded Inspection Photos Gallery (Always visible when photos exist) */}
-        {recoveryRecord.pickup_photos && recoveryRecord.pickup_photos.length > 0 && !isAccepted && !isAssigned && (
+        {recoveryRecord.pickup_photos && recoveryRecord.pickup_photos.length > 0 && !isAccepted && !isAssigned && !isRecoveryAgent && (
           <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">

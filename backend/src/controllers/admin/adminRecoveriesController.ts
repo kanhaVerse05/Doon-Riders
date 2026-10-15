@@ -727,8 +727,16 @@ export const acceptRecovery = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const recoveryId = Number(id);
     const now = new Date().toISOString();
-    const performerName = req.user?.name || 'Recovery Agent';
-    const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    // Hub Incharge cannot accept recovery on behalf of recovery agent!
+    if (userRole.includes('HUB') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Hub Incharge cannot accept recovery tasks. Only the assigned Recovery Agent can accept.'
+      });
+    }
 
     let scootyRecovery = (memoryStore.scootyRecoveries || []).find(
       r => r.id === recoveryId || r.recovery_number?.toLowerCase() === id.toLowerCase()
@@ -746,6 +754,32 @@ export const acceptRecovery = async (req: AuthRequest, res: Response) => {
     if (!scootyRecovery) {
       return res.status(404).json({ success: false, message: 'Recovery ticket not found' });
     }
+
+    // Check if recovery ticket is already accepted or beyond
+    if (scootyRecovery.status !== 'ASSIGNED' && scootyRecovery.status !== 'Pending Inspection') {
+      return res.status(400).json({
+        success: false,
+        message: `Recovery ticket is already in ${scootyRecovery.status} status.`
+      });
+    }
+
+    // Verify assigned agent
+    if (!isSuperAdmin && scootyRecovery.recovery_agent_id && req.user?.id) {
+      if (Number(scootyRecovery.recovery_agent_id) !== Number(req.user.id)) {
+        const agentNameMatches = scootyRecovery.recovery_agent_name && 
+          req.user.name && 
+          scootyRecovery.recovery_agent_name.toLowerCase().trim() === req.user.name.toLowerCase().trim();
+        if (!agentNameMatches) {
+          return res.status(403).json({
+            success: false,
+            message: `This recovery task is assigned to agent: ${scootyRecovery.recovery_agent_name || 'another agent'}. You cannot accept it.`
+          });
+        }
+      }
+    }
+
+    const performerName = req.user?.name || scootyRecovery.recovery_agent_name || 'Recovery Agent';
+    const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
 
     scootyRecovery.status = 'ACCEPTED';
     scootyRecovery.accepted_at = now;
@@ -830,6 +864,16 @@ export const pickupScooty = async (req: AuthRequest, res: Response) => {
 
     const recoveryId = Number(id);
     const now = new Date().toISOString();
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    if (userRole.includes('HUB') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Hub Incharge cannot perform vehicle pickup. Only the assigned Recovery Agent can pickup.'
+      });
+    }
+
     const performerName = req.user?.name || 'Recovery Agent';
     const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
 
@@ -1010,6 +1054,16 @@ export const agentReachedHub = async (req: AuthRequest, res: Response) => {
     const { hub_id, remarks } = req.body;
     const recoveryId = Number(id);
     const now = new Date().toISOString();
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    if (userRole.includes('HUB') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Hub Incharge cannot mark vehicle reached hub. Only the assigned Recovery Agent can mark arrival.'
+      });
+    }
+
     const performerName = req.user?.name || 'Recovery Agent';
     const performerRole = req.user?.roleDisplayName || 'Recovery Agent';
 
@@ -1118,6 +1172,15 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
     const { id } = req.params;
     const { technician_id } = req.body;
     const recoveryId = Number(id);
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    if (userRole.includes('RECOVERY') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Recovery agents cannot assign technicians. Only Hub Incharge can assign technicians.'
+      });
+    }
 
     if (!technician_id) {
       return res.status(400).json({ success: false, message: 'Please select a technician to assign' });
@@ -1249,6 +1312,16 @@ export const submitTechnicianRecoveryInspection = async (req: AuthRequest, res: 
     const { damage_items = [], technician_remarks } = req.body;
     const recoveryId = Number(id);
     const now = new Date().toISOString();
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    if (userRole.includes('RECOVERY') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Recovery agents cannot conduct technical damage inspections.'
+      });
+    }
+
     const performerName = req.user?.name || 'Technician';
     const performerRole = req.user?.roleDisplayName || 'Technician';
 
@@ -1418,6 +1491,16 @@ export const settleRecovery = async (req: AuthRequest, res: Response) => {
 
     const recoveryId = Number(id);
     const now = new Date().toISOString();
+    const userRole = (req.user?.roleName || '').toUpperCase();
+    const isSuperAdmin = userRole.includes('SUPER') || userRole.includes('ADMIN');
+
+    if (userRole.includes('RECOVERY') && !isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Recovery agents cannot approve financial settlements. This is reserved for Hub Incharges.'
+      });
+    }
+
     const performerName = req.user?.name || 'Hub Incharge';
     const performerRole = req.user?.roleDisplayName || 'Hub Incharge';
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticateJwt } from '../../middleware/authMiddleware';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbacMiddleware';
 import {
   getAllRecoveries,
   getRecoveryById,
@@ -17,20 +18,20 @@ const router = Router();
 
 router.use(authenticateJwt);
 
-// Scooty Recoveries API Endpoints
-router.get('/', getAllRecoveries);
-router.get('/:id', getRecoveryById);
-router.post('/', createRecovery);
-router.post('/:id/accept', acceptRecovery);
-router.post('/:id/pickup', pickupScooty);
-router.post('/:id/reached-hub', agentReachedHub);
-router.post('/:id/assign', assignTechnicianForRecovery);
-router.patch('/:id/assign', assignTechnicianForRecovery);
-router.post('/:id/inspection', submitTechnicianRecoveryInspection);
-router.patch('/:id/inspection', submitTechnicianRecoveryInspection);
-router.post('/:id/settle', settleRecovery);
-router.patch('/:id/settle', settleRecovery);
-router.patch('/:id/status', updateRecoveryStatus);
-router.post('/:id/status', updateRecoveryStatus);
+// Scooty Recoveries API Endpoints with granular RBAC protections
+router.get('/', requirePermission('recoveries.view'), getAllRecoveries);
+router.get('/:id', requirePermission('recoveries.view'), getRecoveryById);
+router.post('/', requirePermission('recoveries.create'), createRecovery);
+router.post('/:id/accept', requirePermission('recoveries.accept'), acceptRecovery);
+router.post('/:id/pickup', requirePermission('recoveries.pickup'), pickupScooty);
+router.post('/:id/reached-hub', requirePermission('recoveries.reached_hub'), agentReachedHub);
+router.post('/:id/assign', requirePermission('recoveries.assign_tech'), assignTechnicianForRecovery);
+router.patch('/:id/assign', requirePermission('recoveries.assign_tech'), assignTechnicianForRecovery);
+router.post('/:id/inspection', requirePermission('recoveries.inspect'), submitTechnicianRecoveryInspection);
+router.patch('/:id/inspection', requirePermission('recoveries.inspect'), submitTechnicianRecoveryInspection);
+router.post('/:id/settle', requirePermission('recoveries.settle'), settleRecovery);
+router.patch('/:id/settle', requirePermission('recoveries.settle'), settleRecovery);
+router.patch('/:id/status', requireAnyPermission('recoveries.settle', 'recoveries.create', 'recoveries.reached_hub'), updateRecoveryStatus);
+router.post('/:id/status', requireAnyPermission('recoveries.settle', 'recoveries.create', 'recoveries.reached_hub'), updateRecoveryStatus);
 
 export default router;
