@@ -1618,6 +1618,70 @@ export const addAdditionalPart = async (req: AuthRequest, res: Response) => {
     const jobId = Number(id);
     const { part_name, part_id = 0, quantity = 1, unit_price = 0, notes = '' } = req.body;
 
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid repair job ID.' });
+    }
+    if (typeof part_name !== 'string' || !part_name.trim()) {
+      return res.status(400).json({ success: false, message: 'Part name is required.' });
+    }
+
+    if (getDbStatus()) {
+      const isTechnician = req.user?.roleName?.trim().toUpperCase() === 'TECHNICIAN';
+      const technicianId = isTechnician ? await getTechnicianIdForUser(req.user) : null;
+      if (isTechnician && !technicianId) {
+        return res.status(404).json({ success: false, message: 'Repair job not found.' });
+      }
+      const qty = Number(quantity);
+      const price = Number(unit_price);
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price < 0) {
+        return res.status(400).json({ success: false, message: 'Quantity must be positive and unit price cannot be negative.' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query(`
+          SELECT * FROM repair_jobs
+          WHERE id = $1 AND ($2::int IS NULL OR technician_id = $2)
+          FOR UPDATE
+        `, [jobId, isTechnician ? technicianId : null]);
+        if (!jobResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        const job = jobResult.rows[0];
+        const performerName = req.user?.name || job.technician_name || 'Technician';
+        const insertedPart = await client.query(`
+          INSERT INTO repair_parts
+            (job_id, part_id, part_name, requested_quantity, approved_quantity,
+             replaced_quantity, unit_price, total_price, status, notes)
+          VALUES ($1, $2, $3, $4, $4, $4, $5, $6, 'Approved', $7)
+          RETURNING *
+        `, [jobId, Number(part_id) || 0, part_name.trim(), qty, price, qty * price,
+          typeof notes === 'string' && notes.trim() ? notes.trim() : 'Added during repair by technician']);
+        await client.query(`
+          INSERT INTO repair_audit_logs
+            (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'ADDITIONAL_PART_ADDED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || job.technician_id || null, performerName,
+          req.user?.roleDisplayName || req.user?.roleName || 'Technician',
+          JSON.stringify({ part_name: part_name.trim(), quantity: qty, unit_price: price })]);
+        const partsResult = await client.query('SELECT * FROM repair_parts WHERE job_id = $1 ORDER BY id ASC', [jobId]);
+        await client.query('COMMIT');
+
+        return res.json({
+          success: true,
+          data: { part: insertedPart.rows[0], parts: partsResult.rows },
+          message: `Part "${part_name.trim()}" added successfully to repair job.`
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {
       return res.status(404).json({ success: false, message: 'Repair job not found.' });
@@ -1684,6 +1748,143 @@ export const completeRepair = async (req: AuthRequest, res: Response) => {
       technician_notes = '',
       completion_photos = []
     } = req.body;
+
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid repair job ID.' });
+    }
+    if (!Array.isArray(actually_replaced_parts)) {
+      return res.status(400).json({ success: false, message: 'Replaced parts must be provided as a list.' });
+    }
+
+    if (getDbStatus()) {
+      const isTechnician = req.user?.roleName?.trim().toUpperCase() === 'TECHNICIAN';
+      const technicianId = isTechnician ? await getTechnicianIdForUser(req.user) : null;
+      if (isTechnician && !technicianId) {
+        return res.status(404).json({ success: false, message: 'Repair job not found.' });
+      }
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const jobResult = await client.query(`
+          SELECT * FROM repair_jobs
+          WHERE id = $1 AND ($2::int IS NULL OR technician_id = $2)
+          FOR UPDATE
+        `, [jobId, isTechnician ? technicianId : null]);
+        if (!jobResult.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, message: 'Repair job not found.' });
+        }
+        const job = jobResult.rows[0];
+        const completionTime = new Date();
+        const completionIso = completionTime.toISOString();
+        const performerName = req.user?.name || job.technician_name || 'Technician';
+        const timingResult = await client.query(
+          'SELECT * FROM repair_timing WHERE job_id = $1 ORDER BY id DESC LIMIT 1 FOR UPDATE',
+          [jobId]
+        );
+        const existingTiming = timingResult.rows[0];
+        const startedAt = existingTiming?.repair_started_at
+          ? new Date(existingTiming.repair_started_at)
+          : new Date(completionTime.getTime() - 60 * 60 * 1000);
+        const durationSeconds = Math.max(1, Math.floor((completionTime.getTime() - startedAt.getTime()) / 1000));
+        const durationFormatted = formatDuration(durationSeconds);
+        let timing;
+        if (existingTiming) {
+          const updatedTiming = await client.query(`
+            UPDATE repair_timing
+            SET repair_started_at = COALESCE(repair_started_at, $2),
+                repair_completed_at = $3, completed_by_id = $4, completed_by_name = $5,
+                total_duration_seconds = $6, total_duration_formatted = $7,
+                technician_notes = COALESCE(NULLIF($8, ''), technician_notes),
+                completion_photos = $9::jsonb
+            WHERE id = $1
+            RETURNING *
+          `, [existingTiming.id, startedAt.toISOString(), completionIso, req.user?.id || job.technician_id || null,
+            performerName, durationSeconds, durationFormatted, technician_notes,
+            JSON.stringify(Array.isArray(completion_photos) ? completion_photos : [])]);
+          timing = updatedTiming.rows[0];
+        } else {
+          const insertedTiming = await client.query(`
+            INSERT INTO repair_timing
+              (job_id, repair_started_at, repair_completed_at, started_by_id, started_by_name,
+               completed_by_id, completed_by_name, total_duration_seconds, total_duration_formatted,
+               technician_notes, completion_photos)
+            VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7, $8, $9::jsonb)
+            RETURNING *
+          `, [jobId, startedAt.toISOString(), completionIso, req.user?.id || job.technician_id || null,
+            performerName, durationSeconds, durationFormatted, technician_notes,
+            JSON.stringify(Array.isArray(completion_photos) ? completion_photos : [])]);
+          timing = insertedTiming.rows[0];
+        }
+
+        for (const part of actually_replaced_parts) {
+          const replacedQty = Number(part.replaced_quantity ?? (part.status === 'Replaced' ? part.approved_quantity || 1 : 0));
+          if (!Number.isFinite(replacedQty) || replacedQty < 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: 'Replaced part quantities must be non-negative numbers.' });
+          }
+          const partStatus = replacedQty > 0 ? 'Replaced' : 'Not Replaced';
+          if (part.id) {
+            const updatedPart = await client.query(`
+              UPDATE repair_parts
+              SET replaced_quantity = $3, status = $4, notes = COALESCE($5, notes)
+              WHERE id = $1 AND job_id = $2
+              RETURNING id
+            `, [part.id, jobId, replacedQty, partStatus, part.notes || null]);
+            if (updatedPart.rowCount) continue;
+          }
+
+          if (replacedQty > 0) {
+            const partName = typeof part.part_name === 'string' && part.part_name.trim()
+              ? part.part_name.trim()
+              : 'Emergency Replaced Part';
+            const unitPrice = Math.max(0, Number(part.unit_price || 0));
+            await client.query(`
+              INSERT INTO repair_parts
+                (job_id, part_id, part_name, requested_quantity, approved_quantity,
+                 replaced_quantity, unit_price, total_price, status, notes)
+              VALUES ($1, $2, $3, 0, 0, $4, $5, $6, 'Replaced', $7)
+            `, [jobId, Number(part.part_id || 0), partName, replacedQty, unitPrice,
+              replacedQty * unitPrice, part.notes || 'Emergency additional part replaced during repair']);
+          }
+        }
+
+        const updatedJob = await client.query(
+          "UPDATE repair_jobs SET status = 'Repair Completed', updated_at = $2 WHERE id = $1 RETURNING *",
+          [jobId, completionIso]
+        );
+        const partsResult = await client.query('SELECT * FROM repair_parts WHERE job_id = $1 ORDER BY id ASC', [jobId]);
+        const replacedCount = partsResult.rows.reduce((total: number, part: any) => total + Number(part.replaced_quantity || 0), 0);
+        await client.query(`
+          INSERT INTO repair_audit_logs
+            (job_id, action, performed_by_id, performed_by_name, performed_by_role, metadata)
+          VALUES ($1, 'REPAIR_COMPLETED', $2, $3, $4, $5::jsonb)
+        `, [jobId, req.user?.id || job.technician_id || null, performerName,
+          req.user?.roleDisplayName || req.user?.roleName || 'Technician',
+          JSON.stringify({ duration_seconds: durationSeconds, replaced_parts_count: replacedCount, technician_notes })]);
+        await client.query('COMMIT');
+
+        await logAuditEvent({
+          userId: req.user?.id,
+          userName: performerName,
+          userRole: req.user?.roleName,
+          action: 'UPDATE',
+          module: 'REPAIR_JOBS',
+          recordId: jobId,
+          notes: `Repair completed for ${job.job_number} in ${durationFormatted}`
+        });
+        return res.json({
+          success: true,
+          data: { job: updatedJob.rows[0], timing, parts: partsResult.rows },
+          message: `Repair completed successfully in ${durationFormatted}. Job is ready for billing.`
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
 
     const job = memoryStore.repairJobs.find(j => j.id === jobId);
     if (!job) {
