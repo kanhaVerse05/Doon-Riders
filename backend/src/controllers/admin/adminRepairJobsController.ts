@@ -18,7 +18,8 @@ export const formatDuration = (seconds: number): string => {
   return `${secs}s`;
 };
 
-const getDatabaseRepairDirectories = async () => {
+const getDatabaseRepairDirectories = async (user?: AuthRequest['user']) => {
+  const technicianOnly = user?.roleName?.trim().toUpperCase() === 'TECHNICIAN';
   const [hubsResult, techniciansResult] = await Promise.all([
     pool.query(`
       SELECT id, hub_code, hub_name, location, incharge_name, incharge_phone
@@ -43,8 +44,9 @@ const getDatabaseRepairDirectories = async () => {
         ON app_role.id = app_user.role_id
        AND UPPER(app_role.name) = 'TECHNICIAN'
       LEFT JOIN repair_hubs hub ON hub.id = tech.hub_id
+      WHERE ($1::int IS NULL OR app_user.id = $1)
       ORDER BY tech.name
-    `)
+    `, [technicianOnly ? Number(user?.id) : null])
   ]);
 
   return { hubs: hubsResult.rows, technicians: techniciansResult.rows };
@@ -73,6 +75,29 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
         let whereClauses: string[] = ['1=1'];
         let params: any[] = [];
         let pIndex = 1;
+
+        if (req.user?.roleName?.trim().toUpperCase() === 'TECHNICIAN') {
+          const technicianResult = await pool.query(`
+            SELECT tech.id
+            FROM technicians tech
+            JOIN users app_user
+              ON LOWER(app_user.email) = LOWER(tech.email)
+             AND app_user.id = $1
+             AND app_user.deleted_at IS NULL
+             AND app_user.status = 'active'
+            JOIN roles app_role
+              ON app_role.id = app_user.role_id
+             AND UPPER(app_role.name) = 'TECHNICIAN'
+            LIMIT 1
+          `, [req.user.id]);
+          if (technicianResult.rows.length) {
+            whereClauses.push(`j.technician_id = $${pIndex}`);
+            params.push(Number(technicianResult.rows[0].id));
+            pIndex++;
+          } else {
+            whereClauses.push('FALSE');
+          }
+        }
 
         if (searchTerm) {
           whereClauses.push(`(
@@ -110,16 +135,14 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
           pIndex++;
         }
 
-        if (payment_status && payment_status !== 'all') {
-          whereClauses.push(`p.payment_status = $${pIndex}`);
-          params.push(payment_status);
-          pIndex++;
-        }
+        // Payment and billing tables are not part of the deployed PostgreSQL schema.
+        // Keep payment filtering safely empty until those values are persisted in SQL.
+        if (payment_status && payment_status !== 'all') whereClauses.push('FALSE');
 
         let orderSql = 'j.id DESC';
         if (sort_by === 'oldest') orderSql = 'j.id ASC';
         if (sort_by === 'priority') orderSql = `CASE j.priority WHEN 'Urgent' THEN 1 ELSE 2 END, j.id DESC`;
-        if (sort_by === 'bill_amount') orderSql = `COALESCE(b.grand_total, 0) ${sort_order === 'asc' ? 'ASC' : 'DESC'}`;
+        if (sort_by === 'bill_amount') orderSql = `j.id ${sort_order === 'asc' ? 'ASC' : 'DESC'}`;
 
         const sql = `
           SELECT 
@@ -128,18 +151,16 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
             t.repair_completed_at,
             t.total_duration_seconds,
             t.total_duration_formatted,
-            b.grand_total as bill_amount,
-            b.bill_number,
-            p.payment_method,
-            p.payment_status,
-            p.amount as payment_amount,
-            p.paid_at as payment_paid_at,
+            NULL::numeric as bill_amount,
+            NULL::text as bill_number,
+            NULL::text as payment_method,
+            NULL::text as payment_status,
+            NULL::numeric as payment_amount,
+            NULL::timestamptz as payment_paid_at,
             tech.phone as technician_phone,
             tech.technician_code
           FROM repair_jobs j
           LEFT JOIN repair_timing t ON j.id = t.job_id
-          LEFT JOIN repair_bills b ON j.id = b.job_id
-          LEFT JOIN repair_payments p ON j.id = p.job_id
           LEFT JOIN technicians tech ON j.technician_id = tech.id
           WHERE ${whereClauses.join(' AND ')}
           ORDER BY ${orderSql}
@@ -147,7 +168,7 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
         `;
 
         const result = await pool.query(sql, params);
-        const repairDirectories = await getDatabaseRepairDirectories();
+        const repairDirectories = await getDatabaseRepairDirectories(req.user);
 
         // Stats query
         const allJobsRes = await pool.query(`
@@ -195,6 +216,15 @@ export const getAllRepairJobs = async (req: AuthRequest, res: Response) => {
 
     // Fallback: In-Memory Store
     let filtered = [...memoryStore.repairJobs];
+
+    if (req.user?.roleName?.trim().toUpperCase() === 'TECHNICIAN') {
+      const technician = memoryStore.technicians.find(t =>
+        (t.email || '').toLowerCase() === (req.user?.email || '').toLowerCase()
+      );
+      filtered = technician
+        ? filtered.filter(job => job.technician_id === technician.id)
+        : [];
+    }
 
     if (searchTerm) {
       filtered = filtered.filter(j =>
@@ -1589,7 +1619,7 @@ export const getRepairMeta = async (req: AuthRequest, res: Response) => {
   try {
     if (getDbStatus()) {
       const [directories, inventoryResult] = await Promise.all([
-        getDatabaseRepairDirectories(),
+        getDatabaseRepairDirectories(req.user),
         pool.query('SELECT id, part_code, part_name, unit_price, quantity FROM inventory ORDER BY part_name')
       ]);
       return res.json({
