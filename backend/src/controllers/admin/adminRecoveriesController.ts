@@ -25,6 +25,35 @@ const getAvailableTechnicians = async () => {
   );
 };
 
+const getTechnicianIdsForUser = async (user: AuthRequest['user']): Promise<number[]> => {
+  if (!user) return [];
+
+  if (getDbStatus()) {
+    try {
+      const result = await pool.query(`
+        SELECT id
+        FROM technicians
+        WHERE technician_code = $1
+           OR ($2 <> '' AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM($2)))
+           OR ($3 <> '' AND REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g') = REGEXP_REPLACE($3, '[^0-9]', '', 'g'))
+      `, [`TECH-U-${user.id}`, user.email || '', user.phone || '']);
+      if (result.rows.length > 0) return result.rows.map((row: any) => Number(row.id));
+    } catch (error) {
+      console.warn('[getTechnicianIdsForUser] DB lookup failed:', error);
+    }
+  }
+
+  const email = (user.email || '').trim().toLowerCase();
+  const phone = (user.phone || '').replace(/\D/g, '');
+  const matches = (memoryStore.technicians || []).filter(technician =>
+    technician.technician_code === `TECH-U-${user.id}` ||
+    (!!email && (technician.email || '').trim().toLowerCase() === email) ||
+    (!!phone && (technician.phone || '').replace(/\D/g, '') === phone)
+  );
+
+  return matches.length > 0 ? matches.map(technician => Number(technician.id)) : [Number(user.id)];
+};
+
 // Helper: Save Base64 Compressed Image to Disk in uploads/recoveries
 export const saveRecoveryPhoto = (base64Str: string, recoveryId: number | string, angle: string): string => {
   if (!base64Str || typeof base64Str !== 'string') return '';
@@ -141,6 +170,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
     const searchTerm = String(search || '').toLowerCase().trim();
     const userRole = (req.user?.roleName || '').toUpperCase();
     const userId = req.user?.id;
+    const technicianIds = userRole.includes('TECH') ? await getTechnicianIdsForUser(req.user) : [];
 
     if (getDbStatus()) {
       try {
@@ -158,8 +188,8 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
             params.push((req.user as any).hub_id);
             pIndex++;
           } else if (userRole.includes('TECH')) {
-            whereClauses.push(`r.technician_id = $${pIndex}`);
-            params.push(userId);
+            whereClauses.push(`r.technician_id = ANY($${pIndex}::int[])`);
+            params.push(technicianIds);
             pIndex++;
           } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
             whereClauses.push(`(r.recovery_agent_id = $${pIndex} OR LOWER(TRIM(COALESCE(r.recovered_by, ''))) = $${pIndex + 1} OR LOWER(TRIM(COALESCE(r.recovery_agent_name, ''))) = $${pIndex + 1})`);
@@ -284,11 +314,12 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
     if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
       list = list.filter(r => r.hub_id === (req.user as any)?.hub_id);
     } else if (userRole.includes('TECH')) {
-      const techRecord = memoryStore.technicians.find(
-        t => t.name.toLowerCase() === req.user?.name.toLowerCase() || t.id === userId
+      const assignedTechIds = new Set(technicianIds);
+      const technicianName = (req.user?.name || '').trim().toLowerCase();
+      list = list.filter(r =>
+        assignedTechIds.has(Number(r.technician_id)) ||
+        (r.technician_name || '').trim().toLowerCase() === technicianName
       );
-      const techId = techRecord ? techRecord.id : userId;
-      list = list.filter(r => r.technician_id === techId);
     } else if (userRole.includes('RECOVERY') || userRole.includes('AGENT')) {
       const uName = (req.user?.name || '').toLowerCase().trim();
       const uId = Number(userId) || 0;

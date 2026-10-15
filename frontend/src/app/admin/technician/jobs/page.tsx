@@ -290,21 +290,12 @@ export default function TechnicianJobsSummaryPage() {
       const recoveriesRes = await adminApi.get('/admin/recoveries?limit=100');
       if (recoveriesRes && recoveriesRes.success) {
         let allRecoveries: any[] = recoveriesRes.data || [];
-        if (isTechnicianRole && user) {
-          const matchedTech = jobsRes?.technicians?.find(
-            (t: Technician) =>
-              t.name.toLowerCase() === user.name.toLowerCase() ||
-              t.id === user.id ||
-              (user.phone && t.phone && user.phone === t.phone)
-          );
-          const techId = matchedTech ? matchedTech.id : user.id;
-          allRecoveries = allRecoveries.filter(
-            (r: any) => r.technician_id === techId || r.technician_name?.toLowerCase() === user.name?.toLowerCase()
-          );
-        } else if (selectedTechId !== 'all') {
-          allRecoveries = allRecoveries.filter((r: any) => r.technician_id === Number(selectedTechId));
+        // The API applies technician assignment scoping using the technician
+        // directory ID. Re-filtering here by the login user ID can hide jobs
+        // because those IDs are not the same.
+        if (!isTechnicianRole && selectedTechId !== 'all') {
+          allRecoveries = allRecoveries.filter((recovery: any) => Number(recovery.technician_id) === Number(selectedTechId));
         }
-
         setRecoveryInspections(allRecoveries);
       }
     } catch (err) {
