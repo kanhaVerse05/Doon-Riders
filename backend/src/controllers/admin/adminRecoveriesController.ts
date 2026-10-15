@@ -5,6 +5,26 @@ import { pool, getDbStatus, memoryStore } from '../../config/db';
 import { AuthRequest } from '../../types/auth';
 import { logAuditEvent } from '../../helpers/auditLogger';
 
+const getAvailableTechnicians = async () => {
+  if (getDbStatus()) {
+    try {
+      const result = await pool.query(`
+        SELECT id, technician_code, name, phone, hub_id, hub_name, specialization, status
+        FROM technicians
+        WHERE LOWER(COALESCE(status, 'available')) = 'available'
+        ORDER BY name ASC
+      `);
+      return result.rows;
+    } catch (error) {
+      console.warn('[getAvailableTechnicians] DB query failed, falling back to memoryStore:', error);
+    }
+  }
+
+  return (memoryStore.technicians || []).filter(
+    technician => !technician.status || technician.status.toLowerCase() === 'available'
+  );
+};
+
 // Helper: Save Base64 Compressed Image to Disk in uploads/recoveries
 export const saveRecoveryPhoto = (base64Str: string, recoveryId: number | string, angle: string): string => {
   if (!base64Str || typeof base64Str !== 'string') return '';
@@ -249,7 +269,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
           data: result.rows,
           stats,
           hubs: memoryStore.repairHubs,
-          technicians: memoryStore.technicians,
+          technicians: await getAvailableTechnicians(),
           recoveryAgents: agentsRes.rows,
           inventoryParts: memoryStore.inventory
         });
@@ -315,7 +335,7 @@ export const getAllRecoveries = async (req: AuthRequest, res: Response) => {
       data: list,
       stats,
       hubs: memoryStore.repairHubs,
-      technicians: memoryStore.technicians,
+      technicians: await getAvailableTechnicians(),
       inventoryParts: memoryStore.inventory
     });
   } catch (error: any) {
@@ -360,7 +380,7 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
             data: scootyRecovery,
             timeline: eventsRes.rows,
             hubs: memoryStore.repairHubs,
-            technicians: memoryStore.technicians,
+            technicians: await getAvailableTechnicians(),
             recoveryAgents: agentsRes.rows,
             inventoryParts: memoryStore.inventory
           });
@@ -389,7 +409,7 @@ export const getRecoveryById = async (req: AuthRequest, res: Response) => {
       data: scootyRecovery,
       timeline,
       hubs: memoryStore.repairHubs,
-      technicians: memoryStore.technicians,
+      technicians: await getAvailableTechnicians(),
       recoveryAgents: fallbackAgents,
       inventoryParts: memoryStore.inventory
     });
@@ -1186,22 +1206,20 @@ export const assignTechnicianForRecovery = async (req: AuthRequest, res: Respons
       return res.status(400).json({ success: false, message: 'Please select a technician to assign' });
     }
 
-    let tech = (memoryStore.technicians || []).find(t => t.id === Number(technician_id));
-    if (!tech && getDbStatus()) {
+    let tech: any;
+    if (getDbStatus()) {
       try {
         const techRes = await pool.query('SELECT * FROM technicians WHERE id = $1', [Number(technician_id)]);
         if (techRes.rows.length > 0) {
           tech = techRes.rows[0];
-        } else {
-          const uRes = await pool.query('SELECT id, name, phone FROM users WHERE id = $1', [Number(technician_id)]);
-          if (uRes.rows.length > 0) {
-            tech = { id: uRes.rows[0].id, name: uRes.rows[0].name, phone: uRes.rows[0].phone, technician_code: `TECH-${uRes.rows[0].id}` };
-          }
         }
       } catch (_) {}
     }
     if (!tech) {
-      tech = { id: Number(technician_id), name: `Technician #${technician_id}`, phone: '', technician_code: `TECH-${technician_id}` };
+      tech = (memoryStore.technicians || []).find(t => t.id === Number(technician_id));
+    }
+    if (!tech) {
+      return res.status(400).json({ success: false, message: 'Selected technician was not found. Refresh the list and try again.' });
     }
 
     const now = new Date().toISOString();

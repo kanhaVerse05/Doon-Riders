@@ -11,6 +11,33 @@ import {
   syncUsersWithDb
 } from '../../helpers/userStorage';
 
+const ensureTechnicianProfile = async (user: { id: number; name: string; email: string; phone?: string | null }) => {
+  const technicianCode = `TECH-U-${user.id}`;
+  if (getDbStatus()) {
+    await pool.query(`
+      INSERT INTO technicians (technician_code, name, phone, email)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (technician_code) DO UPDATE
+      SET name = EXCLUDED.name, phone = EXCLUDED.phone, email = EXCLUDED.email
+    `, [technicianCode, user.name, user.phone || '', user.email]);
+    return;
+  }
+
+  const existing = memoryStore.technicians.find(tech => tech.technician_code === technicianCode);
+  if (existing) {
+    Object.assign(existing, { name: user.name, phone: user.phone || '', email: user.email });
+  } else {
+    memoryStore.technicians.push({
+      id: memoryStore.technicians.length > 0 ? Math.max(...memoryStore.technicians.map(tech => tech.id)) + 1 : 1,
+      technician_code: technicianCode,
+      name: user.name,
+      phone: user.phone || '',
+      email: user.email,
+      status: 'Available'
+    });
+  }
+};
+
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
     if (getDbStatus()) {
@@ -195,6 +222,10 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         created_at: new Date().toISOString()
       };
 
+      if (finalRoleName === 'TECHNICIAN') {
+        await ensureTechnicianProfile(createdUser);
+      }
+
       appendOrUpdateUserBackup(createdUser);
 
       await logAuditEvent({
@@ -226,6 +257,9 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       created_at: new Date().toISOString()
     };
     memoryStore.users.push(createdUser);
+    if (finalRoleName === 'TECHNICIAN') {
+      await ensureTechnicianProfile(createdUser);
+    }
     appendOrUpdateUserBackup(createdUser);
 
     return res.status(201).json({ success: true, data: createdUser, message: 'User created successfully.' });
@@ -319,7 +353,7 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
 
     if (getDbStatus()) {
       const userRes = await pool.query(`
-        SELECT u.id, u.name, u.role_id, r.name as role_name
+        SELECT u.id, u.name, u.email, u.phone, u.role_id, r.name as role_name
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.id = $1
@@ -385,6 +419,17 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
 
       appendOrUpdateUserBackup({ id: Number(id), status, role_id: targetRoleId ? Number(targetRoleId) : undefined });
 
+      const effectiveRoleId = targetRoleId || targetUser.role_id;
+      const effectiveRoleRes = await pool.query('SELECT name FROM roles WHERE id = $1', [effectiveRoleId]);
+      if (effectiveRoleRes.rows[0]?.name === 'TECHNICIAN') {
+        await ensureTechnicianProfile({
+          id: Number(id),
+          name: targetUser.name,
+          email: targetUser.email,
+          phone: targetUser.phone
+        });
+      }
+
       return res.json({ success: true, message: 'User updated successfully.' });
     }
 
@@ -397,6 +442,15 @@ export const updateUserStatus = async (req: AuthRequest, res: Response) => {
       if (status) user.status = status;
       if (targetRoleId) user.role_id = Number(targetRoleId);
       if (customPermsPayload) (user as any).custom_permissions = JSON.parse(customPermsPayload);
+      const effectiveRole = memoryStore.roles.find(role => role.id === user.role_id);
+      if (effectiveRole?.name === 'TECHNICIAN') {
+        await ensureTechnicianProfile({
+          id: Number(user.id),
+          name: user.name,
+          email: user.email,
+          phone: user.phone
+        });
+      }
       appendOrUpdateUserBackup({ id: Number(id), status: user.status, role_id: user.role_id });
       return res.json({ success: true, message: 'User updated successfully.' });
     }

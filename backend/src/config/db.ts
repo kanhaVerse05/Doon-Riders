@@ -1360,6 +1360,22 @@ export const checkDbConnection = async (): Promise<boolean> => {
       ON CONFLICT (name) DO UPDATE SET display_name = EXCLUDED.display_name;
     `).catch(() => {});
 
+    // Materialize team accounts with the Technician role in the technician
+    // directory, which recovery/repair assignment workflows reference by ID.
+    await pgPool.query(`
+      INSERT INTO technicians (technician_code, name, phone, email)
+      SELECT 'TECH-U-' || u.id::text, u.name, COALESCE(u.phone, ''), u.email
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE r.name = 'TECHNICIAN'
+        AND u.status = 'active'
+        AND u.deleted_at IS NULL
+      ON CONFLICT (technician_code) DO UPDATE
+      SET name = EXCLUDED.name, phone = EXCLUDED.phone, email = EXCLUDED.email;
+    `).catch((error) => {
+      console.warn('Technician account sync migration failed:', error.message);
+    });
+
     // Non-Super-Admin roles must never inherit legacy defaults. Clear only rows
     // for roles that have not been explicitly configured, then mark them as an
     // intentionally empty permission set so old fallbacks cannot restore grants.
