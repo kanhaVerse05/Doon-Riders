@@ -144,15 +144,38 @@ export const parseLocationUrlHandler = async (req: Request, res: Response) => {
 };
 
 // Helper to auto-generate sequential Complaint Number CMP-00125 etc.
-const generateComplaintNumber = (): string => {
-  const existingNumbers = (memoryStore.complaints || [])
-    .map(c => {
-      const match = c.complaint_number.match(/CMP-(\d+)/);
-      return match ? parseInt(match[1], 10) : 0;
-    })
-    .filter(n => !isNaN(n));
+export const generateComplaintNumber = async (): Promise<string> => {
+  let maxNum = 123;
 
-  const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 123;
+  if (getDbStatus()) {
+    try {
+      const res = await pool.query(
+        "SELECT complaint_number FROM complaints WHERE complaint_number ~ '^CMP-[0-9]+$' ORDER BY id DESC LIMIT 100"
+      );
+      for (const row of res.rows) {
+        const match = row.complaint_number?.match(/CMP-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[generateComplaintNumber] Error reading DB:', err);
+    }
+  }
+
+  for (const c of (memoryStore.complaints || [])) {
+    const match = c.complaint_number?.match(/CMP-(\d+)/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+
   const nextNum = maxNum + 1;
   return `CMP-${String(nextNum).padStart(5, '0')}`;
 };
@@ -474,7 +497,7 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
     const selectedHubId = Number(hub_id) || 1;
     const targetHub = memoryStore.repairHubs.find(h => h.id === selectedHubId) || memoryStore.repairHubs[0];
 
-    const complaintNumber = generateComplaintNumber();
+    const complaintNumber = await generateComplaintNumber();
     const now = new Date().toISOString();
 
     let resolvedLat = latitude !== undefined && latitude !== null && latitude !== '' ? Number(latitude) : null;
@@ -562,44 +585,86 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
       closed_at: null
     };
 
-    if (getDbStatus()) {
+    // Validate targetHub in database if DB is active
+    let dbHubId: number | null = targetHub?.id ? Number(targetHub.id) : null;
+    if (getDbStatus() && dbHubId) {
       try {
-        const insertRes = await pool.query(
-          `INSERT INTO complaints (
-            complaint_number, scooter_number, customer_name, customer_phone, location_address,
-            location_url, latitude, longitude, issue_category, description, priority,
-            hub_id, hub_name, hub_incharge_name, status, created_by_id, created_by_name, created_by_role, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-          RETURNING id`,
-          [
-            newComplaint.complaint_number,
-            newComplaint.scooter_number,
-            newComplaint.customer_name,
-            newComplaint.customer_phone,
-            newComplaint.location_address,
-            newComplaint.location_url,
-            newComplaint.latitude,
-            newComplaint.longitude,
-            newComplaint.issue_category,
-            newComplaint.description,
-            newComplaint.priority,
-            newComplaint.hub_id,
-            newComplaint.hub_name,
-            newComplaint.hub_incharge_name,
-            newComplaint.status,
-            newComplaint.created_by_id,
-            newComplaint.created_by_name,
-            newComplaint.created_by_role,
-            newComplaint.created_at,
-            newComplaint.updated_at
-          ]
-        );
-
-        if (insertRes.rows.length > 0) {
-          newComplaint.id = insertRes.rows[0].id;
+        const hubCheck = await pool.query('SELECT id FROM repair_hubs WHERE id = $1', [dbHubId]);
+        if (hubCheck.rows.length === 0) {
+          dbHubId = null;
         }
+      } catch {
+        dbHubId = null;
+      }
+    }
 
-        // Insert initial timeline event
+    if (getDbStatus()) {
+      let currentNumber = complaintNumber;
+      let inserted = false;
+      let lastErr: any = null;
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          const insertRes = await pool.query(
+            `INSERT INTO complaints (
+              complaint_number, scooter_number, customer_name, customer_phone, location_address,
+              location_url, latitude, longitude, issue_category, description, priority,
+              hub_id, hub_name, hub_incharge_name, status, created_by_id, created_by_name, created_by_role, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            RETURNING id`,
+            [
+              currentNumber,
+              newComplaint.scooter_number,
+              newComplaint.customer_name,
+              newComplaint.customer_phone,
+              newComplaint.location_address,
+              newComplaint.location_url,
+              newComplaint.latitude,
+              newComplaint.longitude,
+              newComplaint.issue_category,
+              newComplaint.description,
+              newComplaint.priority,
+              dbHubId,
+              newComplaint.hub_name,
+              newComplaint.hub_incharge_name,
+              newComplaint.status,
+              newComplaint.created_by_id,
+              newComplaint.created_by_name,
+              newComplaint.created_by_role,
+              newComplaint.created_at,
+              newComplaint.updated_at
+            ]
+          );
+
+          if (insertRes.rows.length > 0) {
+            newComplaint.id = insertRes.rows[0].id;
+          }
+          newComplaint.complaint_number = currentNumber;
+          inserted = true;
+          break;
+        } catch (dbErr: any) {
+          lastErr = dbErr;
+          if (dbErr.code === '23505' && (dbErr.constraint?.includes('complaint_number') || dbErr.detail?.includes('complaint_number') || dbErr.message?.includes('complaint_number'))) {
+            const match = currentNumber.match(/CMP-(\d+)/);
+            const n = match ? parseInt(match[1], 10) + 1 : 129 + attempt;
+            currentNumber = `CMP-${String(n).padStart(5, '0')}`;
+            continue;
+          }
+          console.error('[createComplaint] DB insert error:', dbErr);
+          break;
+        }
+      }
+
+      if (!inserted) {
+        console.error('[createComplaint] Failed to insert into database:', lastErr);
+        return res.status(500).json({
+          success: false,
+          message: `Database error creating complaint: ${lastErr?.message || 'Insert failed'}`
+        });
+      }
+
+      // Insert initial timeline event
+      try {
         await pool.query(
           `INSERT INTO complaint_events (
             complaint_id, event_type, title, description, status, performed_by_id, performed_by_name, performed_by_role, latitude, longitude, created_at
@@ -618,8 +683,8 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
             now
           ]
         );
-      } catch (dbErr) {
-        console.warn('[createComplaint] DB insert error, falling back to memoryStore:', dbErr);
+      } catch (evtErr: any) {
+        console.warn('[createComplaint] Event insert warning:', evtErr.message);
       }
     }
 
