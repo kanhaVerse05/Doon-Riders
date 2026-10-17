@@ -126,6 +126,8 @@ interface Complaint {
   proof_photos?: string[];
   completion_notes?: string | null;
   return_journey_started_at?: string | null;
+  return_journey_completed_at?: string | null;
+  return_journey_skipped_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -380,7 +382,7 @@ export default function TechnicianJobsSummaryPage() {
   ) => {
     if (!canTrackField) return;
     const activeComplaints = fieldComplaintsRef.current.filter(
-      c => c.status === 'En Route' || c.status === 'Assigned' || c.status === 'Reached' || c.status === 'Work In Progress'
+      c => c.status === 'En Route' || c.status === 'Assigned' || c.status === 'Reached' || c.status === 'Work In Progress' || (c.status === 'Work Done' && !!c.return_journey_started_at && !c.return_journey_completed_at)
     );
 
     if (activeComplaints.length === 0) return;
@@ -469,7 +471,7 @@ export default function TechnicianJobsSummaryPage() {
     // 3. Periodic 2.5s heartbeat ping when any job is active
     const heartbeatTimer = setInterval(() => {
       const hasActiveJobs = fieldComplaintsRef.current.some(
-        c => c.status === 'En Route' || c.status === 'Work In Progress' || c.status === 'Reached' || c.status === 'Assigned'
+        c => c.status === 'En Route' || c.status === 'Work In Progress' || c.status === 'Reached' || c.status === 'Assigned' || (c.status === 'Work Done' && !!c.return_journey_started_at && !c.return_journey_completed_at)
       );
       if (hasActiveJobs) {
         navigator.geolocation.getCurrentPosition(handleSuccess, () => {}, {
@@ -571,6 +573,16 @@ export default function TechnicianJobsSummaryPage() {
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  const getElapsedString = (startedAt: string | null | undefined, completedAt?: string | null): string => {
+    if (!startedAt) return '00:00:00';
+    const endMs = completedAt ? new Date(completedAt).getTime() : currentTimeMs;
+    const diffSec = Math.max(0, Math.floor((endMs - new Date(startedAt).getTime()) / 1000));
+    const hrs = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
   const getTechnicianStatus = (status: string) => {
     switch (status) {
       case 'Pending Inspection':
@@ -619,11 +631,14 @@ export default function TechnicianJobsSummaryPage() {
       if (res && res.success) {
         showToast('Journey started! GPS live tracking activated.');
         fetchData();
+        return true;
       } else {
         alert(res?.message || 'Failed to start journey');
+        return false;
       }
     } catch (err: any) {
       alert(err.message || 'Error updating status');
+      return false;
     }
   };
 
@@ -754,6 +769,36 @@ export default function TechnicianJobsSummaryPage() {
       }
     } catch (err: any) {
       alert(err.message || 'Error updating status');
+    }
+  };
+
+  const handleReachedHub = async (complaintId: number) => {
+    try {
+      if (!navigator.geolocation) throw new Error('Location access is required to record arrival at the service hub.');
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }));
+      const res = await adminApi.patch(`/admin/complaints/${complaintId}/status`, {
+        status: 'Reached Hub', latitude: position.coords.latitude, longitude: position.coords.longitude
+      });
+      if (res && res.success) {
+        setReturnToHubComplaintId(null);
+        showToast('Hub arrival recorded and return time saved.');
+        await fetchData();
+      } else alert(res?.message || 'Failed to record hub arrival');
+    } catch (err: any) {
+      alert(err.message || 'Error recording hub arrival');
+    }
+  };
+
+  const handleDirectDispatch = async (complaintId: number, nextComplaintId: number) => {
+    try {
+      const result = await adminApi.patch(`/admin/complaints/${complaintId}/status`, { status: 'Proceed to Next Complaint' });
+      if (!result?.success) throw new Error(result?.message || 'Could not record direct dispatch.');
+      const started = await handleStartJourney(nextComplaintId);
+      if (!started) throw new Error('The previous task is marked as directly dispatched. Start the next complaint from its task card.');
+      showToast('Hub return skipped; next complaint journey started.');
+    } catch (err: any) {
+      alert(err.message || 'Could not dispatch to the next complaint.');
+      await fetchData();
     }
   };
 
@@ -1209,6 +1254,8 @@ export default function TechnicianJobsSummaryPage() {
                   const isReached = complaint.status === 'Reached';
                   const isWIP = complaint.status === 'Work In Progress';
                   const isDone = complaint.status === 'Work Done';
+                  const isReturning = isDone && !!complaint.return_journey_started_at && !complaint.return_journey_completed_at;
+                  const hasReturned = isDone && !!complaint.return_journey_completed_at;
                   const isClosed = complaint.status === 'Closed';
 
                   let custLat = parseFloat(String(complaint.latitude || ''));
@@ -1231,14 +1278,14 @@ export default function TechnicianJobsSummaryPage() {
                   const exactPinUrl = getExactLocationUrl(complaint.location_url, custLat, custLng);
 
                   // Check if there is another complaint next in line
-                  const remainingAssigned = fieldComplaints.filter(c => c.id !== complaint.id && (c.status === 'Assigned' || c.status === 'En Route'));
+                  const remainingAssigned = fieldComplaints.filter(c => c.id !== complaint.id && c.status === 'Assigned');
                   const nextComplaint = remainingAssigned[0];
 
                   return (
                     <div
                       key={complaint.id}
                       className={`bg-white rounded-3xl border transition-all p-5 space-y-4 shadow-sm ${
-                        isEnRoute || isWIP
+                        isEnRoute || isWIP || isReturning
                           ? 'border-[#00D96B] ring-2 ring-[#00D96B]/20 bg-emerald-50/10'
                           : isAssigned
                           ? 'border-blue-300'
@@ -1368,18 +1415,18 @@ export default function TechnicianJobsSummaryPage() {
                       {/* ================================================================= */}
                       {/* ACTIVE EN ROUTE / WIP LIVE TIMER & RADAR MAP */}
                       {/* ================================================================= */}
-      {(isEnRoute || isWIP) && canTrackField && (
+      {(isEnRoute || isWIP || isReturning) && canTrackField && (
                         <div className="bg-[#0A0F1D] text-white p-4 rounded-2xl border border-slate-800 space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="w-2.5 h-2.5 rounded-full bg-[#00D96B] animate-ping" />
                               <span className="text-xs font-black text-white">
-                                {isEnRoute ? 'En Route to Customer' : 'Work In Progress'}
+                                {isEnRoute ? 'En Route to Customer' : isWIP ? 'Work In Progress' : 'Returning to Service Hub'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 font-mono text-xs font-black text-[#00D96B] bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700">
                               <Clock className="w-3.5 h-3.5" />
-                              <span>{getTimerString(isEnRoute ? complaint.journey_started_at : complaint.work_started_at)}</span>
+                              <span>{getTimerString(isEnRoute ? complaint.journey_started_at : isWIP ? complaint.work_started_at : complaint.return_journey_started_at)}</span>
                             </div>
                           </div>
 
@@ -1443,10 +1490,18 @@ export default function TechnicianJobsSummaryPage() {
                             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           </div>
                           <p className="text-slate-700 text-[11px]">{complaint.work_performed}</p>
-                          {complaint.journey_duration_formatted && (
+                          {(complaint.journey_duration_formatted || complaint.journey_started_at) && (
                             <p className="text-[10px] text-slate-500 pt-1 font-mono">
-                              Travel Time: {complaint.journey_duration_formatted} &bull; Work Duration: {complaint.work_duration_formatted || 'Done'}
+                              Travel Time: {complaint.journey_duration_formatted || getElapsedString(complaint.journey_started_at, complaint.reached_at)} &bull; Work Duration: {complaint.work_duration_formatted || getElapsedString(complaint.work_started_at, complaint.work_completed_at)}
                             </p>
+                          )}
+                          {complaint.return_journey_started_at && (
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              Return to Hub: {getElapsedString(complaint.return_journey_started_at, complaint.return_journey_completed_at)}{!complaint.return_journey_completed_at ? ' (in progress)' : ''}
+                            </p>
+                          )}
+                          {complaint.return_journey_skipped_at && (
+                            <p className="text-[10px] text-blue-700 font-mono">Hub return skipped; dispatched directly at {new Date(complaint.return_journey_skipped_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.</p>
                           )}
                         </div>
                       )}
@@ -1499,27 +1554,42 @@ export default function TechnicianJobsSummaryPage() {
                           </button>
                         )}
 
-                        {/* 5. AFTER WORK DONE: NEXT COMPLAINT OR RETURN TO HUB */}
-                        {isDone && (
+                        {/* 5. AFTER WORK DONE: RETURN, ARRIVE, THEN ACCEPT THE NEXT COMPLAINT */}
+                        {isDone && !complaint.return_journey_started_at && canFieldStatus && (
                           <div className="space-y-2 pt-1">
-                            {nextComplaint && canFieldStatus ? (
-                              <button
-                                onClick={() => handleStartJourney(nextComplaint.id)}
-                                className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all active:scale-98 cursor-pointer"
-                              >
-                                <Navigation className="w-4 h-4" />
-                                <span>START JOURNEY: NEXT COMPLAINT ({nextComplaint.complaint_number})</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleReturnToHub(complaint.id)}
-                                className="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 cursor-pointer"
-                              >
-                                <Building className="w-4 h-4 text-[#00D96B]" />
-                                <span>RETURN TO SERVICE HUB</span>
+                            {nextComplaint && !complaint.return_journey_skipped_at && (
+                              <button onClick={() => handleDirectDispatch(complaint.id, nextComplaint.id)} className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all active:scale-98 cursor-pointer">
+                                <Navigation className="w-4 h-4" /><span>SKIP HUB & START NEXT COMPLAINT ({nextComplaint.complaint_number})</span>
                               </button>
                             )}
+                            {!complaint.return_journey_skipped_at && (
+                            <button
+                              onClick={() => handleReturnToHub(complaint.id)}
+                              className="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 cursor-pointer"
+                            >
+                              <Building className="w-4 h-4 text-[#00D96B]" />
+                              <span>RETURN TO SERVICE HUB</span>
+                            </button>
+                            )}
                           </div>
+                        )}
+                        {isReturning && canFieldStatus && (
+                          <button
+                            onClick={() => handleReachedHub(complaint.id)}
+                            className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 cursor-pointer"
+                          >
+                            <MapPin className="w-4 h-4" />
+                            <span>REACHED SERVICE HUB</span>
+                          </button>
+                        )}
+                        {hasReturned && nextComplaint && canFieldStatus && (
+                          <button
+                            onClick={() => handleStartJourney(nextComplaint.id)}
+                            className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-all active:scale-98 cursor-pointer"
+                          >
+                            <Navigation className="w-4 h-4" />
+                            <span>START JOURNEY: NEXT COMPLAINT ({nextComplaint.complaint_number})</span>
+                          </button>
                         )}
                       </div>
                     </div>

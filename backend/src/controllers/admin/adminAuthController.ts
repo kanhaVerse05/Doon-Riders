@@ -63,12 +63,18 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid sign-in portal.' });
     }
 
-    const validatePortalRole = (roleName: string | null | undefined) => {
+    const validatePortalRole = (
+      roleName: string | null | undefined,
+      permissions: Array<{ code: string; scope: string }> = []
+    ) => {
       const normalizedRole = String(roleName || '').trim().toUpperCase();
       const isTechnician = normalizedRole === 'TECHNICIAN';
       const isHubIncharge = normalizedRole === 'HUB_INCHARGE';
+      const hasTechnicianPermissions = permissions.some((p) =>
+        String(p?.code || '').toLowerCase().startsWith('technician_tasks.')
+      );
 
-      if (portal === 'technician' && !isTechnician) {
+      if (portal === 'technician' && !isTechnician && !hasTechnicianPermissions) {
         return 'This account is not assigned the Technician role.';
       }
       if (portal === 'hub' && !isHubIncharge) {
@@ -115,7 +121,9 @@ export const login = async (req: Request, res: Response) => {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
       }
 
-      const portalError = validatePortalRole(u.role_name);
+      const permissions = await computeUserPermissions(u);
+
+      const portalError = validatePortalRole(u.role_name, permissions);
       if (portalError) {
         return res.status(403).json({ success: false, message: portalError });
       }
@@ -156,8 +164,6 @@ export const login = async (req: Request, res: Response) => {
           message: 'Enter the 6-digit code from your authenticator app.',
         });
       }
-
-      const permissions = await computeUserPermissions(u);
 
       const authUser = {
         id: u.id,
@@ -212,12 +218,12 @@ export const login = async (req: Request, res: Response) => {
       display_name: u.role_display_name || 'Sales Executive'
     };
 
-    const portalError = validatePortalRole(roleObj.name);
+    const permissions = computeMemoryPermissions(roleObj, u);
+
+    const portalError = validatePortalRole(roleObj.name, permissions);
     if (portalError) {
       return res.status(403).json({ success: false, message: portalError });
     }
-
-    const permissions = computeMemoryPermissions(roleObj, u);
 
     const authUser = {
       id: u.id,

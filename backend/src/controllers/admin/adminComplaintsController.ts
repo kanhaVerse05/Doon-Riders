@@ -502,13 +502,8 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // 3. Fallback to target Hub coordinates only if neither coordinates nor URL were resolved
-    if (!isValidLatLng(resolvedLat, resolvedLng)) {
-      resolvedLat = targetHub.id === 1 ? 30.3256 : 30.3427;
-      resolvedLng = targetHub.id === 1 ? 78.0436 : 78.0645;
-    }
-
-    // 4. Ensure finalLocationUrl is populated with exact destination coordinates if missing
+    // Never substitute service-hub coordinates for an unknown customer location.
+    // The map UI can still launch navigation using the saved address when no exact pin exists.
     if (!finalLocationUrl && isValidLatLng(resolvedLat, resolvedLng)) {
       finalLocationUrl = `https://maps.google.com/?q=${resolvedLat},${resolvedLng}`;
     }
@@ -558,6 +553,7 @@ export const createComplaint = async (req: AuthRequest, res: Response) => {
       final_longitude: null,
       return_journey_started_at: null,
       return_journey_completed_at: null,
+      return_journey_skipped_at: null,
       created_by_id: req.user?.id || 7,
       created_by_name: req.user?.name || 'Customer Support',
       created_by_role: req.user?.roleDisplayName || 'Customer Support',
@@ -961,6 +957,24 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
 
+    const isDuplicateStatusTransition =
+      (status === 'En Route' && complaint.status === 'En Route' && complaint.journey_started_at) ||
+      (status === 'Reached' && complaint.status === 'Reached' && complaint.reached_at) ||
+      (status === 'Work In Progress' && complaint.status === 'Work In Progress' && complaint.work_started_at) ||
+      (status === 'Work Done' && complaint.status === 'Work Done' && complaint.work_completed_at) ||
+      ((status === 'Return to Hub' || status === 'Returning') && complaint.return_journey_started_at && !complaint.return_journey_completed_at) ||
+      ((status === 'Reached Hub' || status === 'Returned to Hub') && complaint.return_journey_completed_at) ||
+      (status === 'Proceed to Next Complaint' && complaint.return_journey_skipped_at) ||
+      (status === 'Closed' && complaint.status === 'Closed' && complaint.closed_at);
+
+    if (isDuplicateStatusTransition) {
+      return res.json({
+        success: true,
+        message: `Complaint status is already ${complaint.status}`,
+        data: complaint
+      });
+    }
+
     let eventType = 'STATUS_CHANGED';
     let eventTitle = `Status updated to ${status}`;
     let eventDescription = `${performerName} updated status to ${status}.`;
@@ -1044,12 +1058,42 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
     else if (status === 'Return to Hub' || status === 'Returning') {
       complaint.status = 'Work Done'; // keep state clean
       complaint.return_journey_started_at = now;
+      complaint.return_journey_completed_at = null;
       eventType = 'RETURN_TO_HUB_STARTED';
       eventTitle = 'Returning to Service Hub';
       eventDescription = `Technician ${complaint.technician_name || performerName} started journey back to ${complaint.hub_name}.`;
     }
 
-    // 6. CLOSED -> CLOSED
+    // 6. ARRIVED BACK AT HUB -> COMPLETE THE RETURN JOURNEY
+    else if (status === 'Reached Hub' || status === 'Returned to Hub') {
+      if (!complaint.return_journey_started_at) {
+        return res.status(400).json({ success: false, message: 'Return journey has not been started' });
+      }
+      complaint.status = 'Work Done';
+      complaint.return_journey_completed_at = now;
+      if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
+        complaint.final_latitude = Number(latitude);
+        complaint.final_longitude = Number(longitude);
+        complaint.technician_latitude = Number(latitude);
+        complaint.technician_longitude = Number(longitude);
+        complaint.technician_location_updated_at = now;
+      }
+      const returnSeconds = Math.max(1, Math.round((new Date(now).getTime() - new Date(complaint.return_journey_started_at).getTime()) / 1000));
+      eventType = 'RETURN_TO_HUB_COMPLETED';
+      eventTitle = 'Reached Service Hub';
+      eventDescription = `Technician ${complaint.technician_name || performerName} returned to ${complaint.hub_name} in ${formatDuration(returnSeconds)}.`;
+    }
+
+    // A technician may be dispatched directly to another complaint without returning to the hub.
+    else if (status === 'Proceed to Next Complaint') {
+      complaint.status = 'Work Done';
+      complaint.return_journey_skipped_at = now;
+      eventType = 'RETURN_TO_HUB_SKIPPED';
+      eventTitle = 'Hub Return Skipped';
+      eventDescription = `Technician ${complaint.technician_name || performerName} was dispatched directly to the next complaint without returning to ${complaint.hub_name}.`;
+    }
+
+    // 7. CLOSED -> CLOSED
     else if (status === 'Closed') {
       complaint.status = 'Closed';
       complaint.closed_at = now;
@@ -1085,10 +1129,12 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
             completion_notes = COALESCE($16, completion_notes),
             final_latitude = COALESCE($17, final_latitude),
             final_longitude = COALESCE($18, final_longitude),
-            return_journey_started_at = COALESCE($19, return_journey_started_at),
-            closed_at = COALESCE($20, closed_at),
-            updated_at = $21
-           WHERE id = $22 OR complaint_number = $23`,
+            return_journey_started_at = $19,
+            return_journey_completed_at = $20,
+            return_journey_skipped_at = $21,
+            closed_at = COALESCE($22, closed_at),
+            updated_at = $23
+           WHERE id = $24 OR complaint_number = $25`,
           [
             complaint.status,
             complaint.journey_started_at,
@@ -1109,6 +1155,8 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
             complaint.final_latitude,
             complaint.final_longitude,
             complaint.return_journey_started_at,
+            complaint.return_journey_completed_at,
+            complaint.return_journey_skipped_at,
             complaint.closed_at,
             now,
             complaint.id,
@@ -1131,8 +1179,12 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
             performerRole,
             latitude ? Number(latitude) : null,
             longitude ? Number(longitude) : null,
-            complaint.work_duration_seconds || complaint.journey_duration_seconds || 0,
-            complaint.work_duration_formatted || complaint.journey_duration_formatted || null,
+            eventType === 'RETURN_TO_HUB_COMPLETED'
+              ? Math.max(1, Math.round((new Date(now).getTime() - new Date(complaint.return_journey_started_at).getTime()) / 1000))
+              : complaint.work_duration_seconds || complaint.journey_duration_seconds || 0,
+            eventType === 'RETURN_TO_HUB_COMPLETED'
+              ? formatDuration(Math.max(1, Math.round((new Date(now).getTime() - new Date(complaint.return_journey_started_at).getTime()) / 1000)))
+              : complaint.work_duration_formatted || complaint.journey_duration_formatted || null,
             now
           ]
         );
@@ -1155,8 +1207,12 @@ export const updateComplaintStatus = async (req: AuthRequest, res: Response) => 
       performed_by_role: performerRole,
       latitude: latitude ? Number(latitude) : null,
       longitude: longitude ? Number(longitude) : null,
-      duration_seconds: complaint.work_duration_seconds || complaint.journey_duration_seconds || 0,
-      duration_formatted: complaint.work_duration_formatted || complaint.journey_duration_formatted || null,
+      duration_seconds: eventType === 'RETURN_TO_HUB_COMPLETED'
+        ? Math.max(1, Math.round((new Date(now).getTime() - new Date(complaint.return_journey_started_at).getTime()) / 1000))
+        : complaint.work_duration_seconds || complaint.journey_duration_seconds || 0,
+      duration_formatted: eventType === 'RETURN_TO_HUB_COMPLETED'
+        ? formatDuration(Math.max(1, Math.round((new Date(now).getTime() - new Date(complaint.return_journey_started_at).getTime()) / 1000)))
+        : complaint.work_duration_formatted || complaint.journey_duration_formatted || null,
       metadata: null,
       created_at: now
     });

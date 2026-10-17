@@ -32,6 +32,30 @@ export default function HomeV2Page() {
   const [aboutChapter, setAboutChapter] = useState(0);
   const [swapSlide, setSwapSlide] = useState(0);
 
+  // Low-End / Mobile Device Detection
+  const [isLowEnd, setIsLowEnd] = useState(false);
+  const [loadedScenes, setLoadedScenes] = useState<number[]>([0]);
+  const [videoReady, setVideoReady] = useState<Record<number, boolean>>({});
+  const [videoErrors, setVideoErrors] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nav = navigator as any;
+    const isLowMemory = nav.deviceMemory && nav.deviceMemory <= 4;
+    const isLowCores = nav.hardwareConcurrency && nav.hardwareConcurrency <= 4;
+    const isSaveData = nav.connection && nav.connection.saveData;
+    const isSlowConn = nav.connection && (nav.connection.effectiveType === '2g' || nav.connection.effectiveType === '3g');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isLowMemory || isLowCores || isSaveData || isSlowConn || isMobile) {
+      setIsLowEnd(true);
+    }
+  }, []);
+
+  // Track which scene videos should be loaded into DOM
+  useEffect(() => {
+    setLoadedScenes((prev) => (prev.includes(scene) ? prev : [...prev, scene]));
+  }, [scene]);
+
   // Video Refs
   const heroVideoRef = useRef<HTMLVideoElement>(null);
   const aboutVideoRef = useRef<HTMLVideoElement>(null);
@@ -40,6 +64,10 @@ export default function HomeV2Page() {
   // Animation lock to prevent stutter
   const isTransitioningRef = useRef(false);
   const lastInputTimeRef = useRef(0);
+
+  // Active video listener tracker to prevent listener leaks and race conditions
+  const activeListenerRef = useRef<(() => void) | null>(null);
+  const activeVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Refs for tracking active values inside event listeners
   const sceneRef = useRef<0 | 1 | 2>(0);
@@ -59,33 +87,73 @@ export default function HomeV2Page() {
   const aboutChapterTimes = [0.0, 4.5, 9.5];
   const swapSlideTimes = [0.0, 3.0, 6.5];
 
-  // Helper to smoothly animate/play video to target time
+  // Helper to smoothly animate/play video to target time without hanging
   const animateVideoToTime = useCallback((video: HTMLVideoElement | null, targetTime: number) => {
-    if (!video || !video.duration || isNaN(video.duration)) return;
+    if (!video) return;
+
+    // Clean up any pending listener on the previous video
+    if (activeListenerRef.current && activeVideoRef.current) {
+      try {
+        activeVideoRef.current.removeEventListener('timeupdate', activeListenerRef.current);
+      } catch (_) {}
+      activeListenerRef.current = null;
+      activeVideoRef.current = null;
+    }
+
+    // If metadata not ready yet, wait once for loadedmetadata
+    if (!video.duration || isNaN(video.duration) || video.readyState < 1) {
+      const onMeta = () => {
+        video.removeEventListener('loadedmetadata', onMeta);
+        animateVideoToTime(video, targetTime);
+      };
+      video.addEventListener('loadedmetadata', onMeta, { once: true });
+      return;
+    }
+
     const clampedTarget = Math.min(video.duration - 0.05, Math.max(0, targetTime));
     const current = video.currentTime;
     const diff = clampedTarget - current;
 
+    // On mobile / low-end devices, do direct seek to prevent MediaCodec buffer starvation
+    if (isLowEnd || Math.abs(diff) < 0.25) {
+      try {
+        video.currentTime = clampedTarget;
+      } catch (_) {}
+      return;
+    }
+
     if (diff > 0.08) {
-      // Forward: play with slightly higher playback rate until target
-      video.playbackRate = 1.4;
+      video.playbackRate = 1.2;
       video.muted = true;
-      video.play().catch(() => {});
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          try { video.currentTime = clampedTarget; } catch (_) {}
+        });
+      }
 
       const checkForward = () => {
-        if (video.currentTime >= clampedTarget || video.paused) {
+        if (!video || video.currentTime >= clampedTarget || video.paused) {
           video.pause();
           video.currentTime = clampedTarget;
           video.removeEventListener('timeupdate', checkForward);
+          if (activeListenerRef.current === checkForward) {
+            activeListenerRef.current = null;
+            activeVideoRef.current = null;
+          }
         }
       };
+
+      activeListenerRef.current = checkForward;
+      activeVideoRef.current = video;
       video.addEventListener('timeupdate', checkForward);
-    } else if (diff < -0.08) {
-      // Backward: seek directly to target timestamp
+    } else {
       video.pause();
-      video.currentTime = clampedTarget;
+      try {
+        video.currentTime = clampedTarget;
+      } catch (_) {}
     }
-  }, []);
+  }, [isLowEnd]);
 
   // Update video playback whenever scene or slides change
   useEffect(() => {
@@ -103,18 +171,6 @@ export default function HomeV2Page() {
       aboutVideoRef.current?.pause();
     }
   }, [scene, heroSlide, aboutChapter, swapSlide, animateVideoToTime]);
-
-  // Initial video warmup on mount so there is never a blank screen
-  useEffect(() => {
-    [heroVideoRef, aboutVideoRef, swapVideoRef].forEach((ref) => {
-      const v = ref.current;
-      if (v) {
-        v.muted = true;
-        v.currentTime = 0.01;
-        v.play().then(() => v.pause()).catch(() => {});
-      }
-    });
-  }, []);
 
   // Slide navigation handlers
   const handleNext = useCallback(() => {
@@ -249,13 +305,25 @@ export default function HomeV2Page() {
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
           {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
+            {/* High-Performance Fallback Background */}
+            <div className="absolute inset-0 bg-[#070D18] overflow-hidden pointer-events-none">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,217,107,0.18),transparent_70%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_80%,rgba(56,189,248,0.14),transparent_65%)]" />
+              <div className="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,#1f293d_1px,transparent_1px),linear-gradient(to_bottom,#1f293d_1px,transparent_1px)] bg-[size:4rem_4rem]" />
+            </div>
+
             <video
               ref={heroVideoRef}
               src="/videos/scooter-ride.mp4"
+              poster="/images/hero-poster.jpg"
               muted
               playsInline
-              preload="auto"
-              className="absolute inset-0 w-full h-full object-cover"
+              preload="metadata"
+              onCanPlay={() => setVideoReady((prev) => ({ ...prev, 0: true }))}
+              onError={() => setVideoErrors((prev) => ({ ...prev, 0: true }))}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+                videoReady[0] && !videoErrors[0] ? 'opacity-100' : 'opacity-60'
+              }`}
             />
             {/* Cinematic Gradient Overlays */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/95 via-black/30 to-[#070D18]/65 pointer-events-none" />
@@ -390,13 +458,25 @@ export default function HomeV2Page() {
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
           {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
+            {/* High-Performance Fallback Background */}
+            <div className="absolute inset-0 bg-[#070D18] overflow-hidden pointer-events-none">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,217,107,0.18),transparent_70%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(56,189,248,0.14),transparent_65%)]" />
+              <div className="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,#1f293d_1px,transparent_1px),linear-gradient(to_bottom,#1f293d_1px,transparent_1px)] bg-[size:4rem_4rem]" />
+            </div>
+
             <video
               ref={aboutVideoRef}
-              src="/videos/about-scroll.mp4"
+              src={loadedScenes.includes(1) ? "/videos/about-scroll.mp4" : undefined}
+              poster="/images/about-poster.jpg"
               muted
               playsInline
-              preload="auto"
-              className="absolute inset-0 w-full h-full object-cover"
+              preload="metadata"
+              onCanPlay={() => setVideoReady((prev) => ({ ...prev, 1: true }))}
+              onError={() => setVideoErrors((prev) => ({ ...prev, 1: true }))}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+                videoReady[1] && !videoErrors[1] ? 'opacity-100' : 'opacity-60'
+              }`}
             />
             {/* Cinematic Gradient Overlays */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/95 via-black/30 to-[#070D18]/65 pointer-events-none" />
@@ -587,13 +667,25 @@ export default function HomeV2Page() {
         <section className="relative w-full h-screen shrink-0 overflow-hidden bg-[#070D18]">
           {/* Background Video */}
           <div className="absolute inset-0 w-full h-full bg-[#070D18] overflow-hidden">
+            {/* High-Performance Fallback Background */}
+            <div className="absolute inset-0 bg-[#070D18] overflow-hidden pointer-events-none">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(0,217,107,0.2),transparent_70%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_75%,rgba(56,189,248,0.16),transparent_65%)]" />
+              <div className="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,#1f293d_1px,transparent_1px),linear-gradient(to_bottom,#1f293d_1px,transparent_1px)] bg-[size:4rem_4rem]" />
+            </div>
+
             <video
               ref={swapVideoRef}
-              src="/videos/battery-swap.mp4"
+              src={loadedScenes.includes(2) ? "/videos/battery-swap.mp4" : undefined}
+              poster="/images/battery-swap-poster.jpg"
               muted
               playsInline
-              preload="auto"
-              className="absolute inset-0 w-full h-full object-cover"
+              preload="metadata"
+              onCanPlay={() => setVideoReady((prev) => ({ ...prev, 2: true }))}
+              onError={() => setVideoErrors((prev) => ({ ...prev, 2: true }))}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+                videoReady[2] && !videoErrors[2] ? 'opacity-100' : 'opacity-60'
+              }`}
             />
             {/* Cinematic Gradient Overlays */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#070D18]/95 via-black/30 to-[#070D18]/65 pointer-events-none" />
@@ -678,7 +770,7 @@ export default function HomeV2Page() {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2 max-w-4xl mx-auto w-full">
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-left shadow-xl">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-4 text-left shadow-xl">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-0.5 rounded-full border border-[#00D96B]/30">STEP 01</span>
                       <Navigation className="w-4 h-4 text-[#00D96B]" />
@@ -691,7 +783,7 @@ export default function HomeV2Page() {
                     </p>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-[#00D96B]/50 rounded-2xl p-4 text-left shadow-[0_0_30px_rgba(0,217,107,0.15)]">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-[#00D96B]/50 rounded-2xl p-4 text-left shadow-[0_0_30px_rgba(0,217,107,0.15)]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/25 px-2.5 py-0.5 rounded-full border border-[#00D96B]/50">STEP 02</span>
                       <RefreshCw className="w-4 h-4 text-[#00D96B]" />
@@ -704,7 +796,7 @@ export default function HomeV2Page() {
                     </p>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-4 text-left shadow-xl">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-4 text-left shadow-xl">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-black font-mono text-[#00D96B] bg-[#00D96B]/15 px-2.5 py-0.5 rounded-full border border-[#00D96B]/30">STEP 03</span>
                       <Zap className="w-4 h-4 text-[#00D96B]" />
@@ -742,35 +834,35 @@ export default function HomeV2Page() {
                 </p>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2 max-w-5xl mx-auto w-full">
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
                     <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Canal Road</h4>
                     <p className="text-[10px] text-gray-300">Kishanpur corridor</p>
                     <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
                     <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Sewla Kalan</h4>
                     <p className="text-[10px] text-gray-300">Saharanpur Road</p>
                     <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
                     <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Balliwala</h4>
                     <p className="text-[10px] text-gray-300">GMS Road Junction</p>
                     <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all">
                     <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Premnagar</h4>
                     <p className="text-[10px] text-gray-300">University Zone</p>
                     <span className="inline-block text-[9px] font-mono font-bold text-[#00D96B] bg-[#00D96B]/15 px-2 py-0.5 rounded-full mt-1.5">Active 19x7</span>
                   </div>
 
-                  <div className="bg-white/[0.08] backdrop-blur-xl border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all col-span-2 sm:col-span-1">
+                  <div className="bg-[#0B1424]/90 sm:bg-white/[0.08] sm:backdrop-blur-md border border-white/15 rounded-2xl p-3 text-center hover:border-[#00D96B]/50 transition-all col-span-2 sm:col-span-1">
                     <MapPin className="w-4 h-4 text-[#00D96B] mx-auto mb-1.5" />
                     <h4 className="text-xs sm:text-sm font-black text-white uppercase">Ajabpur Kalan</h4>
                     <p className="text-[10px] text-gray-300">Bypass Connectivity</p>

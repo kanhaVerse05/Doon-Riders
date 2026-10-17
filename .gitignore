@@ -28,3 +28,8 @@ yarn-debug.log*
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+# Mobile apps (local builds only)
+technician-app/
+.npm-cache/
+.easignore

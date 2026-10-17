@@ -1164,6 +1164,7 @@ export const checkDbConnection = async (): Promise<boolean> => {
         final_longitude NUMERIC(10, 7),
         return_journey_started_at TIMESTAMPTZ,
         return_journey_completed_at TIMESTAMPTZ,
+        return_journey_skipped_at TIMESTAMPTZ,
         created_by_id INT,
         created_by_name VARCHAR(150),
         created_by_role VARCHAR(100),
@@ -1171,6 +1172,11 @@ export const checkDbConnection = async (): Promise<boolean> => {
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         closed_at TIMESTAMPTZ
       );
+
+      ALTER TABLE complaints
+        ADD COLUMN IF NOT EXISTS return_journey_completed_at TIMESTAMPTZ;
+      ALTER TABLE complaints
+        ADD COLUMN IF NOT EXISTS return_journey_skipped_at TIMESTAMPTZ;
 
       CREATE TABLE IF NOT EXISTS complaint_events (
         id SERIAL PRIMARY KEY,

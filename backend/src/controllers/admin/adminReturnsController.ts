@@ -105,7 +105,6 @@ export const getAllReturns = async (req: AuthRequest, res: Response) => {
 
     const searchTerm = String(search || '').toLowerCase().trim();
     const userRole = (req.user?.roleName || '').toUpperCase();
-    const userId = req.user?.id;
 
     if (getDbStatus()) {
       try {
@@ -119,8 +118,14 @@ export const getAllReturns = async (req: AuthRequest, res: Response) => {
           params.push((req.user as any).hub_id);
           pIndex++;
         } else if (userRole.includes('TECH')) {
-          whereClauses.push(`r.technician_id = $${pIndex}`);
-          params.push(userId);
+          // Return records store the linked technician profile ID, not the
+          // authenticated application's users.id. Resolve by the shared email.
+          whereClauses.push(`r.technician_id = (
+            SELECT t.id FROM technicians t
+            WHERE LOWER(TRIM(t.email)) = LOWER(TRIM($${pIndex}))
+            LIMIT 1
+          )`);
+          params.push(req.user?.email || '');
           pIndex++;
         }
 
@@ -220,8 +225,10 @@ export const getAllReturns = async (req: AuthRequest, res: Response) => {
     if (userRole.includes('HUB') && (req.user as any)?.hub_id) {
       list = list.filter(r => r.hub_id === (req.user as any)?.hub_id);
     } else if (userRole.includes('TECH')) {
-      const techRecord = memoryStore.technicians.find(t => t.name.toLowerCase() === req.user?.name.toLowerCase() || t.id === userId);
-      const techId = techRecord ? techRecord.id : userId;
+      const techRecord = memoryStore.technicians.find(t =>
+        String(t.email || '').trim().toLowerCase() === String(req.user?.email || '').trim().toLowerCase()
+      );
+      const techId = techRecord?.id;
       list = list.filter(r => r.technician_id === techId);
     }
 
