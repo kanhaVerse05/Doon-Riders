@@ -1,24 +1,36 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from '../../components/Navbar';
 import { Footer } from '../../components/Footer';
 import { BookTestDriveModal } from '../../components/BookTestDriveModal';
 import { MapPin, Phone, Mail, Clock, Send, CheckCircle2, MessageSquare, ExternalLink } from 'lucide-react';
-import { submitBooking } from '../../lib/api';
+import { submitBooking, fetchPricingPlans, PricingPlanOption } from '../../lib/api';
 
 export default function ContactPage() {
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [plans, setPlans] = useState<PricingPlanOption[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
-    
-    rentalPlan: 'Weekly',
+    rentalPlan: 'Weekly Pro Rider (₹1,699/week)',
     notes: ''
   });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchPricingPlans().then((fetched) => {
+      setPlans(fetched);
+      if (fetched.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          rentalPlan: `${fetched[0].name} (₹${fetched[0].price}/${fetched[0].period})`
+        }));
+      }
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,8 +50,7 @@ export default function ContactPage() {
         name: '',
         phone: '',
         email: '',
-        
-        rentalPlan: 'Weekly',
+        rentalPlan: plans.length > 0 ? `${plans[0].name} (₹${plans[0].price}/${plans[0].period})` : 'Weekly Pro Rider (₹1,699/week)',
         notes: ''
       });
     } catch {
@@ -208,9 +219,17 @@ export default function ContactPage() {
                       onChange={(e) => setFormData({ ...formData, rentalPlan: e.target.value })}
                       className="w-full bg-white border border-[#EEF2F0] rounded-xl px-4 py-3 text-[#101828] font-medium focus:outline-none focus:border-[#00D96B]"
                     >
-                      <option value="Daily">Daily Rental (₹299/day)</option>
-                      <option value="Weekly">Weekly Rental (₹1,499/week)</option>
-                      <option value="Monthly">Monthly Subscription (₹4,499/month)</option>
+                      {plans.length > 0 ? (
+                        plans.map((p) => (
+                          <option key={p.id} value={`${p.name} (₹${p.price}/${p.period})`}>
+                            {p.name} (₹{p.price.toLocaleString('en-IN')}/{p.period})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="Weekly Pro Rider (₹1,699/week)">
+                          Weekly Pro Rider (₹1,699/week)
+                        </option>
+                      )}
                     </select>
                   </div>
                 </div>

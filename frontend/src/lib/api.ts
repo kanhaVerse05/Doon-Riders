@@ -196,56 +196,7 @@ export const subscribeNewsletter = async (email: string) => {
 // VEHICLE & FLEET GALLERY API
 // ==========================================
 
-export const FALLBACK_GALLERY: GalleryImage[] = [
-  {
-    id: 1,
-    title: 'DOON Electro Pro - 360 Studio Showcase',
-    category: 'Scooter Angles',
-    description: 'Aerodynamic frame engineered with aerospace-grade alloy, digital cluster and LED matrix lighting.',
-    image_url: '/images/slide-1-1.webp',
-    created_at: '2026-09-01T10:00:00.000Z'
-  },
-  {
-    id: 2,
-    title: 'ISBT Dehradun 2-Min Battery Swap Station',
-    category: 'Battery Swap Hubs',
-    description: 'Fully automated 2-minute battery exchange station with automated temperature & voltage health monitoring.',
-    image_url: '/images/bg-img-home1-958x463.jpg',
-    created_at: '2026-09-02T11:30:00.000Z'
-  },
-  {
-    id: 3,
-    title: 'DOON Storm EV - Mussoorie Hill Climb Testing',
-    category: 'Hill Climbs & Roads',
-    description: 'Conquering 18-degree uphill hairpin turns effortlessly with 4.2 kW peak dual-torque motor.',
-    image_url: '/images/slide-3.webp',
-    created_at: '2026-09-03T09:15:00.000Z'
-  },
-  {
-    id: 4,
-    title: 'Dehradun Daily Delivery Rider Fleet',
-    category: 'Delivery Partners',
-    description: 'Over 500+ commercial delivery partners operating daily across Rajpur Road, Paltan Bazar & Clement Town.',
-    image_url: '/images/dehradun-clock-tower.jpg',
-    created_at: '2026-09-04T08:45:00.000Z'
-  },
-  {
-    id: 5,
-    title: 'DOON City Cruise - Lightweight Commuter',
-    category: 'Scooter Angles',
-    description: 'Ultra-lightweight agile chassis designed specifically for swift daily office commutes in city traffic.',
-    image_url: '/images/slide-2.webp',
-    created_at: '2026-09-04T14:20:00.000Z'
-  },
-  {
-    id: 6,
-    title: 'Commercial Heavy-Duty Carrier Setup',
-    category: 'Fleet Showcase',
-    description: 'Reinforced dual suspension chassis equipped with 80kg rated modular delivery box carrier.',
-    image_url: '/images/all-vehicle.webp',
-    created_at: '2026-09-05T07:10:00.000Z'
-  }
-];
+export const FALLBACK_GALLERY: GalleryImage[] = [];
 
 export const fetchGalleryImages = async (category?: string): Promise<GalleryImage[]> => {
   try {
@@ -256,16 +207,13 @@ export const fetchGalleryImages = async (category?: string): Promise<GalleryImag
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch gallery images');
     const json = await res.json();
-    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+    if (json.success && Array.isArray(json.data)) {
       return json.data;
     }
-    return FALLBACK_GALLERY;
+    return [];
   } catch (error) {
-    console.warn('Backend gallery unavailable, using fallback gallery data:', error);
-    if (category && category !== 'All') {
-      return FALLBACK_GALLERY.filter(item => item.category === category);
-    }
-    return FALLBACK_GALLERY;
+    console.warn('Backend gallery unavailable:', error);
+    return [];
   }
 };
 
