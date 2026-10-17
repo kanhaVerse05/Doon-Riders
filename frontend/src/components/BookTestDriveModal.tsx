@@ -4,16 +4,16 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   CheckCircle2,
-  AlertCircle,
   User,
   Phone,
   Send,
   Zap,
   ShieldCheck,
   BatteryCharging,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
-import { submitBooking } from '../lib/api';
+import { submitBooking, fetchPricingPlans, PricingPlanOption } from '../lib/api';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -26,28 +26,47 @@ export const BookTestDriveModal: React.FC<BookingModalProps> = ({
   onClose,
   selectedVehicle
 }) => {
+  const [plans, setPlans] = useState<PricingPlanOption[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
-    plan: 'Standard Weekly Plan (₹1,699/week)',
+    plan: '',
     description: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Sync selected plan when opened
+  // Fetch plans from DB on mount
   useEffect(() => {
-    if (selectedVehicle) {
-      if (selectedVehicle.toLowerCase().includes('monthly')) {
-        setFormData((prev) => ({ ...prev, plan: 'Monthly Long-Term Plan' }));
-      } else if (selectedVehicle.toLowerCase().includes('fleet')) {
-        setFormData((prev) => ({ ...prev, plan: 'Delivery / Commercial Fleet' }));
-      } else {
-        setFormData((prev) => ({ ...prev, plan: 'Standard Weekly Plan (₹1,699/week)' }));
+    if (!isOpen) return;
+    setPlansLoading(true);
+    fetchPricingPlans().then((fetched) => {
+      setPlans(fetched);
+      // Set default plan to first in list (or keep existing if valid)
+      if (fetched.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          plan: prev.plan && fetched.some(p => p.name === prev.plan) ? prev.plan : fetched[0].name
+        }));
       }
+      setPlansLoading(false);
+    });
+  }, [isOpen]);
+
+  // Sync selected plan when vehicle changes
+  useEffect(() => {
+    if (!selectedVehicle || plans.length === 0) return;
+    if (selectedVehicle.toLowerCase().includes('monthly')) {
+      const monthly = plans.find(p => p.period === 'month' || p.name.toLowerCase().includes('month'));
+      if (monthly) setFormData((prev) => ({ ...prev, plan: monthly.name }));
+    } else if (selectedVehicle.toLowerCase().includes('fleet')) {
+      const fleet = plans.find(p => p.name.toLowerCase().includes('fleet') || p.name.toLowerCase().includes('delivery'));
+      if (fleet) setFormData((prev) => ({ ...prev, plan: fleet.name }));
     }
-  }, [selectedVehicle, isOpen]);
+  }, [selectedVehicle, plans]);
 
   if (!isOpen) return null;
 
@@ -71,7 +90,7 @@ export const BookTestDriveModal: React.FC<BookingModalProps> = ({
         setFormData({
           fullName: '',
           phone: '',
-          plan: 'Standard Weekly Plan (₹1,699/week)',
+          plan: plans.length > 0 ? plans[0].name : '',
           description: ''
         });
         onClose();
@@ -106,16 +125,11 @@ export const BookTestDriveModal: React.FC<BookingModalProps> = ({
                 strokeLinejoin="round"
                 className="w-6 h-6"
               >
-                {/* Scooter Wheel Back */}
                 <circle cx="6" cy="18" r="3" />
-                {/* Scooter Wheel Front */}
                 <circle cx="18" cy="18" r="3" />
-                {/* Frame Deck */}
                 <path d="M6 18h8l3-10" />
-                {/* Handle Bar */}
                 <path d="M15 8h4" />
                 <path d="M17 8v2" />
-                {/* Battery / Motor Zap Badge */}
                 <path d="M10 13l2-3-1 4h2l-2 3" />
               </svg>
             </div>
@@ -196,32 +210,33 @@ export const BookTestDriveModal: React.FC<BookingModalProps> = ({
                 </div>
               </div>
 
-              {/* 3. Plan Select (Defaults to current scooty plan) */}
+              {/* 3. Plan Select — DB fetched */}
               <div>
                 <label className="block text-xs font-bold text-[#071426] uppercase tracking-wider mb-1.5">
                   Select Rental Plan <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="w-4 h-4 text-[#00A854] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <Zap className="w-4 h-4" />
+                    {plansLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                   </div>
                   <select
+                    required
                     value={formData.plan}
                     onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-                    className="w-full bg-[#F8FAFC] border border-[#E2E8F0] focus:border-[#00D96B] focus:bg-white rounded-2xl pl-10 pr-8 py-3 text-sm text-[#071426] font-semibold focus:outline-none transition-all appearance-none cursor-pointer shadow-sm"
+                    disabled={plansLoading}
+                    className="w-full bg-[#F8FAFC] border border-[#E2E8F0] focus:border-[#00D96B] focus:bg-white rounded-2xl pl-10 pr-8 py-3 text-sm text-[#071426] font-semibold focus:outline-none transition-all appearance-none cursor-pointer shadow-sm disabled:opacity-60"
                   >
-                    <option value="Standard Weekly Plan (₹1,699/week)">
-                      Standard Weekly Plan — ₹1,699 / week (Unlimited KM)
-                    </option>
-                    <option value="Monthly Long-Term Plan">
-                      Monthly Long-Term Plan — ₹6,499 / month
-                    </option>
-                    <option value="Delivery / Commercial Fleet">
-                      Delivery &amp; Commercial Gig Fleet Partner
-                    </option>
-                    <option value="Daily Short-Term Rental">
-                      Daily Rental Plan (₹299 / day)
-                    </option>
+                    {plansLoading ? (
+                      <option>Loading plans...</option>
+                    ) : plans.length === 0 ? (
+                      <option value="General Inquiry">General Inquiry</option>
+                    ) : (
+                      plans.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name} — ₹{p.price.toLocaleString('en-IN')} / {p.period}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -247,7 +262,7 @@ export const BookTestDriveModal: React.FC<BookingModalProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || plansLoading}
                   className="w-full bg-[#00D96B] hover:bg-[#00A854] text-white font-extrabold text-sm sm:text-base uppercase tracking-wider py-3.5 sm:py-4 rounded-2xl shadow-[0_8px_25px_rgba(0,217,107,0.35)] hover:shadow-[0_10px_30px_rgba(0,217,107,0.5)] transition-all transform active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   <Send className="w-4 h-4 stroke-[2.5]" />

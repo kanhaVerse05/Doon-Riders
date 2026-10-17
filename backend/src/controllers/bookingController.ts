@@ -47,6 +47,41 @@ export const createBooking = async (req: Request, res: Response) => {
         status: 'pending',
         created_at: new Date().toISOString()
       };
+
+      // ─── AUTO-CREATE LEAD in leads table ──────────────────────────────────────
+      // Extract plan name from message: "Plan: XYZ | Note: ..."
+      let rentalPlan = 'Website Inquiry';
+      if (message) {
+        const planMatch = message.match(/^Plan:\s*(.+?)\s*\|/);
+        if (planMatch) rentalPlan = planMatch[1].trim();
+      }
+
+      try {
+        const countRes = await pool.query("SELECT COUNT(*) FROM leads WHERE lead_code LIKE 'LD-%'");
+        const nextNum = 1000 + Number(countRes.rows[0].count) + 1;
+        const leadCode = `LD-${nextNum}`;
+
+        await pool.query(`
+          INSERT INTO leads (
+            lead_code, name, phone, email, location,
+            vehicle_interested_in, rental_plan, lead_source,
+            status, notes, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, 'Dehradun', $5, $6, 'Website Form', 'New', $7, NOW(), NOW())
+        `, [
+          leadCode,
+          fullName,
+          phone,
+          email || null,
+          vehicleName || 'DOON Electro Pro',
+          rentalPlan,
+          message || null
+        ]);
+      } catch (leadErr: any) {
+        // Don't fail the booking if lead creation fails — just log
+        console.warn('Auto lead creation failed (non-critical):', leadErr.message);
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       return res.status(201).json({
         success: true,
         message: 'Test drive booked successfully! Our DOON Riders specialist will contact you.',

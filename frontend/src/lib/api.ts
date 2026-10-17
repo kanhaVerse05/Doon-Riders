@@ -157,6 +157,32 @@ export const submitBooking = async (payload: BookingPayload) => {
   return res.json();
 };
 
+export interface PricingPlanOption {
+  id: number;
+  name: string;
+  price: number;
+  period: string;
+}
+
+export const fetchPricingPlans = async (): Promise<PricingPlanOption[]> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/pricing-plans`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch plans');
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      return json.data.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price),
+        period: p.period || 'week'
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+};
+
 export const subscribeNewsletter = async (email: string) => {
   const res = await fetch(`${API_BASE_URL}/newsletter`, {
     method: 'POST',

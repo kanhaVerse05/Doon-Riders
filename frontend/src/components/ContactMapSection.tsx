@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MapPin,
   Phone,
@@ -11,20 +11,35 @@ import {
   ExternalLink,
   ShieldCheck,
   Zap,
-  BatteryCharging
+  BatteryCharging,
+  Loader2
 } from 'lucide-react';
-import { submitBooking } from '../lib/api';
+import { submitBooking, fetchPricingPlans, PricingPlanOption } from '../lib/api';
 
 export const ContactMapSection: React.FC = () => {
+  const [plans, setPlans] = useState<PricingPlanOption[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
-    rentalPlan: 'Standard Weekly (₹1,699/week)',
+    rentalPlan: '',
     notes: ''
   });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Fetch plans from DB on mount
+  useEffect(() => {
+    fetchPricingPlans().then((fetched) => {
+      setPlans(fetched);
+      if (fetched.length > 0) {
+        setFormData((prev) => ({ ...prev, rentalPlan: fetched[0].name }));
+      }
+      setPlansLoading(false);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +59,7 @@ export const ContactMapSection: React.FC = () => {
         name: '',
         phone: '',
         email: '',
-        rentalPlan: 'Standard Weekly (₹1,699/week)',
+        rentalPlan: plans.length > 0 ? plans[0].name : '',
         notes: ''
       });
     } catch {
@@ -278,17 +293,31 @@ export const ContactMapSection: React.FC = () => {
                         <label className="block text-xs font-bold text-[#071426] mb-1.5">
                           Select Rental Plan
                         </label>
-                        <select
-                          value={formData.rentalPlan}
-                          onChange={(e) => setFormData({ ...formData, rentalPlan: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] focus:border-[#00D96B] focus:bg-white focus:outline-none text-xs sm:text-sm text-[#071426] transition cursor-pointer"
-                        >
-                          <option value="Standard Weekly (₹1,699/week)">Standard Weekly (₹1,699/week)</option>
-                          <option value="Monthly Long-Term Plan">Monthly Long-Term Plan</option>
-                          <option value="Delivery / Commercial Fleet">Delivery / Commercial Fleet</option>
-                          <option value="Custom Rental Inquiry">Custom Rental Inquiry</option>
-                        </select>
+                        <div className="relative">
+                          {plansLoading && (
+                            <Loader2 className="w-3.5 h-3.5 text-[#00A854] animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          )}
+                          <select
+                            value={formData.rentalPlan}
+                            onChange={(e) => setFormData({ ...formData, rentalPlan: e.target.value })}
+                            disabled={plansLoading}
+                            className="w-full px-4 py-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] focus:border-[#00D96B] focus:bg-white focus:outline-none text-xs sm:text-sm text-[#071426] transition cursor-pointer disabled:opacity-60"
+                          >
+                            {plansLoading ? (
+                              <option>Loading plans...</option>
+                            ) : plans.length === 0 ? (
+                              <option value="General Inquiry">General Inquiry</option>
+                            ) : (
+                              plans.map((p) => (
+                                <option key={p.id} value={p.name}>
+                                  {p.name} — ₹{p.price.toLocaleString('en-IN')} / {p.period}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
                       </div>
+
                     </div>
 
                     {/* Notes / Message */}
